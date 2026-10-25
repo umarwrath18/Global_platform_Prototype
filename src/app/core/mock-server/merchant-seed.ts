@@ -162,7 +162,7 @@ export function buildMerchantSeed(now: number, version: number): MerchantDb {
   const notifications: PortalNotification[] = [];
   let nt = 1;
   const note = (daysAgo: number, event: PortalNotification['event'], app: CountryApplication, m: MerchantRecord, audience: StaffRole[], title: string, body: string, to: string[]) =>
-    notifications.push({ id: `NT-${nt++}`, at: ago(daysAgo), event, title, body, applicationId: app.id, merchantId: m.id, audience, email: { to, subject: `[Mobi Global Platform] ${title}`, status: 'simulated' }, readBy: [] });
+    notifications.push({ id: `NT-${nt++}`, at: ago(daysAgo), event, title, body, applicationId: app.id, merchantId: m.id, country: app.country, audience, email: { to, subject: `[Mobi Global Platform] ${title}`, status: 'simulated' }, readBy: [] });
   const byId = (id: string) => applications.find((a) => a.id === id)!;
   note(25, 'configuration_ready', byId('APP-2026-0009'), bites, ['cs', 'sales'], `Configuration ready: ${bites.legalName} · Thailand`, 'CS configuration is complete and production keys are generated (simulated) for APP-2026-0009. Merchant integration can start.', [bites.primaryContact.email, 'cs-onboarding@mobi-demo.test']);
   note(3, 'approved', byId('APP-2026-0010'), trading, ['sales', 'cs'], `Risk approved: ${trading.legalName} · Thailand`, 'APP-2026-0010 is approved. CS can now start country configuration. The merchant is not operational yet.', ['sales-ops@mobi-demo.test', 'cs-onboarding@mobi-demo.test']);

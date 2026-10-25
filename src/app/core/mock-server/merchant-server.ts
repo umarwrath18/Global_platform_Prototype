@@ -555,6 +555,7 @@ export class MerchantServer {
       body: msg.body,
       applicationId: app.id,
       merchantId: merchant.id,
+      country: app.country,
       audience,
       email: { to: msg.to, subject: `[Mobi Global Platform] ${msg.title}`, status: 'simulated' },
       readBy: [],

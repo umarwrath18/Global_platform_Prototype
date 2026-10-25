@@ -47,9 +47,11 @@ import { MobiLogo } from '../../shared/mobi-logo';
       flex-direction: column;
       padding: 60px 70px;
       color: #fff;
+      /* Same navy surface as the signed-in sidebar, with a soft brand-blue glow. */
       background:
-        radial-gradient(120% 80% at 100% 100%, rgba(1, 123, 139, 0.95) 0%, rgba(1, 123, 139, 0) 60%),
-        linear-gradient(160deg, var(--brand-dark) 0%, #0053a0 45%, #0160a6 75%, #01708f 100%);
+        radial-gradient(90% 70% at 100% 100%, rgba(11, 92, 171, 0.55) 0%, rgba(11, 92, 171, 0) 65%),
+        radial-gradient(60% 50% at 0% 0%, rgba(19, 37, 61, 0.9) 0%, rgba(19, 37, 61, 0) 70%),
+        var(--nav-bg);
     }
 
     .rings {
@@ -72,7 +74,7 @@ import { MobiLogo } from '../../shared/mobi-logo';
       max-width: 760px;
       font-size: clamp(40px, 3.4vw, 62px);
       line-height: 1.12;
-      font-weight: 500;
+      font-weight: 700;
       letter-spacing: -0.02em;
     }
 
@@ -80,7 +82,7 @@ import { MobiLogo } from '../../shared/mobi-logo';
       display: flex;
       flex-direction: column;
       min-width: 0;
-      background: linear-gradient(180deg, #fff 0%, var(--surface-page) 100%);
+      background: var(--surface);
     }
 
     .mobile-header {

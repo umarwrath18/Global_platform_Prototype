@@ -9,8 +9,9 @@ import {
   MerchantSummary,
   READINESS_STATUSES,
 } from '../../core/merchants/merchant-models';
-import { ONBOARDING_COUNTRIES, REGISTRATION_COUNTRIES, countryName } from '../../core/merchants/onboarding-config';
+import { REGISTRATION_COUNTRIES, countryName } from '../../core/merchants/onboarding-config';
 import { StaffRoleService } from '../../core/merchants/staff-role.service';
+import { GlobalFilters } from '../../core/merchants/global-filters.service';
 import { Icon } from '../../shared/icon';
 import { StatusBadge, fmtDate, fmtRelative } from '../../shared/merchant-ui';
 
@@ -28,6 +29,7 @@ export class MerchantList {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   protected readonly roles = inject(StaffRoleService);
+  protected readonly filters = inject(GlobalFilters);
 
   protected readonly merchants = signal<MerchantSummary[]>([]);
   protected readonly loading = signal(true);
@@ -35,12 +37,10 @@ export class MerchantList {
 
   private readonly qp = this.route.snapshot.queryParamMap;
   protected readonly q = signal(this.qp.get('q') ?? '');
-  protected readonly country = signal(this.qp.get('country') ?? '');
   protected readonly appStatus = signal<StatusFilter>((this.qp.get('status') as StatusFilter) ?? '');
   protected readonly globalStatus = signal<'' | GlobalMerchantStatus>((this.qp.get('global') as GlobalMerchantStatus) ?? '');
   protected readonly regCountry = signal(this.qp.get('reg') ?? '');
 
-  protected readonly countries = Object.values(ONBOARDING_COUNTRIES);
   protected readonly regCountries = REGISTRATION_COUNTRIES;
   protected readonly statusOptions = Object.entries(APPLICATION_STATUS_LABEL) as [ApplicationStatus, string][];
   protected readonly globalOptions = Object.entries(GLOBAL_STATUS_LABEL) as [GlobalMerchantStatus, string][];
@@ -50,7 +50,8 @@ export class MerchantList {
 
   protected readonly filtered = computed(() => {
     const q = this.q().trim().toLowerCase();
-    const country = this.country();
+    const f = this.filters;
+    const appFilter = !!(f.country() || f.currency() || f.range() !== 'all');
     const status = this.appStatus();
     const global = this.globalStatus();
     const reg = this.regCountry();
@@ -62,17 +63,19 @@ export class MerchantList {
       }
       if (global && m.globalStatus !== global) return false;
       if (reg && m.registrationCountry !== reg) return false;
-      const apps = country ? m.applications.filter((a) => a.country === country) : m.applications;
-      if (country && !apps.length) return false;
+      if (f.merchantId() && m.id !== f.merchantId()) return false;
+      // Top-bar filters: the merchant must have a matching application (or, for a date-only filter, be new in range).
+      const apps = appFilter ? m.applications.filter((a) => f.matches(a)) : m.applications;
+      if (appFilter && !apps.length && !(!f.country() && !f.currency() && m.createdAt >= f.since())) return false;
       if (status && !apps.some((a) => statusMatch(a.status))) return false;
       return true;
     });
   });
 
   protected readonly stats = computed(() => {
-    const apps = this.merchants().flatMap((m) => m.applications);
+    const apps = this.filtered().flatMap((m) => m.applications).filter((a) => this.filters.matches(a));
     return {
-      merchants: this.merchants().length,
+      merchants: this.filtered().length,
       pending: apps.filter((a) => a.status === 'pending_risk_review').length,
       returned: apps.filter((a) => a.status === 'returned').length,
       readiness: apps.filter((a) => READINESS_STATUSES.includes(a.status) && a.status !== 'operational').length,
@@ -80,7 +83,7 @@ export class MerchantList {
     };
   });
 
-  protected readonly hasFilters = computed(() => !!(this.q() || this.country() || this.appStatus() || this.globalStatus() || this.regCountry()));
+  protected readonly hasFilters = computed(() => !!(this.q() || this.appStatus() || this.globalStatus() || this.regCountry()) || this.filters.active());
 
   constructor() {
     void this.load();
@@ -98,8 +101,8 @@ export class MerchantList {
     }
   }
 
-  protected setFilter(key: 'q' | 'country' | 'status' | 'global' | 'reg', value: string) {
-    ({ q: this.q, country: this.country, status: this.appStatus, global: this.globalStatus, reg: this.regCountry } as const)[key].set(value as never);
+  protected setFilter(key: 'q' | 'status' | 'global' | 'reg', value: string) {
+    ({ q: this.q, status: this.appStatus, global: this.globalStatus, reg: this.regCountry } as const)[key].set(value as never);
     this.syncUrl();
   }
 
@@ -110,7 +113,7 @@ export class MerchantList {
 
   protected clear() {
     this.q.set('');
-    this.country.set('');
+    this.filters.clear();
     this.appStatus.set('');
     this.globalStatus.set('');
     this.regCountry.set('');
@@ -118,7 +121,7 @@ export class MerchantList {
   }
 
   private syncUrl() {
-    const queryParams = { q: this.q() || null, country: this.country() || null, status: this.appStatus() || null, global: this.globalStatus() || null, reg: this.regCountry() || null };
+    const queryParams = { q: this.q() || null, status: this.appStatus() || null, global: this.globalStatus() || null, reg: this.regCountry() || null };
     this.router.navigate([], { queryParams, replaceUrl: true });
   }
 }

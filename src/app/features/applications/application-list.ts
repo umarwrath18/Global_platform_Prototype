@@ -2,8 +2,9 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } 
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MerchantApi, MerchantClientError, toMerchantError } from '../../core/merchants/merchant-api.service';
 import { ApplicationStatus, ApplicationSummary, StaffRole } from '../../core/merchants/merchant-models';
-import { ONBOARDING_COUNTRIES, countryName } from '../../core/merchants/onboarding-config';
+import { countryName } from '../../core/merchants/onboarding-config';
 import { StaffRoleService } from '../../core/merchants/staff-role.service';
+import { GlobalFilters } from '../../core/merchants/global-filters.service';
 import { Icon } from '../../shared/icon';
 import { StatusBadge, fmtDate, fmtRelative } from '../../shared/merchant-ui';
 
@@ -44,29 +45,28 @@ export class ApplicationList {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   protected readonly roles = inject(StaffRoleService);
+  protected readonly filters = inject(GlobalFilters);
 
   protected readonly apps = signal<ApplicationSummary[]>([]);
   protected readonly loading = signal(true);
   protected readonly error = signal<MerchantClientError | null>(null);
   protected readonly queue = signal<QueueKey>((this.route.snapshot.queryParamMap.get('queue') as QueueKey) || this.roles.role());
   protected readonly q = signal('');
-  protected readonly country = signal('');
 
   protected readonly queues = QUEUES;
-  protected readonly countries = Object.values(ONBOARDING_COUNTRIES);
   protected readonly countryName = countryName;
   protected readonly date = fmtDate;
   protected readonly rel = fmtRelative;
 
   protected readonly current = computed(() => QUEUES.find((x) => x.key === this.queue()) ?? QUEUES[0]);
-  protected readonly counts = computed(() => Object.fromEntries(QUEUES.map((x) => [x.key, this.apps().filter((a) => !x.statuses || x.statuses.includes(a.status)).length])) as Record<QueueKey, number>);
+  protected readonly scoped = computed(() => this.apps().filter((a) => this.filters.matches(a)));
+  protected readonly counts = computed(() => Object.fromEntries(QUEUES.map((x) => [x.key, this.scoped().filter((a) => !x.statuses || x.statuses.includes(a.status)).length])) as Record<QueueKey, number>);
   protected readonly rows = computed(() => {
     const qd = this.current();
     const q = this.q().trim().toLowerCase();
-    return this.apps().filter(
+    return this.scoped().filter(
       (a) =>
         (!qd.statuses || qd.statuses.includes(a.status)) &&
-        (!this.country() || a.country === this.country()) &&
         (!q || [a.id, a.merchantId, a.merchantName].join(' ').toLowerCase().includes(q)),
     );
   });

@@ -285,6 +285,8 @@ export interface PortalNotification {
   body: string;
   applicationId: string;
   merchantId: string;
+  /** Country of the application (absent on records created before this field existed). */
+  country?: string;
   audience: StaffRole[];
   /** Target behaviour: an automatic email. Not sent; recorded as simulated. */
   email: { to: string[]; subject: string; status: 'simulated' };

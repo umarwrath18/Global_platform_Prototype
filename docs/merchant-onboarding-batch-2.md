@@ -74,13 +74,26 @@ Readiness:  Risk approved → CS configuration → Production keys generated →
 
 | Route | Purpose | States |
 | --- | --- | --- |
-| `/merchants` | Merchant list: GM ID, name, registration, country applications with status, global status, created, last updated; search; country / application status / global status / registration country filters; quick-filter counters | loading, error + retry, empty, no results + clear |
+| `/merchants` | Merchant list: GM ID, name, registration, country applications with status, global status, created, last updated; search; application status / global status / registration country filters plus the top-bar filters; quick-filter counters | loading, error + retry, empty, no results + clear |
 | `/merchants/new` | Flow A | field errors, duplicate (hard) and possible-duplicate (soft), role not permitted, success with GM ID |
 | `/merchants/expand` | Flow B | search, no match, merchant summary, disabled countries, previous rejection note |
 | `/merchants/:id` | Global profile (editable by Sales/Ops), country applications with progress, history across all countries | not found, empty applications |
 | `/applications` | Team queues: Drafts & returned, Risk review, CS readiness, Operational, Rejected, All | empty per queue |
 | `/applications/:id` | Two-lane status tracker, "Next: owner" hint (with a prototype "Act as" shortcut), status banners, guided form / Risk panel / CS readiness panel / read-only summary, history | loading, not found, read-only, toasts |
 | `/notifications` | Notification history (for my team / all teams, filter by event) | empty |
+
+## 5a. Visual design update (portal-wide)
+
+Applied from the supplied UI reference, after these decisions were confirmed:
+
+| Decision | Implementation |
+| --- | --- |
+| Scope | All screens, including Login / Forgot Password (style only; behaviour unchanged). |
+| Navigation | Dark navy sidebar: workspace card, prototype role switcher, Dashboard / Merchants / Applications / Notifications. Approved MVP modules not yet built (Pay-ins, Payouts, Settlements, Transactions, Payment Methods, Hosts & Routing, Reports, Settings) are shown **disabled with a LATER tag** and are not clickable. Collapsible on desktop, off-canvas on mobile. |
+| Dashboard | Reference layout (KPI cards with sparklines, pipeline row, by-country chart, *Attention required*), computed **only from prototype onboarding data**. No payment volumes, revenue or success rates are shown. The Batch 1 workspace/country access content is kept; the workspace switch (still `/dashboard/:country`, authorised by the server) is a labelled **Workspace** control in the page header. |
+| Top bar | **Country, Merchant, Currency, Date range** filters (date = last update) applied to the dashboard, Merchants, Applications and Notifications; search for merchants and applications (Ctrl/⌘ + K); a prototype help popover; notifications. The filters are dimmed on pages they don't affect. Filter choices are remembered in this browser. |
+
+Tokens added in `styles.scss`: `--nav-bg`, `--nav-bg-raised`, `--nav-border`, `--nav-text`, `--nav-text-muted`, `--nav-active`. Headings are now bold (700), as in the reference.
 
 ## 6. Demo data (`merchant-seed.ts`, all marked *Demo data*)
 
@@ -119,6 +132,9 @@ Reset all data with `mobiDemo.reset()`, or only the merchant data with `mobiDemo
 | M-16 | Risk rejects APP-2026-0012 | Confirmation step; final; Sales *Start a new Malaysia application* → new ID linked to the rejected one |
 | M-17 | CS completes APP-2026-0010 (TH) to go-live | `/dashboard/TH` now opens for user `123` (TH active on GA-1001); PH still failed |
 | M-18 | Notifications bell / history | Per-role unread count, mark read, simulated email recipients |
+| M-20 | Top bar: Country = Indonesia | Merchants shows 2 (GM-100101, GM-100103); add Currency = THB → empty state; *Clear* restores 8 |
+| M-21 | Ctrl/⌘ + K, type `APP-2026-0011`, Enter | Opens that application |
+| M-22 | Collapse the sidebar; resize to mobile | Icon-only sidebar; on mobile the menu button opens the navigation drawer |
 | M-19 | Batch 1 regression | Login, wrong password, sign-out, `/merchants` while signed out → login → back to `/merchants`; Forgot Password |
 
 Automated: `npm test` runs 14 merchant-server unit tests (plus the 30 Batch 1 auth tests). The browser walkthrough above was also run with Playwright at desktop and 390 px widths.

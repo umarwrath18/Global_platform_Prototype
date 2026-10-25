@@ -16,7 +16,7 @@
   </div>
 
   <div class="stats" role="group" aria-label="Quick filters">
-    <div class="stat static"><span class="n">{{ stats().merchants }}</span><span class="l">Global Merchants</span></div>
+    <div class="stat static"><span class="n">{{ stats().merchants }}</span><span class="l">Global Merchants shown</span></div>
     <button type="button" class="stat" [class.on]="appStatus() === 'pending_risk_review'" (click)="quick('pending_risk_review')" [attr.aria-pressed]="appStatus() === 'pending_risk_review'">
       <span class="n">{{ stats().pending }}</span><span class="l">Pending Risk review</span>
     </button>
@@ -37,15 +37,6 @@
         <app-icon name="search" [size]="18" />
         <span class="sr-only">Search merchants</span>
         <input class="f-input" type="search" placeholder="Search by name, GM ID, application ID, registration no. or contact" [value]="q()" (input)="setFilter('q', $any($event.target).value)" />
-      </label>
-      <label>
-        <span class="sr-only">Country</span>
-        <select class="f-input" [value]="country()" (change)="setFilter('country', $any($event.target).value)">
-          <option value="">All countries</option>
-          @for (c of countries; track c.code) {
-            <option [value]="c.code" [selected]="c.code === country()">{{ c.name }}</option>
-          }
-        </select>
       </label>
       <label>
         <span class="sr-only">Application status</span>
@@ -102,7 +93,7 @@
         }
       </div>
     } @else {
-      <p class="count" aria-live="polite">{{ filtered().length }} of {{ merchants().length }} merchants</p>
+      <p class="count" aria-live="polite">{{ filtered().length }} of {{ merchants().length }} merchants@if (filters.active()) { · top-bar filters applied}</p>
       <div class="table-wrap">
         <table class="data-table">
           <thead>

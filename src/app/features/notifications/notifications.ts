@@ -3,6 +3,8 @@ import { RouterLink } from '@angular/router';
 import { MerchantApi } from '../../core/merchants/merchant-api.service';
 import { NotificationEvent, PortalNotification, STAFF_ROLE_LABEL, StaffRole } from '../../core/merchants/merchant-models';
 import { StaffRoleService } from '../../core/merchants/staff-role.service';
+import { GlobalFilters } from '../../core/merchants/global-filters.service';
+import { ONBOARDING_COUNTRIES } from '../../core/merchants/onboarding-config';
 import { Icon } from '../../shared/icon';
 import { fmtDateTime } from '../../shared/merchant-ui';
 
@@ -27,6 +29,7 @@ const EVENT_LABEL: Record<NotificationEvent, string> = {
 export class Notifications {
   protected readonly api = inject(MerchantApi);
   protected readonly roles = inject(StaffRoleService);
+  protected readonly filters = inject(GlobalFilters);
 
   protected readonly scope = signal<'mine' | 'all'>('mine');
   protected readonly event = signal<'' | NotificationEvent>('');
@@ -36,11 +39,23 @@ export class Notifications {
   protected readonly dateTime = fmtDateTime;
 
   protected readonly items = computed(() =>
-    (this.scope() === 'mine' ? this.api.myNotifications() : this.api.notifications()).filter((n) => !this.event() || n.event === this.event()),
+    (this.scope() === 'mine' ? this.api.myNotifications() : this.api.notifications()).filter((n) => (!this.event() || n.event === this.event()) && this.passesTopBar(n)),
   );
 
   constructor() {
     void this.api.refreshNotifications();
+  }
+
+  /** Records without a country (older data) are only filtered by merchant and date. */
+  private passesTopBar(n: PortalNotification) {
+    const f = this.filters;
+    const currency = n.country ? ONBOARDING_COUNTRIES[n.country]?.currency : undefined;
+    return (
+      (!f.merchantId() || n.merchantId === f.merchantId()) &&
+      n.at >= f.since() &&
+      (!f.country() || !n.country || n.country === f.country()) &&
+      (!f.currency() || !currency || currency === f.currency())
+    );
   }
 
   protected unread(n: PortalNotification) {

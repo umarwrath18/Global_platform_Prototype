@@ -45,8 +45,8 @@ screen in a **Demo inbox** card instead of being emailed.
 
 ### Merchant onboarding (Batch 2)
 
-Sign in as `123`, then open **Merchants**. Use the pink **Prototype · Acting as** control in the
-top bar to switch between Sales / Operations, Risk and Customer Success. It is a
+Sign in as `123`, then open **Merchants** in the sidebar. Use the pink **Prototype · Acting as** control in the
+sidebar to switch between Sales / Operations, Risk and Customer Success. It is a
 prototype-only stand-in for real role permissions. All sample merchants are labelled *Demo data*.
 
 ### QA hooks (browser console)

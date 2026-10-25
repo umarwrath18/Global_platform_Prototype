@@ -7,13 +7,21 @@
   --brand-dark: #00407a;
   --brand-teal: #017b8b;
 
+  /* Navigation surface (dark sidebar / auth brand panel) */
+  --nav-bg: #0b1a2e;
+  --nav-bg-raised: #13253d;
+  --nav-border: rgba(255, 255, 255, 0.08);
+  --nav-text: #c3cddb;
+  --nav-text-muted: #8496ad;
+  --nav-active: #0b5cab;
+
   --text: #101828;
   --text-muted: #5b6675;
   --text-subtle: #8a94a3;
-  --border: #d5dbe3;
+  --border: #dfe4eb;
   --border-strong: #b7c0cc;
   --surface: #ffffff;
-  --surface-page: #fafbfd;
+  --surface-page: #f6f8fb;
   --surface-muted: #f3f5f8;
 
   --danger: #b42318;
@@ -32,7 +40,7 @@
   --radius-lg: 14px;
   --focus-ring: 0 0 0 4px rgba(0, 92, 172, 0.18);
   --shadow-button: 0 8px 20px -8px rgba(0, 92, 172, 0.55);
-  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 3px rgba(16, 24, 40, 0.06);
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 2px 6px rgba(16, 24, 40, 0.04);
   --shadow-pop: 0 16px 40px -12px rgba(16, 24, 40, 0.25);
 
   color-scheme: light;
@@ -97,8 +105,8 @@ a {
   margin: 0 0 14px;
   font-size: clamp(28px, 3vw, 38px);
   line-height: 1.2;
-  font-weight: 500;
-  letter-spacing: -0.01em;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   color: var(--text);
 }
 
@@ -414,9 +422,9 @@ a {
 /* Built from the same tokens as the auth screens, sized for dense operations pages. */
 
 .page {
-  max-width: 1240px;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: 32px 32px 64px;
+  padding: 40px 36px 64px;
 }
 
 .crumbs {
@@ -457,16 +465,16 @@ a {
 
   h1 {
     margin: 0;
-    font-size: 30px;
+    font-size: 34px;
     line-height: 1.2;
-    font-weight: 500;
-    letter-spacing: -0.01em;
+    font-weight: 700;
+    letter-spacing: -0.02em;
   }
 
   .sub {
-    margin: 6px 0 0;
+    margin: 8px 0 0;
     color: var(--text-muted);
-    font-size: 15px;
+    font-size: 17px;
   }
 }
 
@@ -499,8 +507,9 @@ a {
 
   h2 {
     margin: 0;
-    font-size: 17px;
+    font-size: 18px;
     font-weight: 700;
+    letter-spacing: -0.01em;
   }
 
   p {
