@@ -143,7 +143,7 @@ HttpOnly cookie, and the OTP is shown on screen instead of being emailed.
 
 **Confirmed gaps (vs brief)**
 1. Mobi's existing auth backend and APIs haven't been inspected. The API contract here needs to be mapped onto them.
-2. Official Mobi logo SVG not supplied; the wordmark is approximated.
+2. ~~Official Mobi logo SVG not supplied~~ Resolved: official wordmark and logo mark are in `public/brand/` and used across the portal.
 3. No designs exist for the *Set new password*, *Success* and dashboard screens. They were built in the same visual style and need Design review.
 
 **Proposed improvements (need approval)**
@@ -165,7 +165,7 @@ HttpOnly cookie, and the OTP is shown on screen instead of being emailed.
 
 - **Product:** answer §8 items 7–14; approve the §5 values; sign off on the acceptance criteria.
 - **BA:** map this API contract to the existing Mobi auth services; document the user lifecycle and audit requirements.
-- **Design:** review the new screens (set new password, success, dashboard placeholder, error states); supply the logo SVG.
+- **Design:** review the new screens (set new password, success, dashboard placeholder, error states).
 - **Engineering:** confirm the real backend's capabilities against §2 and §5; plan the cookie-based sessions and Argon2id; review the security controls.
 - **QA:** run §7 on the Vercel deployment; add cross-browser and mobile checks.
 

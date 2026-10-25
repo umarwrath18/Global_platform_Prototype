@@ -2,7 +2,7 @@
   <aside class="sidebar" aria-label="Main navigation">
     <div class="brand">
       <a routerLink="/dashboard" class="home-link" aria-label="Global Platform home" (click)="navigated()">
-        <span class="mini-logo" aria-hidden="true">m</span>
+        <img class="mini-logo" src="brand/mobi-mark-white.svg" alt="" aria-hidden="true" />
         <app-mobi-logo class="full-logo" [showProduct]="false" style="--logo-size: 40px" />
       </a>
       <button type="button" class="collapse-btn" (click)="toggleCollapsed()" [attr.aria-label]="collapsed() ? 'Expand sidebar' : 'Collapse sidebar'" [attr.aria-pressed]="collapsed()">

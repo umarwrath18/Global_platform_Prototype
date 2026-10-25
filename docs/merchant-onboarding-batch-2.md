@@ -93,6 +93,8 @@ Applied from the supplied UI reference, after these decisions were confirmed:
 | Dashboard | Reference layout (KPI cards with sparklines, pipeline row, by-country chart, *Attention required*), computed **only from prototype onboarding data**. No payment volumes, revenue or success rates are shown. The Batch 1 workspace/country access content is kept; the workspace switch (still `/dashboard/:country`, authorised by the server) is a labelled **Workspace** control in the page header. |
 | Top bar | **Country, Merchant, Currency, Date range** filters (date = last update) applied to the dashboard, Merchants, Applications and Notifications; search for merchants and applications (Ctrl/⌘ + K); a prototype help popover; notifications. The filters are dimmed on pages they don't affect. Filter choices are remembered in this browser. |
 
+Brand assets (`public/brand/`): official wordmark (white on navy surfaces: login brand panel, sidebar; blue on white: mobile login header), logo mark (white: collapsed sidebar; blue: browser favicon).
+
 Tokens added in `styles.scss`: `--nav-bg`, `--nav-bg-raised`, `--nav-border`, `--nav-text`, `--nav-text-muted`, `--nav-active`. Headings are now bold (700), as in the reference.
 
 ## 6. Demo data (`merchant-seed.ts`, all marked *Demo data*)
