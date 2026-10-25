@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { from, mergeMap, Observable, timer } from 'rxjs';
 import { DemoInboxService } from '../../shared/demo-inbox.service';
 import { AuthServer } from './auth-server';
+import { MerchantServer } from './merchant-server';
 
 /**
  * Hosts the simulated backend for the prototype and exposes QA hooks on
@@ -17,6 +18,8 @@ export class MockBackend {
     sendEmail: (email) => this.inbox.deliver(email),
   });
 
+  readonly merchants = new MerchantServer({ storage: localStorage, auth: this.server });
+
   constructor() {
     (window as any).mobiDemo = {
       suspendAccount: (id: string) => this.server.setAccountStatus(id, 'suspended'),
@@ -25,7 +28,12 @@ export class MockBackend {
       enableUser: (loginId: string) => this.server.setUserStatus(loginId, 'active'),
       expireSessions: () => this.server.expireSessions(),
       audit: async () => console.table((await this.server.auditLog()).map((e) => ({ ...e, at: new Date(e.at).toISOString() }))),
-      reset: () => this.server.resetAll(),
+      // Restores both the auth and the merchant demo data (they are linked through Global Accounts).
+      reset: async () => {
+        await this.server.resetAll();
+        await this.merchants.resetAll();
+      },
+      resetMerchants: () => this.merchants.resetAll(),
     };
   }
 }
@@ -42,8 +50,11 @@ export const mockBackendInterceptor: HttpInterceptorFn = (req, next) => {
       return;
     }
     const token = req.headers.get('Authorization')?.replace(/^Bearer /, '') ?? null;
+    const handle = MerchantServer.handles(req.url)
+      ? () => backend.merchants.handle(req.method, req.urlWithParams, req.body, token, req.headers.get('X-Demo-Role'))
+      : () => backend.server.handle(req.method, req.urlWithParams, req.body, token);
     const sub = timer(LATENCY_MS)
-      .pipe(mergeMap(() => from(backend.server.handle(req.method, req.urlWithParams, req.body, token))))
+      .pipe(mergeMap(() => from(handle())))
       .subscribe({
         next: (res) => {
           if (res.status < 400) {

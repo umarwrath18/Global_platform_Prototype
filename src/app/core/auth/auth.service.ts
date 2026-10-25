@@ -86,6 +86,11 @@ export class AuthService {
     return firstValueFrom(this.http.get<WorkspaceContext>(`/api/workspace/context${query}`));
   }
 
+  /** Re-reads the session (e.g. after a country is activated) without extending it. */
+  refresh() {
+    return this.checkStatus(false);
+  }
+
   /** Called by the HTTP interceptor when a protected request is rejected as unauthenticated. */
   handleUnauthenticated(code: ApiErrorCode) {
     if (!this.sessionState() && !this.token) return;

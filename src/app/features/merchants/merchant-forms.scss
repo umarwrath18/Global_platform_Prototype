@@ -1,0 +1,164 @@
+.narrow {
+  max-width: 920px;
+}
+
+.flow-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin: 0 0 20px;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-subtle);
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  span {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    font-size: 12px;
+  }
+
+  .current {
+    color: var(--mobi-blue);
+
+    span {
+      border-color: var(--mobi-blue);
+      background: var(--mobi-blue);
+      color: #fff;
+    }
+  }
+
+  .done {
+    color: var(--success);
+
+    span {
+      border-color: var(--success);
+      background: var(--success-bg);
+    }
+  }
+}
+
+.sub-head {
+  margin: 28px 0 14px;
+  padding-top: 20px;
+  border-top: 1px solid var(--surface-muted);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.form-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 22px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-page);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+.alert-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.created {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+
+  .icon-tile {
+    flex: none;
+    margin: 0;
+  }
+
+  .eyebrow {
+    margin-bottom: 4px;
+    color: var(--success);
+  }
+
+  .lead {
+    margin: 6px 0 0;
+    color: var(--text-muted);
+  }
+}
+
+.gm-id {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.results {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+
+  li + li {
+    border-top: 1px solid var(--surface-muted);
+  }
+
+  button {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 12px 14px;
+    border: 0;
+    background: var(--surface);
+    text-align: left;
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible {
+      outline: none;
+      background: var(--mobi-blue-tint);
+    }
+  }
+
+  .r-name {
+    flex: 1;
+    font-weight: 700;
+  }
+
+  .r-meta {
+    display: block;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-muted);
+  }
+}
+
+.selected-merchant {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.existing {
+  margin-top: 18px;
+
+  h3 {
+    margin: 0 0 8px;
+    font-size: 14px;
+    font-weight: 700;
+  }
+}

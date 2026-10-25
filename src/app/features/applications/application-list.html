@@ -1,0 +1,75 @@
+<main class="page">
+  <div class="portal-head">
+    <div>
+      <p class="eyebrow">Merchant Management</p>
+      <h1>Country applications</h1>
+      <p class="sub">Work queues by team. Each application is tracked independently of the merchant's other countries.</p>
+    </div>
+  </div>
+
+  <section class="panel-card">
+    <div class="tabs" role="tablist" aria-label="Queues">
+      @for (t of queues; track t.key) {
+        <button type="button" role="tab" [class.on]="queue() === t.key" [attr.aria-selected]="queue() === t.key" (click)="select(t.key)">
+          {{ t.label }}<span class="n">{{ counts()[t.key] }}</span>
+          @if (t.owner === roles.role()) {<span class="mine">Your team</span>}
+        </button>
+      }
+    </div>
+    <div class="toolbar">
+      <input class="f-input grow" type="search" placeholder="Search application ID, Global Merchant ID or name" aria-label="Search applications" [value]="q()" (input)="q.set($any($event.target).value)" />
+      <select class="f-input" aria-label="Country" (change)="country.set($any($event.target).value)">
+        <option value="">All countries</option>
+        @for (c of countries; track c.code) {<option [value]="c.code">{{ c.name }}</option>}
+      </select>
+    </div>
+
+    @if (loading()) {
+      <div class="skeleton-rows" aria-busy="true" aria-label="Loading applications"><span></span><span></span><span></span></div>
+    } @else if (error(); as e) {
+      <div class="empty-state" role="alert">
+        <div class="icon-tile"><app-icon name="alert-circle" /></div>
+        <h3>We couldn't load applications</h3>
+        <p>{{ e.message }}</p>
+        <button type="button" class="btn" (click)="load()">Try again</button>
+      </div>
+    } @else if (!rows().length) {
+      <div class="empty-state">
+        <div class="icon-tile"><app-icon name="check-circle" /></div>
+        <h3>{{ q() || country() ? 'No applications match' : current().empty }}</h3>
+      </div>
+    } @else {
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Application ID</th>
+              <th scope="col">Merchant</th>
+              <th scope="col">Country</th>
+              <th scope="col">Status</th>
+              <th scope="col">Submissions</th>
+              <th scope="col">Created</th>
+              <th scope="col">Last updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (a of rows(); track a.id) {
+              <tr>
+                <td class="mono"><a class="row-link" [routerLink]="['/applications', a.id]">{{ a.id }}</a></td>
+                <td>
+                  <a class="row-link" [routerLink]="['/merchants', a.merchantId]">{{ a.merchantName }}</a>
+                  <div class="meta">{{ a.merchantId }}</div>
+                </td>
+                <td>{{ countryName(a.country) }} <span class="tag">{{ a.currency }}</span></td>
+                <td><app-status [status]="a.status" /></td>
+                <td class="muted">{{ a.submissionCount }}</td>
+                <td class="muted">{{ date(a.createdAt) }}</td>
+                <td class="muted" [title]="date(a.updatedAt)">{{ rel(a.updatedAt) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+</main>

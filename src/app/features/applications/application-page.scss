@@ -1,0 +1,152 @@
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  font-size: 14px;
+}
+
+.tracker {
+  margin-bottom: 20px;
+}
+
+.next {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 22px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-page);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  font-size: 14px;
+  color: var(--text-muted);
+
+  span:first-of-type {
+    flex: 1;
+  }
+
+  &.mine {
+    background: var(--mobi-blue-tint);
+    color: var(--mobi-blue);
+  }
+}
+
+.alert {
+  margin-bottom: 20px;
+}
+
+.alert-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.small {
+  font-size: 13px;
+}
+
+.corr-sections,
+.corr-note {
+  display: block;
+  margin-top: 6px;
+  font-size: 14px;
+}
+
+.corr-sections {
+  font-weight: 600;
+}
+
+.hint-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 14px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 20px;
+  align-items: start;
+}
+
+.col-side {
+  position: sticky;
+  top: 92px;
+}
+
+.timeline {
+  max-height: calc(100vh - 200px);
+  margin: 0;
+  padding: 8px 22px 16px;
+  overflow-y: auto;
+  list-style: none;
+
+  li {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 0 10px 18px;
+    border-left: 2px solid var(--surface-muted);
+
+    &::before {
+      content: '';
+      position: absolute;
+      left: -6px;
+      top: 15px;
+      width: 10px;
+      height: 10px;
+      border: 2px solid var(--surface);
+      border-radius: 50%;
+      background: var(--mobi-blue);
+    }
+
+    &.system::before {
+      background: var(--border-strong);
+    }
+
+    &.returned::before {
+      background: var(--warning);
+    }
+
+    &.rejected::before {
+      background: var(--danger);
+    }
+
+    &.operational::before,
+    &.risk_approved::before {
+      background: var(--success);
+    }
+  }
+}
+
+.t-action {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.t-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.t-comment {
+  margin: 2px 0;
+  font-size: 13px;
+}
+
+@media (max-width: 1100px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .col-side {
+    position: static;
+  }
+}

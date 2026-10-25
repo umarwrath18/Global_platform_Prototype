@@ -1,0 +1,105 @@
+@let a = application();
+<section class="panel-card role-panel risk">
+  <div class="panel-head">
+    <div>
+      <h2><app-icon name="shield" [size]="18" />Risk review</h2>
+      <p>Submission {{ a.submissionCount }} · Review the application, documents and evidence, then decide.</p>
+    </div>
+  </div>
+  <div class="panel-body">
+    @if (lastReturn(); as r) {
+      <div class="alert compact" role="note">
+        <app-icon name="info" />
+        <div>
+          <strong>Resubmitted after correction</strong>
+          Previously returned on {{ dateTime(r.at) }} by {{ r.by }}: “{{ r.comment }}”
+          @if (lastResubmit()?.comment; as note) {
+            <br />Sales / Operations response: “{{ note }}”
+          }
+        </div>
+      </div>
+    }
+
+    @if (evidence(); as ev) {
+      <div class="evidence">
+        <div class="ev-head">
+          <strong>Verification evidence</strong>
+          <span class="tag demo">Simulated</span>
+          <span class="ev-meta">{{ ev.provider }} · {{ dateTime(ev.ranAt) }}</span>
+        </div>
+        <ul>
+          @for (chk of ev.checks; track chk.name) {
+            <li [class]="chk.result">
+              <app-icon [name]="chk.result === 'pass' ? 'check-circle' : 'alert-circle'" [size]="18" />
+              <span><strong>{{ chk.name }}</strong> · {{ chk.result === 'pass' ? 'No issues' : chk.result === 'review' ? 'Needs review' : 'Failed' }}<br /><span class="ev-detail">{{ chk.detail }}</span></span>
+            </li>
+          }
+        </ul>
+        <p class="ev-note"><app-icon name="info" [size]="14" />{{ flags() ? flags() + ' check(s) need attention. ' : '' }}Automated checks never approve or reject an application. The decision is yours.</p>
+      </div>
+    }
+
+    @if (error(); as e) {
+      <div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>
+    }
+
+    <fieldset class="decision">
+      <legend>Decision <span class="req">*</span></legend>
+      <label class="opt" [class.on]="decision() === 'approve'">
+        <input type="radio" name="decision" value="approve" [checked]="decision() === 'approve'" (change)="choose('approve')" />
+        <span><strong>Approve</strong>Hand over to CS for country configuration. The merchant does not go live yet.</span>
+      </label>
+      <label class="opt" [class.on]="decision() === 'return'">
+        <input type="radio" name="decision" value="return" [checked]="decision() === 'return'" (change)="choose('return')" />
+        <span><strong>Return for correction</strong>Sales / Ops corrects the same application and resubmits it.</span>
+      </label>
+      <label class="opt danger" [class.on]="decision() === 'reject'">
+        <input type="radio" name="decision" value="reject" [checked]="decision() === 'reject'" (change)="choose('reject')" />
+        <span><strong>Reject</strong>Final for this application. A retry needs a new application.</span>
+      </label>
+      @if (attempted() && problems()['decision']; as m) {<p class="f-error">{{ m }}</p>}
+    </fieldset>
+
+    @if (decision() === 'return') {
+      <fieldset class="sections">
+        <legend>Sections to correct <span class="req">*</span></legend>
+        @for (s of sectionKeys; track s) {
+          <label><input type="checkbox" [checked]="sections().has(s)" (change)="toggleSection(s, $any($event.target).checked)" />{{ label[s] }}</label>
+        }
+        @if (attempted() && problems()['sections']; as m) {<p class="f-error">{{ m }}</p>}
+      </fieldset>
+    }
+
+    <div class="f-field">
+      <label for="review-comment">
+        {{ decision() === 'return' ? 'Reason and requested corrections' : decision() === 'reject' ? 'Reason for rejection' : 'Comment' }}
+        @if (decision() && decision() !== 'approve') {<span class="req">*</span>} @else {<span class="f-hint inline">(optional)</span>}
+      </label>
+      <textarea id="review-comment" class="f-input" rows="3" [class.invalid]="attempted() && problems()['comment']" [value]="comment()" (input)="comment.set($any($event.target).value)"></textarea>
+      @if (attempted() && problems()['comment']; as m) {<p class="f-error">{{ m }}</p>}
+    </div>
+
+    <label class="check">
+      <input type="checkbox" [checked]="reviewed()" (change)="reviewed.set($any($event.target).checked)" />
+      I have reviewed the application, documents and verification evidence.
+    </label>
+    @if (attempted() && problems()['reviewed']; as m) {<p class="f-error">{{ m }}</p>}
+
+    @if (confirmReject()) {
+      <div class="alert danger compact" role="alert">
+        <app-icon name="alert-circle" />
+        <div><strong>Reject {{ a.id }}?</strong>This is final. The application and its history are kept, and any retry will need a new application.</div>
+      </div>
+    }
+
+    <div class="panel-actions">
+      <button type="button" class="btn" [class.primary]="decision() !== 'reject'" [class.danger]="decision() === 'reject'" (click)="submit()" [disabled]="busy()">
+        @if (busy()) {<span class="spinner" aria-hidden="true"></span>}
+        {{ decision() === 'reject' ? (confirmReject() ? 'Confirm rejection' : 'Reject application') : decision() === 'return' ? 'Return for correction' : 'Approve application' }}
+      </button>
+      @if (confirmReject()) {
+        <button type="button" class="btn" (click)="confirmReject.set(false)">Cancel</button>
+      }
+    </div>
+  </div>
+</section>

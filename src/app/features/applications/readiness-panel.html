@@ -1,0 +1,113 @@
+@let a = application();
+<section class="panel-card role-panel cs">
+  <div class="panel-head">
+    <div>
+      <h2><app-icon name="check-circle" [size]="18" />Operational readiness</h2>
+      <p>Risk approval does not activate the merchant. Each step below must be completed in order. <span class="tag demo">Simulated downstream steps</span></p>
+    </div>
+  </div>
+  <div class="panel-body">
+    @if (!canAct() && a.status !== 'operational') {
+      <p class="hint-line"><app-icon name="info" [size]="16" />Customer Success completes these steps. Switch the prototype role to CS to act.</p>
+    }
+    @if (error(); as e) {
+      <div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>
+    }
+
+    @if (a.status === 'risk_approved' && canAct()) {
+      <div class="start">
+        <p>Risk approved this application. Start the {{ cfg().name }} configuration to begin operational readiness.</p>
+        <button type="button" class="btn primary" (click)="run({ action: 'start_configuration' }, 'start_configuration', 'CS configuration started')" [disabled]="!!busy()">
+          @if (busy() === 'start_configuration') {<span class="spinner" aria-hidden="true"></span>}Start CS configuration
+        </button>
+      </div>
+    }
+
+    <ol class="stages">
+      @for (s of stages(); track s.key) {
+        <li [class]="s.state">
+          <div class="stage-head">
+            <span class="dot" aria-hidden="true">@if (s.state === 'done') {<app-icon name="check" [size]="13" />}</span>
+            <div>
+              <h3>{{ s.title }} <span class="sr-only">({{ s.state }})</span></h3>
+              <p>{{ s.description }}</p>
+            </div>
+          </div>
+
+          @if (s.key === 'configuration') {
+            <div class="config-summary">
+              <span><strong>Country</strong> {{ cfg().name }}</span>
+              <span><strong>Currency</strong> {{ a.currency }}</span>
+              <span><strong>Approved methods</strong>
+                @for (x of pricing(); track x.m.code; let last = $last) {<span>{{ x.m.name }} {{ x.line!.mdr }}%{{ last ? '' : ', ' }}</span>}
+              </span>
+            </div>
+          }
+
+          @if (s.checklist; as stage) {
+            @if (s.state !== 'upcoming') {
+              <ul class="checklist">
+                @for (item of items(stage); track item.key) {
+                  <li>
+                    <label [class.done]="item.done">
+                      <input type="checkbox" [checked]="item.done" [disabled]="!checklistOpen(stage) || !!busy()" (change)="toggle(stage, item, $any($event.target).checked)" />
+                      <span>{{ item.label }}
+                        @if (item.done && item.doneBy) {<span class="who">{{ item.doneBy }} · {{ dateTime(item.doneAt!) }}</span>}
+                      </span>
+                    </label>
+                  </li>
+                }
+              </ul>
+            }
+          }
+
+          @if (s.key === 'keys') {
+            @if (a.readiness.keySet; as k) {
+              <div class="keyset">
+                <app-icon name="key" [size]="18" />
+                <div>
+                  <strong>{{ k.reference }}</strong> · Production · {{ dateTime(k.generatedAt) }}
+                  <p>Sample key-set reference only. No real credentials were generated or issued.</p>
+                </div>
+              </div>
+            }
+          }
+
+          @if (canAct()) {
+            @if (s.key === 'configuration' && a.status === 'cs_configuration') {
+              <div class="stage-actions">
+                <button type="button" class="btn primary" [disabled]="!allDone('configuration') || !!busy()" (click)="run({ action: 'generate_keys' }, 'generate_keys', 'Production keys generated (simulated)')">
+                  @if (busy() === 'generate_keys') {<span class="spinner" aria-hidden="true"></span>} @else {<app-icon name="key" [size]="16" />}Generate production keys (simulated)
+                </button>
+                @if (!allDone('configuration')) {<span class="hint">Complete every configuration item first.</span>}
+              </div>
+            }
+            @if (s.key === 'integration' && a.status === 'keys_generated') {
+              <div class="stage-actions">
+                <button type="button" class="btn primary" [disabled]="!!busy()" (click)="run({ action: 'start_integration' }, 'start_integration', 'Merchant integration started')">
+                  @if (busy() === 'start_integration') {<span class="spinner" aria-hidden="true"></span>}Start merchant integration
+                </button>
+              </div>
+            }
+            @if (s.key === 'integration' && a.status === 'integration') {
+              <div class="stage-actions">
+                <button type="button" class="btn primary" [disabled]="!allDone('integration') || !!busy()" (click)="run({ action: 'request_go_live' }, 'request_go_live', 'Go-live verification started')">
+                  @if (busy() === 'request_go_live') {<span class="spinner" aria-hidden="true"></span>}Integration complete: start go-live verification
+                </button>
+                @if (!allDone('integration')) {<span class="hint">Complete every integration item first.</span>}
+              </div>
+            }
+            @if (s.key === 'go_live' && a.status === 'go_live_verification') {
+              <div class="stage-actions">
+                <button type="button" class="btn primary" [disabled]="!allDone('go_live') || !!busy()" (click)="run({ action: 'confirm_go_live' }, 'confirm_go_live', cfg().name + ' is now operational')">
+                  @if (busy() === 'confirm_go_live') {<span class="spinner" aria-hidden="true"></span>}Confirm go-live
+                </button>
+                @if (!allDone('go_live')) {<span class="hint">All go-live checks must pass first.</span>}
+              </div>
+            }
+          }
+        </li>
+      }
+    </ol>
+  </div>
+</section>

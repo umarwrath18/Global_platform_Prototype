@@ -1,0 +1,49 @@
+<main class="page">
+  <div class="portal-head">
+    <div>
+      <p class="eyebrow">Merchant Management</p>
+      <h1>Notifications</h1>
+      <p class="sub">Target behaviour: every event is shown in the portal and sent automatically by email. In this prototype no email is sent; each one is recorded as <strong>simulated</strong>.</p>
+    </div>
+    @if (api.unreadCount()) {
+      <button type="button" class="btn" (click)="api.markRead()">Mark all as read</button>
+    }
+  </div>
+
+  <section class="panel-card">
+    <div class="toolbar">
+      <div class="seg" role="radiogroup" aria-label="Show">
+        <button type="button" role="radio" [attr.aria-checked]="scope() === 'mine'" [class.on]="scope() === 'mine'" (click)="scope.set('mine')">For {{ roleLabel[roles.role()] }}</button>
+        <button type="button" role="radio" [attr.aria-checked]="scope() === 'all'" [class.on]="scope() === 'all'" (click)="scope.set('all')">All teams</button>
+      </div>
+      <select class="f-input" aria-label="Event type" (change)="event.set($any($event.target).value)">
+        <option value="">All events</option>
+        @for (e of events; track e[0]) {<option [value]="e[0]">{{ e[1] }}</option>}
+      </select>
+    </div>
+
+    <ul class="list">
+      @for (n of items(); track n.id) {
+        <li [class.unread]="unread(n)">
+          <div class="row">
+            <span class="ev" [class]="'ev ' + n.event">{{ eventLabel[n.event] }}</span>
+            <strong class="title">{{ n.title }}</strong>
+            <span class="when">{{ dateTime(n.at) }}</span>
+          </div>
+          <p class="body">{{ n.body }}</p>
+          <div class="channels">
+            <span><app-icon name="bell" [size]="14" />In-portal · {{ audience(n.audience) }}</span>
+            <span><app-icon name="mail" [size]="14" />Email (simulated) → {{ n.email.to.join(', ') }}</span>
+            <a [routerLink]="['/applications', n.applicationId]" (click)="open(n)">Open {{ n.applicationId }}</a>
+          </div>
+        </li>
+      } @empty {
+        <li class="empty-state">
+          <div class="icon-tile"><app-icon name="bell" /></div>
+          <h3>No notifications</h3>
+          <p>Events such as submission, return, approval, rejection, configuration readiness and go-live will appear here.</p>
+        </li>
+      }
+    </ul>
+  </section>
+</main>

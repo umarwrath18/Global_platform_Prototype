@@ -1,46 +1,4 @@
 @if (session(); as s) {
-  <header class="topbar">
-    <div class="topbar-left">
-      <app-mobi-logo tone="dark" [showProduct]="false" style="--logo-size: 36px" />
-      <span class="product">Global Platform</span>
-    </div>
-
-    <div class="topbar-right">
-      @if (activeCountries().length) {
-        <label class="switcher">
-          <span class="sr-only">Workspace country</span>
-          <app-icon name="globe" [size]="18" />
-          <select (change)="switchCountry($any($event.target).value)">
-            <option value="" [selected]="!country()">All countries · {{ s.baseCurrency }}</option>
-            @for (c of activeCountries(); track c.code) {
-              <option [value]="c.code" [selected]="c.code === country()?.toUpperCase()">{{ c.name }} · {{ c.currency }}</option>
-            }
-          </select>
-        </label>
-      }
-
-      <div class="user">
-        <button type="button" class="user-chip" (click)="menuOpen.set(!menuOpen())" [attr.aria-expanded]="menuOpen()" aria-haspopup="menu">
-          <span class="avatar" aria-hidden="true">{{ initials() }}</span>
-          <span class="user-text">
-            <span class="user-name">{{ s.user.name }}</span>
-            <span class="user-role">{{ s.role.name }}</span>
-          </span>
-        </button>
-        @if (menuOpen()) {
-          <div class="menu" role="menu">
-            <div class="menu-head">
-              <strong>{{ s.user.name }}</strong>
-              <span>{{ s.user.email }}</span>
-              <span>ID: {{ s.user.loginId }}</span>
-            </div>
-            <button type="button" role="menuitem" (click)="logout()"><app-icon name="logout" [size]="18" />Sign out</button>
-          </div>
-        }
-      </div>
-    </div>
-  </header>
-
   <main class="main">
     <div class="page-head">
       <p class="eyebrow">{{ s.account.name }} · {{ s.account.id }}</p>
@@ -117,9 +75,14 @@
       <section class="card">
         <h2>Features</h2>
         <p class="card-sub">Features permitted by your role will appear here.</p>
+        <a class="feature-link" routerLink="/merchants">
+          <app-icon name="building" [size]="20" />
+          <span><strong>Merchant Management &amp; Onboarding</strong>Create Global Merchants, onboard countries and track reviews.</span>
+          <app-icon name="chevron-right" [size]="18" />
+        </a>
         <div class="placeholder">
           <app-icon name="lock" [size]="20" />
-          <p>The role-to-permission matrix and MVP modules are pending approval. They will be added in later phases.</p>
+          <p>The role-to-permission matrix and other MVP modules are pending approval. They will be added in later phases.</p>
         </div>
       </section>
     </div>

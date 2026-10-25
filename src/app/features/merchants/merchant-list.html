@@ -1,0 +1,157 @@
+<main class="page">
+  <div class="portal-head">
+    <div>
+      <p class="eyebrow">Merchant Management</p>
+      <h1>Merchants</h1>
+      <p class="sub">Global Merchants and their country applications. <span class="tag demo">Demo data</span></p>
+    </div>
+    <div class="actions">
+      @if (roles.role() === 'sales') {
+        <a class="btn" routerLink="/merchants/expand"><app-icon name="globe" [size]="18" />Add country to existing merchant</a>
+        <a class="btn primary" routerLink="/merchants/new"><app-icon name="plus" [size]="18" />Add new merchant</a>
+      } @else {
+        <p class="role-note"><app-icon name="info" [size]="16" />Switch to Sales / Operations to add merchants or countries.</p>
+      }
+    </div>
+  </div>
+
+  <div class="stats" role="group" aria-label="Quick filters">
+    <div class="stat static"><span class="n">{{ stats().merchants }}</span><span class="l">Global Merchants</span></div>
+    <button type="button" class="stat" [class.on]="appStatus() === 'pending_risk_review'" (click)="quick('pending_risk_review')" [attr.aria-pressed]="appStatus() === 'pending_risk_review'">
+      <span class="n">{{ stats().pending }}</span><span class="l">Pending Risk review</span>
+    </button>
+    <button type="button" class="stat" [class.on]="appStatus() === 'returned'" (click)="quick('returned')" [attr.aria-pressed]="appStatus() === 'returned'">
+      <span class="n">{{ stats().returned }}</span><span class="l">Returned for correction</span>
+    </button>
+    <button type="button" class="stat" [class.on]="appStatus() === 'in_readiness'" (click)="quick('in_readiness')" [attr.aria-pressed]="appStatus() === 'in_readiness'">
+      <span class="n">{{ stats().readiness }}</span><span class="l">In operational readiness</span>
+    </button>
+    <button type="button" class="stat" [class.on]="appStatus() === 'operational'" (click)="quick('operational')" [attr.aria-pressed]="appStatus() === 'operational'">
+      <span class="n">{{ stats().operational }}</span><span class="l">Operational countries</span>
+    </button>
+  </div>
+
+  <section class="panel-card">
+    <div class="filters">
+      <label class="search">
+        <app-icon name="search" [size]="18" />
+        <span class="sr-only">Search merchants</span>
+        <input class="f-input" type="search" placeholder="Search by name, GM ID, application ID, registration no. or contact" [value]="q()" (input)="setFilter('q', $any($event.target).value)" />
+      </label>
+      <label>
+        <span class="sr-only">Country</span>
+        <select class="f-input" [value]="country()" (change)="setFilter('country', $any($event.target).value)">
+          <option value="">All countries</option>
+          @for (c of countries; track c.code) {
+            <option [value]="c.code" [selected]="c.code === country()">{{ c.name }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span class="sr-only">Application status</span>
+        <select class="f-input" (change)="setFilter('status', $any($event.target).value)">
+          <option value="" [selected]="!appStatus()">Any application status</option>
+          <option value="in_readiness" [selected]="appStatus() === 'in_readiness'">In operational readiness</option>
+          @for (s of statusOptions; track s[0]) {
+            <option [value]="s[0]" [selected]="s[0] === appStatus()">{{ s[1] }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span class="sr-only">Global status</span>
+        <select class="f-input" (change)="setFilter('global', $any($event.target).value)">
+          <option value="" [selected]="!globalStatus()">Any global status</option>
+          @for (s of globalOptions; track s[0]) {
+            <option [value]="s[0]" [selected]="s[0] === globalStatus()">{{ s[1] }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span class="sr-only">Registration country</span>
+        <select class="f-input" (change)="setFilter('reg', $any($event.target).value)">
+          <option value="" [selected]="!regCountry()">Any registration country</option>
+          @for (c of regCountries; track c.code) {
+            <option [value]="c.code" [selected]="c.code === regCountry()">Registered in {{ c.name }}</option>
+          }
+        </select>
+      </label>
+      @if (hasFilters()) {
+        <button type="button" class="btn ghost sm" (click)="clear()">Clear filters</button>
+      }
+    </div>
+
+    @if (loading()) {
+      <div class="skeleton-rows" aria-busy="true" aria-label="Loading merchants"><span></span><span></span><span></span><span></span></div>
+    } @else if (error(); as e) {
+      <div class="empty-state" role="alert">
+        <div class="icon-tile"><app-icon name="alert-circle" /></div>
+        <h3>We couldn't load merchants</h3>
+        <p>{{ e.message ?? 'Please try again.' }}</p>
+        <button type="button" class="btn" (click)="load()">Try again</button>
+      </div>
+    } @else if (!filtered().length) {
+      <div class="empty-state">
+        <div class="icon-tile"><app-icon name="search" /></div>
+        @if (hasFilters()) {
+          <h3>No merchants match these filters</h3>
+          <p>Try a different search or clear the filters.</p>
+          <button type="button" class="btn" (click)="clear()">Clear filters</button>
+        } @else {
+          <h3>No merchants yet</h3>
+          <p>Create the first Global Merchant to start onboarding.</p>
+        }
+      </div>
+    } @else {
+      <p class="count" aria-live="polite">{{ filtered().length }} of {{ merchants().length }} merchants</p>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Global Merchant ID</th>
+              <th scope="col">Merchant</th>
+              <th scope="col">Country applications</th>
+              <th scope="col">Global status</th>
+              <th scope="col">Created</th>
+              <th scope="col">Last updated</th>
+              <th scope="col"><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (m of filtered(); track m.id) {
+              <tr>
+                <td class="mono"><a class="row-link" [routerLink]="['/merchants', m.id]">{{ m.id }}</a></td>
+                <td>
+                  <a class="row-link" [routerLink]="['/merchants', m.id]">{{ m.legalName }}</a>
+                  <div class="meta">Registered in {{ countryName(m.registrationCountry) }} · {{ m.registrationNumber }}</div>
+                </td>
+                <td>
+                  <ul class="apps">
+                    @for (a of m.applications; track a.id) {
+                      <li>
+                        <a [routerLink]="['/applications', a.id]" class="app-chip" [attr.aria-label]="countryName(a.country) + ' application ' + a.id">
+                          <span class="cc">{{ a.country }}</span>
+                          <app-status [status]="a.status" />
+                        </a>
+                      </li>
+                    } @empty {
+                      <li class="muted">No country applications</li>
+                    }
+                  </ul>
+                </td>
+                <td><app-status [globalStatus]="m.globalStatus" /></td>
+                <td class="muted">{{ date(m.createdAt) }}</td>
+                <td class="muted" [title]="date(m.lastUpdatedAt)">{{ rel(m.lastUpdatedAt) }}</td>
+                <td class="row-actions">
+                  <a class="btn sm" [routerLink]="['/merchants', m.id]">View</a>
+                  @if (roles.role() === 'sales') {
+                    <a class="btn sm ghost" routerLink="/merchants/expand" [queryParams]="{ merchant: m.id }" [attr.aria-label]="'Add country to ' + m.legalName"><app-icon name="plus" [size]="16" />Country</a>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+</main>

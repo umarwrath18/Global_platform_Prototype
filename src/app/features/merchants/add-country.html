@@ -1,0 +1,119 @@
+<main class="page narrow">
+  <ol class="crumbs">
+    <li><a routerLink="/merchants">Merchants</a></li>
+    <li aria-current="page">Add country to existing merchant</li>
+  </ol>
+
+  <div class="portal-head">
+    <div>
+      <h1>Add country to existing merchant</h1>
+      <p class="sub">Expand a Global Merchant into a new country. No new Global Merchant is created.</p>
+    </div>
+  </div>
+
+  <ol class="flow-steps" aria-label="Steps">
+    <li [class.current]="!detail()" [class.done]="!!detail()"><span>1</span>Find merchant</li>
+    <li [class.current]="!!detail()"><span>2</span>New country</li>
+    <li><span>3</span>Country application</li>
+  </ol>
+
+  @if (roles.role() !== 'sales') {
+    <div class="alert warning compact" role="status">
+      <app-icon name="info" />
+      <div>Only Sales / Operations can start country applications. Use the prototype role switcher in the top bar to act as Sales / Operations.</div>
+    </div>
+  }
+
+  @if (error(); as e) {
+    <div class="alert danger compact" role="alert">
+      <app-icon name="alert-circle" />
+      <div>{{ e.message ?? 'Something went wrong. Please try again.' }}</div>
+    </div>
+  }
+
+  @if (detail(); as d) {
+    <section class="panel-card">
+      <div class="panel-head">
+        <div>
+          <h2>{{ d.merchant.legalName }}</h2>
+          <p>{{ d.merchant.id }} · Registered in {{ countryName(d.merchant.registrationCountry) }} · {{ d.merchant.registrationNumber }}</p>
+        </div>
+        <div class="actions">
+          <app-status [globalStatus]="d.merchant.globalStatus" />
+          <button type="button" class="btn sm" (click)="change()">Change merchant</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <dl class="kv">
+          <div><dt>Primary contact</dt><dd>{{ d.merchant.primaryContact.name }}</dd></div>
+          <div><dt>Email</dt><dd>{{ d.merchant.primaryContact.email }}</dd></div>
+          <div><dt>Phone</dt><dd>{{ d.merchant.primaryContact.phone }}</dd></div>
+          <div><dt>Created</dt><dd>{{ date(d.merchant.createdAt) }}</dd></div>
+        </dl>
+        <div class="existing">
+          <h3>Existing country applications</h3>
+          @if (d.applications.length) {
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead><tr><th scope="col">Application</th><th scope="col">Country</th><th scope="col">Status</th><th scope="col">Updated</th></tr></thead>
+                <tbody>
+                  @for (a of d.applications; track a.id) {
+                    <tr>
+                      <td class="mono"><a class="row-link" [routerLink]="['/applications', a.id]">{{ a.id }}</a></td>
+                      <td>{{ countryName(a.country) }} · {{ a.currency }}</td>
+                      <td><app-status [status]="a.status" /></td>
+                      <td class="muted">{{ date(a.updatedAt) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          } @else {
+            <p class="f-hint">No country applications yet.</p>
+          }
+        </div>
+      </div>
+    </section>
+
+    <section class="panel-card">
+      <div class="panel-head">
+        <div>
+          <h2>Select the new country</h2>
+          <p>Shared details (contact, industry, website, directors) are prefilled. You'll only be asked for missing or country-specific information.</p>
+        </div>
+      </div>
+      <div class="panel-body">
+        <app-country-picker [merchant]="d.merchant" [applications]="d.applications" (opened)="opened($event)" />
+      </div>
+    </section>
+  } @else {
+    <section class="panel-card">
+      <div class="panel-body">
+        <label class="f-label" for="find">Search Global Merchants</label>
+        <input id="find" class="f-input" type="search" placeholder="Name, Global Merchant ID, registration number or contact email" [value]="q()" (input)="q.set($any($event.target).value)" autocomplete="off" [disabled]="loading()" />
+        <p class="f-hint">Type at least 2 characters.</p>
+        @if (loadingDetail()) {
+          <div class="skeleton-rows" aria-busy="true"><span></span><span></span></div>
+        } @else if (results().length) {
+          <ul class="results" aria-label="Matching merchants">
+            @for (m of results(); track m.id) {
+              <li>
+                <button type="button" (click)="select(m.id)">
+                  <span class="r-name">{{ m.legalName }}<span class="r-meta">{{ m.id }} · {{ countryName(m.registrationCountry) }} · {{ m.registrationNumber }}</span></span>
+                  <span class="r-meta">{{ m.applications.length }} {{ m.applications.length === 1 ? 'country' : 'countries' }}</span>
+                  <app-icon name="chevron-right" [size]="18" />
+                </button>
+              </li>
+            }
+          </ul>
+        } @else if (q().trim().length >= 2) {
+          <div class="empty-state">
+            <h3>No Global Merchant found</h3>
+            <p>Check the spelling or registration number. If this is a new organisation, create it instead.</p>
+            <a class="btn" routerLink="/merchants/new">Add new merchant</a>
+          </div>
+        }
+      </div>
+    </section>
+  }
+</main>

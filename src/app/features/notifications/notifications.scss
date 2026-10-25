@@ -1,0 +1,130 @@
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+
+  .f-input {
+    width: auto;
+    min-width: 180px;
+  }
+}
+
+.seg {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+
+  button {
+    padding: 0 14px;
+    height: 36px;
+    border: 0;
+    border-radius: 7px;
+    background: none;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+
+    &.on {
+      background: var(--mobi-blue-tint);
+      color: var(--mobi-blue);
+    }
+
+    &:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+  }
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  > li:not(.empty-state) {
+    position: relative;
+    padding: 16px 22px 16px 34px;
+    border-bottom: 1px solid var(--surface-muted);
+
+    &.unread::before {
+      content: '';
+      position: absolute;
+      left: 16px;
+      top: 22px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--mobi-blue);
+    }
+  }
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.title {
+  flex: 1;
+  min-width: 220px;
+}
+
+.when {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.ev {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--mobi-blue-tint);
+  color: var(--mobi-blue);
+  font-size: 12px;
+  font-weight: 700;
+
+  &.returned {
+    background: var(--warning-bg);
+    color: var(--warning);
+  }
+
+  &.rejected {
+    background: var(--danger-bg);
+    color: var(--danger);
+  }
+
+  &.approved,
+  &.go_live {
+    background: var(--success-bg);
+    color: var(--success);
+  }
+}
+
+.body {
+  margin: 6px 0 8px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-size: 13px;
+  color: var(--text-muted);
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  a {
+    font-weight: 600;
+  }
+}

@@ -1,0 +1,152 @@
+.role-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+
+  &.static {
+    cursor: default;
+  }
+
+  &:not(.static):hover {
+    border-color: var(--border-strong);
+  }
+
+  &.on {
+    border-color: var(--mobi-blue);
+    background: var(--mobi-blue-tint);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+  }
+
+  .n {
+    font-size: 24px;
+    font-weight: 700;
+  }
+
+  .l {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+
+  select.f-input {
+    width: auto;
+    min-width: 170px;
+  }
+}
+
+.search {
+  position: relative;
+  flex: 1 1 320px;
+  color: var(--text-subtle);
+
+  app-icon {
+    position: absolute;
+    left: 12px;
+    top: 13px;
+  }
+
+  .f-input {
+    padding-left: 38px;
+  }
+}
+
+.count {
+  margin: 0;
+  padding: 10px 18px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.meta {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.apps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  text-decoration: none;
+
+  &:hover .cc {
+    background: var(--mobi-blue-tint);
+    color: var(--mobi-blue);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+  }
+}
+
+.cc {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 22px;
+  border-radius: 5px;
+  background: var(--surface-muted);
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.row-actions {
+  white-space: nowrap;
+  text-align: right;
+
+  .btn + .btn {
+    margin-left: 6px;
+  }
+}
+
+@media (max-width: 900px) {
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -1,0 +1,191 @@
+<main class="page">
+  <ol class="crumbs">
+    <li><a routerLink="/merchants">Merchants</a></li>
+    <li aria-current="page">{{ detail()?.merchant?.legalName ?? id() }}</li>
+  </ol>
+
+  @if (loading() && !detail()) {
+    <section class="panel-card"><div class="skeleton-rows" aria-busy="true" aria-label="Loading merchant"><span></span><span></span><span></span></div></section>
+  } @else if (error(); as e) {
+    <section class="panel-card">
+      <div class="empty-state" role="alert">
+        <div class="icon-tile"><app-icon name="alert-circle" /></div>
+        <h3>{{ e.code === 'NOT_FOUND' ? 'Merchant not found' : "We couldn't load this merchant" }}</h3>
+        <p>{{ e.message }}</p>
+        <a class="btn" routerLink="/merchants">Back to merchants</a>
+      </div>
+    </section>
+  } @else if (detail(); as d) {
+    <div class="portal-head">
+      <div>
+        <p class="eyebrow">Global Merchant · {{ d.merchant.id }}</p>
+        <h1>{{ d.merchant.legalName }}</h1>
+        <p class="sub">
+          <app-status [globalStatus]="d.merchant.globalStatus" />
+          @if (d.merchant.demo) {
+            <span class="tag demo">Demo data</span>
+          }
+        </p>
+      </div>
+      @if (roles.role() === 'sales') {
+        <div class="actions">
+          <a class="btn primary" routerLink="/merchants/expand" [queryParams]="{ merchant: d.merchant.id }"><app-icon name="plus" [size]="18" />Add country</a>
+        </div>
+      }
+    </div>
+
+    <div class="layout">
+      <div class="col-main">
+        <section class="panel-card">
+          <div class="panel-head">
+            <div>
+              <h2>Global Merchant profile</h2>
+              <p>Shared across every country. Country-specific details live in each application.</p>
+            </div>
+            @if (roles.role() === 'sales' && !editing()) {
+              <button type="button" class="btn sm" (click)="startEdit()"><app-icon name="edit" [size]="16" />Edit profile</button>
+            }
+          </div>
+          <div class="panel-body">
+            @if (editing() && draft(); as p) {
+              <form (submit)="$event.preventDefault(); saveProfile()" novalidate>
+                @if (saveError(); as msg) {
+                  <div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ msg }}</div></div>
+                }
+                <div class="f-grid">
+                  <div class="f-field full">
+                    <label for="p-name">Registered legal name <span class="req">*</span></label>
+                    <input id="p-name" class="f-input" [class.invalid]="draftErrors()['legalName']" [value]="p.legalName" (input)="setDraft('legalName', $any($event.target).value)" />
+                    @if (draftErrors()['legalName']; as m) {<p class="f-error">{{ m }}</p>}
+                  </div>
+                  <div class="f-field">
+                    <label for="p-rc">Registration country <span class="req">*</span></label>
+                    <select id="p-rc" class="f-input" (change)="setDraft('registrationCountry', $any($event.target).value)">
+                      @for (c of regCountries; track c.code) {
+                        <option [value]="c.code" [selected]="c.code === p.registrationCountry">{{ c.name }}</option>
+                      }
+                    </select>
+                  </div>
+                  <div class="f-field">
+                    <label for="p-rn">Business registration number <span class="req">*</span></label>
+                    <input id="p-rn" class="f-input" [class.invalid]="draftErrors()['registrationNumber']" [value]="p.registrationNumber" (input)="setDraft('registrationNumber', $any($event.target).value)" />
+                    @if (draftErrors()['registrationNumber']; as m) {<p class="f-error">{{ m }}</p>}
+                  </div>
+                  <div class="f-field">
+                    <label for="p-cn">Primary contact <span class="req">*</span></label>
+                    <input id="p-cn" class="f-input" [class.invalid]="draftErrors()['name']" [value]="p.name" (input)="setDraft('name', $any($event.target).value)" />
+                    @if (draftErrors()['name']; as m) {<p class="f-error">{{ m }}</p>}
+                  </div>
+                  <div class="f-field">
+                    <label for="p-ce">Email <span class="req">*</span></label>
+                    <input id="p-ce" class="f-input" [class.invalid]="draftErrors()['email']" [value]="p.email" (input)="setDraft('email', $any($event.target).value)" />
+                    @if (draftErrors()['email']; as m) {<p class="f-error">{{ m }}</p>}
+                  </div>
+                  <div class="f-field">
+                    <label for="p-cp">Phone <span class="req">*</span></label>
+                    <input id="p-cp" class="f-input" [class.invalid]="draftErrors()['phone']" [value]="p.phone" (input)="setDraft('phone', $any($event.target).value)" />
+                    @if (draftErrors()['phone']; as m) {<p class="f-error">{{ m }}</p>}
+                  </div>
+                </div>
+                <p class="f-hint">Submitted applications keep the profile values they were reviewed with; drafts use the updated profile.</p>
+                <div class="actions edit-actions">
+                  <button type="button" class="btn" (click)="editing.set(false)">Cancel</button>
+                  <button type="submit" class="btn primary" [disabled]="saving() || hasDraftErrors()">
+                    @if (saving()) {<span class="spinner" aria-hidden="true"></span>}Save profile
+                  </button>
+                </div>
+              </form>
+            } @else {
+              <dl class="kv">
+                <div><dt>Global Merchant ID</dt><dd class="mono">{{ d.merchant.id }}</dd></div>
+                <div><dt>Legal name</dt><dd>{{ d.merchant.legalName }}</dd></div>
+                <div><dt>Registration country</dt><dd>{{ countryName(d.merchant.registrationCountry) }}</dd></div>
+                <div><dt>Registration number</dt><dd>{{ d.merchant.registrationNumber }}</dd></div>
+                <div><dt>Primary contact</dt><dd>{{ d.merchant.primaryContact.name }}</dd></div>
+                <div><dt>Email</dt><dd>{{ d.merchant.primaryContact.email }}</dd></div>
+                <div><dt>Phone</dt><dd>{{ d.merchant.primaryContact.phone }}</dd></div>
+                <div><dt>Created</dt><dd>{{ date(d.merchant.createdAt) }} · {{ d.merchant.createdBy }}</dd></div>
+                <div>
+                  <dt>Linked Global Account</dt>
+                  <dd>{{ d.merchant.linkedAccountId ?? 'Created at first country go-live' }}</dd>
+                </div>
+              </dl>
+            }
+          </div>
+        </section>
+
+        <section class="panel-card">
+          <div class="panel-head">
+            <div>
+              <h2>Country applications</h2>
+              <p>Each country is reviewed, configured and activated independently.</p>
+            </div>
+          </div>
+          @if (d.applications.length) {
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Application ID</th>
+                    <th scope="col">Country</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Progress</th>
+                    <th scope="col">Submissions</th>
+                    <th scope="col">Updated</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (a of d.applications; track a.id) {
+                    <tr>
+                      <td class="mono"><a class="row-link" [routerLink]="['/applications', a.id]">{{ a.id }}</a></td>
+                      <td>{{ countryName(a.country) }} <span class="tag">{{ a.currency }}</span></td>
+                      <td><app-status [status]="a.status" /></td>
+                      <td>
+                        <span class="bar" [class.rejected]="a.status === 'rejected'" role="img" [attr.aria-label]="'Step ' + progress(a.status) + ' of ' + stageCount">
+                          <span [style.width.%]="(progress(a.status) / stageCount) * 100"></span>
+                        </span>
+                      </td>
+                      <td class="muted">{{ a.submissionCount }}</td>
+                      <td class="muted">{{ date(a.updatedAt) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          } @else {
+            <div class="empty-state">
+              <div class="icon-tile"><app-icon name="globe" /></div>
+              <h3>No country applications yet</h3>
+              <p>This Global Merchant exists but hasn't applied for any country.</p>
+              @if (roles.role() === 'sales') {
+                <a class="btn primary" routerLink="/merchants/expand" [queryParams]="{ merchant: d.merchant.id }">Start a country application</a>
+              }
+            </div>
+          }
+        </section>
+      </div>
+
+      <aside class="col-side panel-card" aria-label="Application history">
+        <div class="panel-head"><div><h2>Application history</h2><p>All countries, newest first</p></div></div>
+        <ol class="timeline">
+          @for (h of history(); track $index) {
+            <li [class.system]="h.role === 'system'">
+              <span class="t-action">{{ h.action }}</span>
+              <span class="t-meta"><a [routerLink]="['/applications', h.applicationId]">{{ h.applicationId }}</a> · {{ h.country }}</span>
+              @if (h.comment) {
+                <span class="t-comment">“{{ h.comment }}”</span>
+              }
+              <span class="t-meta">{{ dateTime(h.at) }} · {{ h.by }} ({{ roleLabel[h.role] }})</span>
+            </li>
+          } @empty {
+            <li class="t-empty">No activity yet.</li>
+          }
+        </ol>
+      </aside>
+    </div>
+  }
+
+  @if (toast(); as t) {
+    <div class="p-toast" role="status"><app-icon name="check-circle" [size]="18" />{{ t }}</div>
+  }
+</main>

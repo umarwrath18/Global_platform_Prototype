@@ -1,0 +1,116 @@
+@let a = application();
+@let data = d();
+@let c = cfg();
+
+<section class="sum" [class.flag]="flagged().has('business')">
+  <header>
+    <h3>{{ label.business }}</h3>
+    @if (flagged().has('business')) {<span class="tag warn">Correction requested</span>}
+    @if (editable()) {<button type="button" class="btn ghost sm" (click)="edit.emit('business')"><app-icon name="edit" [size]="15" />Edit</button>}
+  </header>
+  <dl class="kv">
+    <div><dt>Legal name (Global profile)</dt><dd>{{ profile().legalName }}</dd></div>
+    <div><dt>Registered in</dt><dd>{{ countryName(profile().registrationCountry) }} · {{ profile().registrationNumber }}</dd></div>
+    <div><dt>Trading name</dt><dd>{{ data.business.tradingName || '—' }}</dd></div>
+    <div><dt>Business type</dt><dd>{{ data.business.businessType || '—' }}</dd></div>
+    <div><dt>Industry</dt><dd>{{ data.business.industry || '—' }}</dd></div>
+    <div><dt>Website</dt><dd>{{ data.business.website || '—' }}</dd></div>
+    <div><dt>{{ c.localRegistration.label }}</dt><dd>{{ sameCountry() ? profile().registrationNumber : data.business.localRegistrationNumber || '—' }}</dd></div>
+    <div><dt>{{ c.taxId.label }}</dt><dd>{{ data.business.taxId || '—' }}</dd></div>
+    <div><dt>Expected monthly volume</dt><dd>{{ data.business.expectedMonthlyVolume !== null ? (c.currency + ' ' + data.business.expectedMonthlyVolume.toLocaleString('en-GB')) : '—' }}</dd></div>
+    <div class="wide"><dt>Business address in {{ c.name }}</dt><dd>{{ data.business.address || '—' }}</dd></div>
+  </dl>
+</section>
+
+<section class="sum" [class.flag]="flagged().has('contact')">
+  <header>
+    <h3>{{ label.contact }}</h3>
+    @if (flagged().has('contact')) {<span class="tag warn">Correction requested</span>}
+    @if (editable()) {<button type="button" class="btn ghost sm" (click)="edit.emit('contact')"><app-icon name="edit" [size]="15" />Edit</button>}
+  </header>
+  <dl class="kv">
+    <div><dt>{{ c.directors.required ? 'Country contact' : 'Contact / legal representative' }}</dt><dd>{{ data.contact.name || '—' }}</dd></div>
+    <div><dt>Email</dt><dd>{{ data.contact.email || '—' }}</dd></div>
+    <div><dt>Phone</dt><dd>{{ data.contact.phone || '—' }}</dd></div>
+    <div><dt>Support email</dt><dd>{{ data.contact.supportEmail || '—' }}</dd></div>
+  </dl>
+</section>
+
+<section class="sum" [class.flag]="flagged().has('bank')">
+  <header>
+    <h3>{{ label.bank }}</h3>
+    @if (flagged().has('bank')) {<span class="tag warn">Correction requested</span>}
+    @if (editable()) {<button type="button" class="btn ghost sm" (click)="edit.emit('bank')"><app-icon name="edit" [size]="15" />Edit</button>}
+  </header>
+  <dl class="kv">
+    <div><dt>Settlement currency</dt><dd>{{ a.currency }}</dd></div>
+    @for (f of c.bankFields; track f.key) {
+      <div><dt>{{ f.label }}</dt><dd>{{ f.key === 'accountNumber' ? maskAccount(data.bank[f.key]) : bankValue(f.key) }}</dd></div>
+    }
+  </dl>
+</section>
+
+<section class="sum" [class.flag]="flagged().has('directors')">
+  <header>
+    <h3>{{ label.directors }}</h3>
+    @if (flagged().has('directors')) {<span class="tag warn">Correction requested</span>}
+    @if (editable() && c.directors.required) {<button type="button" class="btn ghost sm" (click)="edit.emit('directors')"><app-icon name="edit" [size]="15" />Edit</button>}
+  </header>
+  @if (!c.directors.required) {
+    <p class="muted">{{ c.directors.note }}</p>
+  } @else if (data.directors.length) {
+    <table class="data-table">
+      <thead><tr><th scope="col">Name</th><th scope="col">Role</th><th scope="col">Nationality</th><th scope="col">ID / passport</th><th scope="col">Ownership</th></tr></thead>
+      <tbody>
+        @for (p of data.directors; track p.id) {
+          <tr><td>{{ p.name || '—' }}</td><td>{{ roleLabel[p.role] }}</td><td>{{ p.nationality || '—' }}</td><td>{{ p.idNumber || '—' }}</td><td>{{ p.ownershipPct !== null ? p.ownershipPct + '%' : '—' }}</td></tr>
+        }
+      </tbody>
+    </table>
+  } @else {
+    <p class="muted">No directors or beneficial owners added.</p>
+  }
+</section>
+
+<section class="sum" [class.flag]="flagged().has('documents')">
+  <header>
+    <h3>{{ label.documents }}</h3>
+    @if (flagged().has('documents')) {<span class="tag warn">Correction requested</span>}
+    @if (editable()) {<button type="button" class="btn ghost sm" (click)="edit.emit('documents')"><app-icon name="edit" [size]="15" />Edit</button>}
+  </header>
+  <ul class="docs">
+    @for (x of docs(); track x.rule.type) {
+      <li>
+        <app-icon [name]="x.files.length ? 'check-circle' : x.rule.required ? 'alert-circle' : 'file'" [size]="18" [class]="x.files.length ? 'ok' : x.rule.required ? 'missing' : 'opt'" />
+        <span class="doc-name">{{ x.rule.label }}@if (!x.rule.required) {<span class="tag">Optional</span>}</span>
+        <span class="doc-files">
+          @for (f of x.files; track f.id) {
+            <span>{{ f.fileName }} · {{ f.sizeKb }} KB · {{ date(f.uploadedAt) }}@if (f.sample) {<span class="tag demo">Sample</span>}</span>
+          } @empty {
+            <span class="muted">{{ x.rule.required ? 'Missing' : 'Not provided' }}</span>
+          }
+        </span>
+      </li>
+    }
+  </ul>
+</section>
+
+<section class="sum" [class.flag]="flagged().has('pricing')">
+  <header>
+    <h3>{{ label.pricing }}</h3>
+    @if (flagged().has('pricing')) {<span class="tag warn">Correction requested</span>}
+    @if (editable()) {<button type="button" class="btn ghost sm" (click)="edit.emit('pricing')"><app-icon name="edit" [size]="15" />Edit</button>}
+  </header>
+  @if (pricing().length) {
+    <table class="data-table">
+      <thead><tr><th scope="col">Payment method</th><th scope="col">MDR</th><th scope="col">Allowed range (demo)</th></tr></thead>
+      <tbody>
+        @for (x of pricing(); track x.m.code) {
+          <tr><td>{{ x.m.name }}</td><td class="mono">{{ x.line!.mdr }}%</td><td class="muted">{{ x.m.minMdr }}–{{ x.m.maxMdr }}%</td></tr>
+        }
+      </tbody>
+    </table>
+  } @else {
+    <p class="muted">No payment methods enabled.</p>
+  }
+</section>

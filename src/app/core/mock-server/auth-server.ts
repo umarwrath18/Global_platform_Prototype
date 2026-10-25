@@ -482,6 +482,43 @@ export class AuthServer {
     return null;
   }
 
+  // ----------------------------------------- bridge for other simulated services
+
+  /** Validates a bearer token with the same session rules as the auth APIs (used by the merchant service). */
+  async authenticate(token: string | null): Promise<{ ok: true; caller: { userId: string; name: string } } | { ok: false; response: ServerResponse }> {
+    await this.ensureSeeded();
+    const db = this.load();
+    try {
+      const { user } = await this.requireSession(db, token, true);
+      return { ok: true, caller: { userId: user.id, name: user.name } };
+    } catch (e) {
+      if (e instanceof HttpError) return { ok: false, response: { status: e.status, body: e.body } };
+      throw e;
+    }
+  }
+
+  /**
+   * Activates a country on a merchant's Global Account after go-live, creating the account
+   * (with no users) if the merchant doesn't have one yet. Returns the Global Account ID.
+   */
+  async activateCountry(accountId: string | null, accountName: string, countryCode: string): Promise<string> {
+    await this.ensureSeeded();
+    const db = this.load();
+    let account = accountId ? db.accounts.find((a) => a.id === accountId) : undefined;
+    if (!account) {
+      const next = Math.max(5000, ...db.accounts.map((a) => Number(a.id.replace(/\D/g, '')) || 0)) + 1;
+      account = { id: `GA-${next}`, name: accountName, status: 'active', countries: [] };
+      db.accounts.push(account);
+      this.audit(db, 'ACCOUNT_CREATED', { accountId: account.id, detail: 'merchant_go_live' });
+    }
+    const existing = account.countries.find((c) => c.code === countryCode);
+    if (existing) existing.status = 'active';
+    else account.countries.push({ code: countryCode, status: 'active' });
+    this.audit(db, 'ACCOUNT_COUNTRY_ACTIVATED', { accountId: account.id, detail: countryCode });
+    this.save(db);
+    return account.id;
+  }
+
   // ------------------------------------------- admin hooks (prototype / QA only)
 
   async setAccountStatus(accountId: string, status: AccountStatus): Promise<string> {

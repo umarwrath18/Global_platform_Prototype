@@ -1,0 +1,159 @@
+<main class="page narrow">
+  <ol class="crumbs">
+    <li><a routerLink="/merchants">Merchants</a></li>
+    <li aria-current="page">Add new merchant</li>
+  </ol>
+
+  <div class="portal-head">
+    <div>
+      <h1>Add new merchant</h1>
+      <p class="sub">Create the Global Merchant first, then open its first country application.</p>
+    </div>
+  </div>
+
+  <ol class="flow-steps" aria-label="Steps">
+    <li [class.current]="!created()" [class.done]="!!created()"><span>1</span>Global Merchant</li>
+    <li [class.current]="!!created()"><span>2</span>Onboarding country</li>
+    <li><span>3</span>Country application</li>
+  </ol>
+
+  @if (roles.role() !== 'sales') {
+    <div class="alert warning compact" role="status">
+      <app-icon name="info" />
+      <div>Only Sales / Operations can create Global Merchants. Use the prototype role switcher in the top bar to act as Sales / Operations.</div>
+    </div>
+  }
+
+  @if (created(); as m) {
+    <section class="panel-card">
+      <div class="panel-body created">
+        <div class="icon-tile success"><app-icon name="check-circle" /></div>
+        <div>
+          <p class="eyebrow">Global Merchant created</p>
+          <h2 class="gm-id">{{ m.id }}</h2>
+          <p class="lead"><strong>{{ m.legalName }}</strong> now has a Global Merchant ID. This does not mean the merchant is approved or operational: each country must be applied for, reviewed by Risk and activated separately.</p>
+        </div>
+      </div>
+    </section>
+    <section class="panel-card">
+      <div class="panel-head">
+        <div>
+          <h2>Select the onboarding country</h2>
+          <p>A new country application will be linked to {{ m.id }}, with the information you entered prefilled.</p>
+        </div>
+      </div>
+      <div class="panel-body">
+        <app-country-picker [merchant]="m" [applications]="[]" (opened)="opened($event)" />
+      </div>
+    </section>
+  } @else {
+    <form class="panel-card" (submit)="$event.preventDefault(); create()" novalidate>
+      <div class="panel-head">
+        <div>
+          <h2>Global business information</h2>
+          <p>Only the minimum needed to identify the organisation. Country-specific details come in the application.</p>
+        </div>
+      </div>
+      <div class="panel-body">
+        @if (error(); as e) {
+          @if (e.code === 'DUPLICATE_MERCHANT' && 'existingMerchantId' in e) {
+            <div class="alert danger compact" role="alert">
+              <app-icon name="alert-circle" />
+              <div>
+                <strong>This merchant already exists</strong>
+                {{ e.message }} Don't create a second Global Merchant: add the new country to the existing one instead.
+                <div class="alert-actions">
+                  <a class="btn sm" [routerLink]="['/merchants/expand']" [queryParams]="{ merchant: e.existingMerchantId }">Add country to {{ e.existingMerchantId }}</a>
+                  <a class="btn sm ghost" [routerLink]="['/merchants', e.existingMerchantId]">View merchant</a>
+                </div>
+              </div>
+            </div>
+          } @else if (e.code === 'POSSIBLE_DUPLICATE' && 'existingMerchantId' in e) {
+            <div class="alert warning compact" role="alert">
+              <app-icon name="alert-circle" />
+              <div>
+                <strong>Possible existing merchant</strong>
+                {{ e.message }} If it's the same organisation, add a country to it instead.
+                <div class="alert-actions">
+                  <a class="btn sm" [routerLink]="['/merchants/expand']" [queryParams]="{ merchant: e.existingMerchantId }">Add country to {{ e.existingMerchantId }}</a>
+                  <button type="button" class="btn sm ghost" (click)="create(true)" [disabled]="busy()">It's a different organisation, create anyway</button>
+                </div>
+              </div>
+            </div>
+          } @else {
+            <div class="alert danger compact" role="alert">
+              <app-icon name="alert-circle" />
+              <div>{{ e.message ?? 'We could not create the merchant. Please try again.' }}</div>
+            </div>
+          }
+        }
+
+        <div class="f-grid">
+          <div class="f-field full">
+            <label for="legalName">Registered legal name <span class="req" aria-hidden="true">*</span></label>
+            <input id="legalName" class="f-input" [class.invalid]="show('legalName')" [value]="draft().legalName" (input)="set('legalName', $any($event.target).value)" (blur)="touch('legalName')" autocomplete="organization" [attr.aria-invalid]="!!show('legalName')" aria-describedby="legalName-err" />
+            @if (show('legalName'); as msg) {
+              <p class="f-error" id="legalName-err"><app-icon name="alert-circle" [size]="16" />{{ msg }}</p>
+            }
+          </div>
+          <div class="f-field">
+            <label for="regCountry">Registration country <span class="req" aria-hidden="true">*</span></label>
+            <select id="regCountry" class="f-input" [class.invalid]="show('registrationCountry')" (change)="set('registrationCountry', $any($event.target).value); touch('registrationCountry')" [attr.aria-invalid]="!!show('registrationCountry')">
+              <option value="" [selected]="!draft().registrationCountry">Select country</option>
+              @for (c of regCountries; track c.code) {
+                <option [value]="c.code" [selected]="c.code === draft().registrationCountry">{{ c.name }}</option>
+              }
+            </select>
+            @if (show('registrationCountry'); as msg) {
+              <p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ msg }}</p>
+            }
+          </div>
+          <div class="f-field">
+            <label for="regNo">Business registration number <span class="req" aria-hidden="true">*</span></label>
+            <input id="regNo" class="f-input" [class.invalid]="show('registrationNumber')" [value]="draft().registrationNumber" (input)="set('registrationNumber', $any($event.target).value)" (blur)="touch('registrationNumber')" [attr.aria-invalid]="!!show('registrationNumber')" aria-describedby="regNo-hint" />
+            @if (show('registrationNumber'); as msg) {
+              <p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ msg }}</p>
+            } @else {
+              <p class="f-hint" id="regNo-hint">{{ regHint() }}. Used to detect duplicate merchants.</p>
+            }
+          </div>
+        </div>
+
+        <h3 class="sub-head">Primary contact</h3>
+        <div class="f-grid">
+          <div class="f-field full">
+            <label for="cName">Full name <span class="req" aria-hidden="true">*</span></label>
+            <input id="cName" class="f-input" [class.invalid]="show('name')" [value]="draft().name" (input)="set('name', $any($event.target).value)" (blur)="touch('name')" autocomplete="name" [attr.aria-invalid]="!!show('name')" />
+            @if (show('name'); as msg) {
+              <p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ msg }}</p>
+            }
+          </div>
+          <div class="f-field">
+            <label for="cEmail">Email <span class="req" aria-hidden="true">*</span></label>
+            <input id="cEmail" type="email" class="f-input" [class.invalid]="show('email')" [value]="draft().email" (input)="set('email', $any($event.target).value)" (blur)="touch('email')" autocomplete="email" [attr.aria-invalid]="!!show('email')" />
+            @if (show('email'); as msg) {
+              <p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ msg }}</p>
+            }
+          </div>
+          <div class="f-field">
+            <label for="cPhone">Phone <span class="req" aria-hidden="true">*</span></label>
+            <input id="cPhone" type="tel" class="f-input" [class.invalid]="show('phone')" [value]="draft().phone" (input)="set('phone', $any($event.target).value)" (blur)="touch('phone')" autocomplete="tel" placeholder="+60 12 345 6789" [attr.aria-invalid]="!!show('phone')" />
+            @if (show('phone'); as msg) {
+              <p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ msg }}</p>
+            }
+          </div>
+        </div>
+      </div>
+      <div class="form-foot">
+        <a class="btn" routerLink="/merchants">Cancel</a>
+        <button type="submit" class="btn primary" [disabled]="busy() || roles.role() !== 'sales'" [class.busy]="busy()">
+          @if (busy()) {
+            <span class="spinner" aria-hidden="true"></span>Creating…
+          } @else {
+            Create Global Merchant ID<app-icon name="arrow-right" [size]="18" />
+          }
+        </button>
+      </div>
+    </form>
+  }
+</main>

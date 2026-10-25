@@ -1,0 +1,156 @@
+<main class="page">
+  @if (loading() && !detail()) {
+    <section class="panel-card"><div class="skeleton-rows" aria-busy="true" aria-label="Loading application"><span></span><span></span><span></span><span></span></div></section>
+  } @else if (error(); as e) {
+    <section class="panel-card">
+      <div class="empty-state" role="alert">
+        <div class="icon-tile"><app-icon name="alert-circle" /></div>
+        <h3>{{ e.code === 'NOT_FOUND' ? 'Application not found' : "We couldn't load this application" }}</h3>
+        <p>{{ e.message }}</p>
+        <div class="actions" style="justify-content: center">
+          <button type="button" class="btn" (click)="load()">Try again</button>
+          <a class="btn" routerLink="/applications">All applications</a>
+        </div>
+      </div>
+    </section>
+  } @else if (detail(); as d) {
+    @let a = d.application;
+    @let m = d.merchant;
+    <ol class="crumbs">
+      <li><a routerLink="/merchants">Merchants</a></li>
+      <li><a [routerLink]="['/merchants', m.id]">{{ m.legalName }}</a></li>
+      <li aria-current="page">{{ a.id }}</li>
+    </ol>
+
+    <div class="portal-head">
+      <div>
+        <p class="eyebrow">Country application · {{ a.id }}</p>
+        <h1>{{ cfg()!.name }} application</h1>
+        <p class="sub meta">
+          <app-status [status]="a.status" />
+          <span>Global Merchant <a [routerLink]="['/merchants', m.id]">{{ m.id }}</a> · {{ m.legalName }}</span>
+          <span>Currency {{ a.currency }}</span>
+          <span>Created {{ date(a.createdAt) }}</span>
+          <span>Updated {{ dateTime(a.updatedAt) }}</span>
+          @if (a.submissionCount) {<span>Submissions: {{ a.submissionCount }}</span>}
+          @if (a.demo) {<span class="tag demo">Demo data</span>}
+        </p>
+      </div>
+    </div>
+
+    <section class="panel-card tracker">
+      <app-status-tracker [status]="a.status" />
+      @if (next(); as n) {
+        <div class="next" [class.mine]="n.role === role()">
+          <app-icon [name]="n.role === role() ? 'arrow-right' : 'clock'" [size]="16" />
+          <span><strong>Next:</strong> {{ n.text }}</span>
+          @if (n.role !== role()) {
+            <button type="button" class="btn sm" (click)="switchRole(n.role)" title="Prototype only"><app-icon name="user-switch" [size]="15" />Act as {{ roleLabel[n.role] }}</button>
+          } @else {
+            <span class="tag">Your team</span>
+          }
+        </div>
+      }
+    </section>
+
+    @if (a.previousApplicationId) {
+      <div class="alert compact" role="note">
+        <app-icon name="info" />
+        <div>This is a new attempt. The previous {{ cfg()!.name }} application <a [routerLink]="['/applications', a.previousApplicationId]">{{ a.previousApplicationId }}</a> was rejected and is kept with its history.</div>
+      </div>
+    }
+
+    @switch (a.status) {
+      @case ('returned') {
+        <div class="alert warning" role="status">
+          <app-icon name="alert-circle" />
+          <div>
+            <strong>Returned for correction by Risk</strong>
+            {{ a.corrections?.reason }}
+            <span class="corr-sections">Sections:
+              @for (s of a.corrections?.sections ?? []; track s; let last = $last) {<span>{{ sectionLabel[s] }}{{ last ? '' : ', ' }}</span>}
+            </span>
+            <span class="corr-note">Edit this same application ({{ a.id }}) and resubmit it. Its ID and history are kept.</span>
+          </div>
+        </div>
+      }
+      @case ('rejected') {
+        <div class="alert danger" role="status">
+          <app-icon name="alert-circle" />
+          <div>
+            <strong>Rejected. This decision is final for {{ a.id }}.</strong>
+            {{ history()[0]?.comment }}
+            @if (role() === 'sales') {
+              <div class="alert-actions">
+                <button type="button" class="btn sm" (click)="startNewApplication()" [disabled]="retrying()">
+                  @if (retrying()) {<span class="spinner" aria-hidden="true"></span>}Start a new {{ cfg()!.name }} application
+                </button>
+                <span class="small">Creates a new application linked to {{ m.id }}.</span>
+              </div>
+              @if (retryError(); as r) {<p class="f-error">{{ r }}</p>}
+            }
+          </div>
+        </div>
+      }
+      @case ('risk_approved') {
+        <div class="alert success" role="status">
+          <app-icon name="check-circle" />
+          <div><strong>Risk approved, not yet operational</strong>Customer Success must complete configuration, production keys, integration and go-live verification first.</div>
+        </div>
+      }
+      @case ('operational') {
+        <div class="alert success" role="status">
+          <app-icon name="check-circle" />
+          <div><strong>Operational in {{ cfg()!.name }}</strong>Go-live verification passed. {{ cfg()!.name }} is active on Global Account {{ m.linkedAccountId }}. Other countries are not affected.</div>
+        </div>
+      }
+    }
+
+    <div class="layout">
+      <div class="col-main">
+        @if (editable()) {
+          <app-application-form [application]="a" [merchant]="m" (saved)="onSaved($event)" />
+        } @else {
+          @if (reviewing()) {
+            <app-review-panel [application]="a" (decided)="onDecided($event)" />
+          }
+          @if (inReadiness()) {
+            <app-readiness-panel [application]="a" [canAct]="role() === 'cs'" (changed)="onReadiness($event)" />
+          }
+          @if (['draft', 'returned'].includes(a.status) && role() !== 'sales') {
+            <p class="hint-line"><app-icon name="lock" [size]="16" />Read only. Sales / Operations edits draft and returned applications.</p>
+          }
+          <section class="panel-card">
+            <div class="panel-head">
+              <div>
+                <h2>Application details</h2>
+                <p>{{ a.submittedProfile ? 'As submitted for review' : 'Current draft' }}</p>
+              </div>
+            </div>
+            <app-application-summary [application]="a" [merchant]="m" />
+          </section>
+        }
+      </div>
+
+      <aside class="col-side panel-card" aria-label="Application history">
+        <div class="panel-head"><div><h2>History</h2><p>{{ a.id }} · newest first</p></div></div>
+        <ol class="timeline">
+          @for (h of history(); track $index) {
+            <li [class.system]="h.role === 'system'" [class]="h.toStatus ?? ''">
+              <span class="t-action">{{ h.action }}</span>
+              @if (h.comment) {<span class="t-comment">“{{ h.comment }}”</span>}
+              @if (h.sections?.length) {
+                <span class="t-meta">Sections: @for (s of h.sections; track s; let last = $last) {<span>{{ sectionLabel[s] }}{{ last ? '' : ', ' }}</span>}</span>
+              }
+              <span class="t-meta">{{ dateTime(h.at) }} · {{ h.by }} ({{ roleLabel[h.role] }})</span>
+            </li>
+          }
+        </ol>
+      </aside>
+    </div>
+  }
+
+  @if (toast(); as t) {
+    <div class="p-toast" role="status"><app-icon name="check-circle" [size]="18" />{{ t }}</div>
+  }
+</main>
