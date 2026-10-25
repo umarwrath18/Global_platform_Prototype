@@ -37,7 +37,7 @@ describe('AuthServer', () => {
     });
 
     it('treats the Global Account ID case-insensitively and trims it', async () => {
-      expect((await login('  mobi-demo-admin ')).status).toBe(200);
+      expect((await login('  tanjung-admin ')).status).toBe(200);
     });
 
     it('rejects missing fields', async () => {
@@ -70,16 +70,16 @@ describe('AuthServer', () => {
     });
 
     it.each([
-      ['MOBI-DEMO-SUSPENDED', 'ACCOUNT_SUSPENDED'],
-      ['MOBI-DEMO-INACTIVE', 'ACCOUNT_INACTIVE'],
-      ['MOBI-DEMO-DISABLED', 'USER_DISABLED'],
+      ['SERIMUTIARA-ADMIN', 'ACCOUNT_SUSPENDED'],
+      ['NUSAPANGAN-ADMIN', 'ACCOUNT_INACTIVE'],
+      ['TANJUNG-RAVI', 'USER_DISABLED'],
     ])('denies %s with %s only after valid credentials', async (id, code) => {
       expect((await login(id, 'wrong')).body).toEqual({ code: 'INVALID_CREDENTIALS' });
       expect(await login(id)).toEqual({ status: 403, body: { code } });
     });
 
     it('reports a service outage', async () => {
-      expect((await login('MOBI-DEMO-OUTAGE')).status).toBe(503);
+      expect((await login('TANJUNG-KEVIN')).status).toBe(503);
     });
   });
 
@@ -125,8 +125,8 @@ describe('AuthServer', () => {
 
     it('suspending a Global Account revokes every session of its users immediately', async () => {
       const a = await tokenFor('123');
-      const b = await tokenFor('MOBI-DEMO-VIEWER');
-      const other = await tokenFor('MOBI-DEMO-NOCOUNTRY');
+      const b = await tokenFor('TANJUNG-VIEWER');
+      const other = await tokenFor('LUMI-ADMIN');
       await server.setAccountStatus('GA-1001', 'suspended');
       for (const t of [a, b]) expect((await server.handle('GET', '/api/auth/session', null, t)).body).toEqual({ code: 'ACCOUNT_SUSPENDED' });
       expect((await server.handle('GET', '/api/auth/session', null, other)).status).toBe(200);
@@ -135,7 +135,7 @@ describe('AuthServer', () => {
 
     it('disabling one user does not affect other users on the account', async () => {
       const a = await tokenFor('123');
-      const b = await tokenFor('MOBI-DEMO-ADMIN');
+      const b = await tokenFor('TANJUNG-ADMIN');
       await server.setUserStatus('123', 'disabled');
       expect((await server.handle('GET', '/api/auth/session', null, a)).body).toEqual({ code: 'USER_DISABLED' });
       expect((await server.handle('GET', '/api/auth/session', null, b)).status).toBe(200);

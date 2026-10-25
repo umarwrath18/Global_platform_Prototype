@@ -76,24 +76,24 @@ export const SEED_ACCOUNTS: SeedAccount[] = [
 
 export const SEED_USERS: SeedUser[] = [
   { id: 'U-1', accountId: 'GA-1001', loginId: '123', name: 'Sarah Lim', email: 'sarah.lim@tanjungtrading.example', roleId: 'role-admin', status: 'active' },
-  { id: 'U-2', accountId: 'GA-1001', loginId: 'MOBI-DEMO-ADMIN', name: 'Aisyah Rahman', email: 'aisyah@tanjungtrading.example', roleId: 'role-admin', status: 'active' },
-  { id: 'U-3', accountId: 'GA-1001', loginId: 'MOBI-DEMO-VIEWER', name: 'Budi Santoso', email: 'budi@tanjungtrading.example', roleId: 'role-viewer', status: 'active' },
-  { id: 'U-4', accountId: 'GA-1001', loginId: 'MOBI-DEMO-DISABLED', name: 'Ravi Kumar', email: 'ravi@tanjungtrading.example', roleId: 'role-viewer', status: 'disabled' },
-  { id: 'U-5', accountId: 'GA-2002', loginId: 'MOBI-DEMO-SUSPENDED', name: 'Nur Izzah', email: 'izzah@serimutiara.example', roleId: 'role-admin', status: 'active' },
-  { id: 'U-6', accountId: 'GA-3003', loginId: 'MOBI-DEMO-INACTIVE', name: 'Dewi Lestari', email: 'dewi@nusapangan.example', roleId: 'role-admin', status: 'active' },
-  { id: 'U-7', accountId: 'GA-4004', loginId: 'MOBI-DEMO-NOCOUNTRY', name: 'Nguyen Lan', email: 'lan@lumihome.example', roleId: 'role-admin', status: 'active' },
-  { id: 'U-8', accountId: 'GA-1001', loginId: 'MOBI-DEMO-OUTAGE', name: 'Kevin Ong', email: 'kevin@tanjungtrading.example', roleId: 'role-admin', status: 'active', demo: 'service-outage' },
-  { id: 'U-9', accountId: 'GA-1001', loginId: 'MOBI-DEMO-BOUNCE', name: 'Farid Hassan', email: 'farid@tanjungtrading.example', roleId: 'role-admin', status: 'active', demo: 'otp-delivery-failure' },
+  { id: 'U-2', accountId: 'GA-1001', loginId: 'TANJUNG-ADMIN', name: 'Aisyah Rahman', email: 'aisyah@tanjungtrading.example', roleId: 'role-admin', status: 'active' },
+  { id: 'U-3', accountId: 'GA-1001', loginId: 'TANJUNG-VIEWER', name: 'Budi Santoso', email: 'budi@tanjungtrading.example', roleId: 'role-viewer', status: 'active' },
+  { id: 'U-4', accountId: 'GA-1001', loginId: 'TANJUNG-RAVI', name: 'Ravi Kumar', email: 'ravi@tanjungtrading.example', roleId: 'role-viewer', status: 'disabled' },
+  { id: 'U-5', accountId: 'GA-2002', loginId: 'SERIMUTIARA-ADMIN', name: 'Nur Izzah', email: 'izzah@serimutiara.example', roleId: 'role-admin', status: 'active' },
+  { id: 'U-6', accountId: 'GA-3003', loginId: 'NUSAPANGAN-ADMIN', name: 'Dewi Lestari', email: 'dewi@nusapangan.example', roleId: 'role-admin', status: 'active' },
+  { id: 'U-7', accountId: 'GA-4004', loginId: 'LUMI-ADMIN', name: 'Nguyen Lan', email: 'lan@lumihome.example', roleId: 'role-admin', status: 'active' },
+  { id: 'U-8', accountId: 'GA-1001', loginId: 'TANJUNG-KEVIN', name: 'Kevin Ong', email: 'kevin@tanjungtrading.example', roleId: 'role-admin', status: 'active', demo: 'service-outage' },
+  { id: 'U-9', accountId: 'GA-1001', loginId: 'TANJUNG-FARID', name: 'Farid Hassan', email: 'farid@tanjungtrading.example', roleId: 'role-admin', status: 'active', demo: 'otp-delivery-failure' },
 ];
 
 /** Shown in the login screen's "sample accounts" panel. */
 export const DEMO_ACCOUNT_GUIDE: { loginId: string; scenario: string }[] = [
   { loginId: '123', scenario: 'Administrator · 3 active countries' },
-  { loginId: 'MOBI-DEMO-ADMIN', scenario: 'Administrator · same account' },
-  { loginId: 'MOBI-DEMO-VIEWER', scenario: 'Viewer · same account' },
-  { loginId: 'MOBI-DEMO-NOCOUNTRY', scenario: 'Account with no active countries' },
-  { loginId: 'MOBI-DEMO-DISABLED', scenario: 'User access disabled' },
-  { loginId: 'MOBI-DEMO-SUSPENDED', scenario: 'Account suspended' },
-  { loginId: 'MOBI-DEMO-INACTIVE', scenario: 'Account inactive' },
-  { loginId: 'MOBI-DEMO-OUTAGE', scenario: 'Sign-in service unavailable' },
+  { loginId: 'TANJUNG-ADMIN', scenario: 'Administrator · same account' },
+  { loginId: 'TANJUNG-VIEWER', scenario: 'Viewer · same account' },
+  { loginId: 'LUMI-ADMIN', scenario: 'Account with no active countries' },
+  { loginId: 'TANJUNG-RAVI', scenario: 'User access disabled' },
+  { loginId: 'SERIMUTIARA-ADMIN', scenario: 'Account suspended' },
+  { loginId: 'NUSAPANGAN-ADMIN', scenario: 'Account inactive' },
+  { loginId: 'TANJUNG-KEVIN', scenario: 'Sign-in service unavailable' },
 ];

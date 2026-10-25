@@ -29,14 +29,14 @@ them under "Use a test account".
 
 | Global Account ID     | Scenario                                              |
 | --------------------- | ----------------------------------------------------- |
-| `123`                 | Active admin · MY/ID/VN active, TH pending, PH failed |
-| `MOBI-DEMO-ADMIN`     | Second user on the same Global Account (GA-1001)      |
-| `MOBI-DEMO-VIEWER`    | Viewer role on GA-1001                                |
-| `MOBI-DEMO-NOCOUNTRY` | Active account with no active countries               |
-| `MOBI-DEMO-DISABLED`  | Individual user disabled                              |
-| `MOBI-DEMO-SUSPENDED` | Global Account suspended                              |
-| `MOBI-DEMO-INACTIVE`  | Global Account inactive                               |
-| `MOBI-DEMO-OUTAGE`    | Simulated auth service outage                         |
+| `123`                 | Administrator · Tanjung Global Trading (GA-1001): MY/ID/VN active, TH pending, PH failed |
+| `TANJUNG-ADMIN`       | Second administrator on the same account (GA-1001)    |
+| `TANJUNG-VIEWER`      | Viewer on GA-1001                                     |
+| `LUMI-ADMIN`          | Active account with no active countries (GA-4004)     |
+| `TANJUNG-RAVI`        | Individual user disabled                              |
+| `SERIMUTIARA-ADMIN`   | Account suspended (GA-2002)                           |
+| `NUSAPANGAN-ADMIN`    | Account inactive (GA-3003)                            |
+| `TANJUNG-KEVIN`       | Sign-in service unavailable                           |
 
 Registered emails for password recovery follow the user, e.g. `sarah.lim@tanjungtrading.example`
 (user `123`), `aisyah@tanjungtrading.example`, `budi@tanjungtrading.example`, `lan@lumihome.example`.
@@ -58,6 +58,8 @@ real role permissions and exists only in this prototype.
 
 Run `mobiDemo.strictValidation(true)` in the browser console, then reload, to apply the full
 production rules. Run `mobiDemo.strictValidation(false)` to go back to guided mode.
+Use guided mode for demos and walkthroughs. Use strict mode for formal acceptance testing
+against the original brief (acceptance criterion 7).
 
 **What isn't real in this build.** Everything runs in the browser, with no external services:
 - Verification results are generated from the application data.

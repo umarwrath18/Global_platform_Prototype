@@ -110,22 +110,22 @@ HttpOnly cookie, and the OTP is shown on screen instead of being emailed.
 | L-04 | `GHOST` / anything | Same message as L-03 |
 | L-05 | 4 wrong attempts | Warning shows 1 attempt left |
 | L-06 | 5th wrong attempt | Locked for 1 minute with countdown; button disabled |
-| L-07 | `MOBI-DEMO-SUSPENDED` / correct password | "Account suspended… contact Mobi Support" |
-| L-08 | `MOBI-DEMO-INACTIVE` / correct password | "Account inactive" |
-| L-09 | `MOBI-DEMO-DISABLED` / correct password | "Access disabled" |
-| L-10 | `MOBI-DEMO-OUTAGE` | "Service unavailable" |
+| L-07 | `SERIMUTIARA-ADMIN` / correct password | "Account suspended… contact Mobi Support" |
+| L-08 | `NUSAPANGAN-ADMIN` / correct password | "Account inactive" |
+| L-09 | `TANJUNG-RAVI` / correct password | "Access disabled" |
+| L-10 | `TANJUNG-KEVIN` | "Service unavailable" |
 | L-11 | Go offline (DevTools) and sign in | "No connection" |
 | L-12 | Tick *Remember this device*, sign in, sign out | Global Account ID is pre-filled |
 | S-01 | Open `/dashboard/MY` signed out | Redirect to login with "Please sign in"; after login, lands on MY |
 | S-02 | Signed in, run `mobiDemo.expireSessions()`, then click anything or reload | Back on login: "Your session expired" |
 | S-03 | Signed in as `123`, run `mobiDemo.suspendAccount('GA-1001')` | Within 30 s, or on the next action: signed out with "Account suspended" |
-| S-04 | Signed in as `123` and `MOBI-DEMO-ADMIN` in two windows; `mobiDemo.disableUser('123')` | Only `123` is signed out |
+| S-04 | Signed in as `123` and `TANJUNG-ADMIN` in two windows; `mobiDemo.disableUser('123')` | Only `123` is signed out |
 | S-05 | Sign out via the user menu | Login shows "You have been signed out"; Back doesn't restore access |
 | C-01 | Switch country to Vietnam | URL `/dashboard/VN`, currency VND, no login prompt |
 | C-02 | Visit `/dashboard/TH` | "Country activation pending" |
 | C-03 | Visit `/dashboard/PH` | "Country activation failed" |
 | C-04 | Visit `/dashboard/SG` | "You don't have access to this country" |
-| C-05 | Sign in as `MOBI-DEMO-NOCOUNTRY` | "No active countries yet"; no switcher |
+| C-05 | Sign in as `LUMI-ADMIN` | "No active countries yet"; no switcher |
 | F-01 | Forgot password, enter `abc` | Email format error |
 | F-02 | Enter `sarah.lim@tanjungtrading.example` | OTP screen + Email preview code |
 | F-03 | Enter `ghost@example.com` | Same OTP screen; no inbox email |

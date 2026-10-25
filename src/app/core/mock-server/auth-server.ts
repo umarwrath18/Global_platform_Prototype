@@ -30,7 +30,7 @@ export const AUTH_POLICY = {
   resetTokenTtlMs: 10 * 60_000,
 } as const;
 
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 interface AccountRec extends SeedAccount {}
 interface UserRec extends Omit<SeedUser, 'status'> {
