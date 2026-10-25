@@ -148,34 +148,34 @@ describe('AuthServer', () => {
     const reset = (resetToken: string, pw: string, confirm = pw) =>
       server.handle('POST', '/api/auth/password/reset', { resetToken, newPassword: pw, confirmPassword: confirm }, null);
 
-    async function verified(email = 'admin@mobidemo.test') {
+    async function verified(email = 'sarah.lim@tanjungtrading.example') {
       const { requestId } = (await requestOtp(email)).body as any;
       const res = await verify(requestId, emails.at(-1)!.code);
       return (res.body as any).resetToken as string;
     }
 
     it('returns the same response for registered and unregistered emails', async () => {
-      const a = await requestOtp('admin@mobidemo.test');
+      const a = await requestOtp('sarah.lim@tanjungtrading.example');
       const b = await requestOtp('nobody@example.com');
       expect(a.status).toBe(202);
       expect(b.status).toBe(202);
       expect(Object.keys(a.body as object)).toEqual(Object.keys(b.body as object));
-      expect(emails.map((e) => e.to)).toEqual(['admin@mobidemo.test']);
+      expect(emails.map((e) => e.to)).toEqual(['sarah.lim@tanjungtrading.example']);
     });
 
     it('does not send codes to suspended or disabled users', async () => {
-      await requestOtp('suspended@mobidemo.test');
-      await requestOtp('disabled@mobidemo.test');
+      await requestOtp('izzah@serimutiara.example');
+      await requestOtp('ravi@tanjungtrading.example');
       expect(emails).toHaveLength(0);
     });
 
     it('issues uniformly formatted 6-digit codes', async () => {
-      await requestOtp('admin@mobidemo.test');
+      await requestOtp('sarah.lim@tanjungtrading.example');
       expect(emails[0].code).toMatch(/^\d{6}$/);
     });
 
     it('limits verification attempts', async () => {
-      const { requestId } = (await requestOtp('admin@mobidemo.test')).body as any;
+      const { requestId } = (await requestOtp('sarah.lim@tanjungtrading.example')).body as any;
       const wrong = emails[0].code === '000000' ? '111111' : '000000';
       for (let i = 4; i >= 1; i--) expect((await verify(requestId, wrong)).body).toEqual({ code: 'OTP_INVALID', attemptsRemaining: i });
       expect((await verify(requestId, wrong)).body).toEqual({ code: 'OTP_ATTEMPTS_EXCEEDED' });
@@ -183,18 +183,18 @@ describe('AuthServer', () => {
     });
 
     it('rejects expired and reused codes', async () => {
-      const { requestId } = (await requestOtp('admin@mobidemo.test')).body as any;
+      const { requestId } = (await requestOtp('sarah.lim@tanjungtrading.example')).body as any;
       advance(AUTH_POLICY.otpTtlMs + 1);
       expect((await verify(requestId, emails[0].code)).body).toEqual({ code: 'OTP_EXPIRED' });
 
       advance(AUTH_POLICY.otpResendCooldownMs);
-      const second = (await requestOtp('admin@mobidemo.test')).body as any;
+      const second = (await requestOtp('sarah.lim@tanjungtrading.example')).body as any;
       expect((await verify(second.requestId, emails[1].code)).status).toBe(200);
       expect((await verify(second.requestId, emails[1].code)).body).toEqual({ code: 'OTP_USED' });
     });
 
     it('enforces resend cooldown, invalidates the previous code and caps sends per hour', async () => {
-      const { requestId } = (await requestOtp('admin@mobidemo.test')).body as any;
+      const { requestId } = (await requestOtp('sarah.lim@tanjungtrading.example')).body as any;
       const resend = () => server.handle('POST', '/api/auth/password/otp/resend', { requestId }, null);
       expect((await resend()).body).toEqual({ code: 'OTP_COOLDOWN', retryAfterSec: 60 });
       advance(60_000);
@@ -210,14 +210,14 @@ describe('AuthServer', () => {
     });
 
     it('reports delivery failure', async () => {
-      expect((await requestOtp('bounce@mobidemo.test')).body).toEqual({ code: 'OTP_DELIVERY_FAILED' });
+      expect((await requestOtp('farid@tanjungtrading.example')).body).toEqual({ code: 'OTP_DELIVERY_FAILED' });
     });
 
     it('enforces the password policy and confirmation', async () => {
       const token = await verified();
       expect((await reset(token, 'short')).body).toMatchObject({ code: 'PASSWORD_POLICY', violations: ['too_short'] });
       expect((await reset(token, 'qwertyuiop12')).body).toMatchObject({ code: 'PASSWORD_POLICY', violations: ['common'] });
-      expect((await reset(token, 'admin-is-my-name-ok')).body).toMatchObject({ code: 'PASSWORD_POLICY', violations: ['contains_identity'] });
+      expect((await reset(token, 'sarah.lim-is-my-name')).body).toMatchObject({ code: 'PASSWORD_POLICY', violations: ['contains_identity'] });
       expect((await reset(token, 'a long passphrase', 'different')).body).toEqual({ code: 'VALIDATION_FAILED' });
     });
 
@@ -241,7 +241,7 @@ describe('AuthServer', () => {
   it('records audit events without secrets', async () => {
     await login('123', 'wrong');
     await login('123');
-    await server.handle('POST', '/api/auth/password/otp', { email: 'admin@mobidemo.test' }, null);
+    await server.handle('POST', '/api/auth/password/otp', { email: 'sarah.lim@tanjungtrading.example' }, null);
     const log = await server.auditLog();
     expect(log.map((e) => e.type)).toEqual(['LOGIN_FAILED', 'LOGIN_SUCCESS', 'OTP_SENT']);
     const serialised = JSON.stringify(log);

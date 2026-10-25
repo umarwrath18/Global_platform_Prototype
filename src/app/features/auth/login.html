@@ -2,15 +2,15 @@
   <p class="eyebrow">Welcome back</p>
   <h1 class="screen-title">Sign in to Global Platform</h1>
   <p class="screen-lead">
-    Use any sample Global Account ID and password to explore the prototype.
+    Enter your Global Account ID and password to continue.
     <button type="button" class="link-button samples-toggle" (click)="showSamples.set(!showSamples())" [attr.aria-expanded]="showSamples()" aria-controls="sample-accounts">
-      {{ showSamples() ? 'Hide sample accounts' : 'View sample accounts' }}
+      {{ showSamples() ? 'Hide test accounts' : 'Use a test account' }}
     </button>
   </p>
 
   @if (showSamples()) {
     <div id="sample-accounts" class="samples">
-      <p class="samples-head">All sample accounts use the password <code>{{ demoPassword }}</code>. Select one to fill the form.</p>
+      <p class="samples-head">Every test account uses the password <code>{{ demoPassword }}</code>. Choose one to fill in the form.</p>
       <ul>
         @for (a of demoAccounts; track a.loginId) {
           <li>
@@ -55,7 +55,7 @@
         id="loginId"
         class="input"
         formControlName="loginId"
-        placeholder="e.g. MOBI-DEMO-ADMIN"
+        placeholder="Enter your Global Account ID"
         autocomplete="username"
         autocapitalize="characters"
         spellcheck="false"

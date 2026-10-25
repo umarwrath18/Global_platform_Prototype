@@ -24,14 +24,14 @@ import { HasUnsavedChanges } from './unsaved-changes.guard';
 
 /** Which team owns the next step for each status. */
 const NEXT_OWNER: Partial<Record<ApplicationStatus, { role: StaffRole; text: string }>> = {
-  draft: { role: 'sales', text: 'Sales / Operations completes and submits the application.' },
-  returned: { role: 'sales', text: 'Sales / Operations corrects and resubmits the same application.' },
-  pending_risk_review: { role: 'risk', text: 'Risk reviews and approves, returns or rejects.' },
-  risk_approved: { role: 'cs', text: 'Customer Success starts the country configuration.' },
-  cs_configuration: { role: 'cs', text: 'Customer Success completes configuration and generates production keys.' },
-  keys_generated: { role: 'cs', text: 'Customer Success starts merchant integration.' },
-  integration: { role: 'cs', text: 'Customer Success tracks merchant integration to completion.' },
-  go_live_verification: { role: 'cs', text: 'Customer Success confirms the go-live checks.' },
+  draft: { role: 'sales', text: 'Sales / Operations finishes the application and submits it.' },
+  returned: { role: 'sales', text: 'Sales / Operations makes the requested changes and resubmits.' },
+  pending_risk_review: { role: 'risk', text: 'Risk reviews the application.' },
+  risk_approved: { role: 'cs', text: 'Customer Success starts setup.' },
+  cs_configuration: { role: 'cs', text: 'Customer Success completes setup and issues production keys.' },
+  keys_generated: { role: 'cs', text: 'Customer Success starts the integration.' },
+  integration: { role: 'cs', text: 'The merchant integrates while Customer Success tracks progress.' },
+  go_live_verification: { role: 'cs', text: 'Customer Success runs the go-live checks.' },
 };
 
 @Component({
@@ -71,6 +71,7 @@ export class ApplicationPage implements HasUnsavedChanges {
   protected readonly inReadiness = computed(() => READINESS_STATUSES.includes(this.app()?.status as ApplicationStatus));
   protected readonly next = computed(() => NEXT_OWNER[this.app()?.status as ApplicationStatus] ?? null);
   protected readonly history = computed(() => [...(this.app()?.history ?? [])].reverse());
+  protected readonly rejectionReason = computed(() => this.app()?.history.find((h) => h.toStatus === 'rejected')?.comment ?? '');
 
   constructor() {
     effect(() => void this.load(this.id()));
@@ -103,7 +104,7 @@ export class ApplicationPage implements HasUnsavedChanges {
 
   protected onDecided(app: CountryApplication) {
     this.replace(app);
-    this.flash(app.status === 'risk_approved' ? 'Application approved and handed to CS' : app.status === 'returned' ? 'Returned to Sales / Operations for correction' : 'Application rejected');
+    this.flash(app.status === 'risk_approved' ? 'Approved. Customer Success has been notified.' : app.status === 'returned' ? 'Returned to Sales / Operations' : 'Application rejected');
   }
 
   protected onReadiness(e: { application: CountryApplication; message?: string }) {
@@ -126,7 +127,7 @@ export class ApplicationPage implements HasUnsavedChanges {
       if (err.code === 'APPLICATION_EXISTS' && 'existingApplicationId' in err && err.existingApplicationId) {
         this.router.navigate(['/applications', err.existingApplicationId]);
       } else {
-        this.retryError.set(err.message ?? 'We could not start a new application.');
+        this.retryError.set(err.message ?? "We couldn't start a new application.");
       }
     } finally {
       this.retrying.set(false);

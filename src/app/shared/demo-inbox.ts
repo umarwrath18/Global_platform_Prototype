@@ -2,17 +2,17 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { DemoInboxService, InboxMessage } from './demo-inbox.service';
 import { Icon } from './icon';
 
-/** Shows prototype emails (OTP codes) on screen in place of a real mailbox. */
+/** Shows outgoing account emails (OTP codes) on screen, since this build has no mail delivery. */
 @Component({
   selector: 'app-demo-inbox',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Icon],
   template: `
-    <section class="stack" aria-live="polite" aria-label="Demo inbox">
+    <section class="stack" aria-live="polite" aria-label="Email preview">
       @for (m of inbox.messages(); track m.id) {
         <article class="toast">
           <header>
-            <span class="badge">Demo inbox</span>
+            <span class="badge"><app-icon name="mail" [size]="13" />Email preview</span>
             <span class="to">To: {{ m.to }}</span>
             <button type="button" class="close" (click)="inbox.dismiss(m.id)" aria-label="Dismiss email">
               <app-icon name="x" [size]="16" />
@@ -27,7 +27,7 @@ import { Icon } from './icon';
               {{ copiedId() === m.id ? 'Copied' : 'Copy' }}
             </button>
           </div>
-          <p class="note">Expires in {{ m.expiresInMin }} minutes. Never share this code. Mobi will never ask for it.</p>
+          <p class="note">This code expires in {{ m.expiresInMin }} minutes. Never share it. Mobi will never ask you for it.</p>
         </article>
       }
     </section>
@@ -65,15 +65,15 @@ import { Icon } from './icon';
       color: var(--text-subtle);
     }
     .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
       padding: 2px 8px;
       border-radius: 999px;
-      background: var(--warning-bg);
-      border: 1px solid var(--warning-border);
-      color: var(--warning);
-      font-weight: 700;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      font-size: 10px;
+      background: var(--mobi-blue-tint);
+      color: var(--mobi-blue);
+      font-weight: 600;
+      font-size: 11px;
     }
     .to {
       flex: 1;

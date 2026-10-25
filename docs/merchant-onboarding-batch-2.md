@@ -66,7 +66,7 @@ Readiness:  Risk approved → CS configuration → Production keys generated →
 - *Rejected:* final. The application stays recorded. *Start a new application* creates a new ID linked to the same Global Merchant (`previousApplicationId`).
 - *Approved:* not operational. CS must complete the configuration checklist before **Generate production keys (simulated)**, then integration, then go-live checks, then **Confirm go-live**.
 
-**Verification:** generic, simulated evidence (registry lookup, sanctions/PEP screening, bank-name match, website check) produced on each submission. Labelled "Verification provider (to be confirmed) · Simulated". It never decides; Risk must confirm they reviewed it. Demo trigger: a person whose name contains "Flag" returns a screening match (see `APP-2026-0013`).
+**Verification:** generic, simulated evidence (registry lookup, sanctions/PEP screening, bank-name match, website check) produced on each submission. Labelled "Verification provider (to be confirmed) · Simulated". It never decides; Risk must confirm they reviewed it. Screening returns a possible match for names on a small fictional watchlist (e.g. "Tan Ah Kow" on `APP-2026-0013`).
 
 **Notifications:** events for submitted, resubmitted, returned, approved, rejected, configuration ready (keys generated) and go-live. Each is shown in-portal to the relevant teams (bell + `/notifications`, read state per role) and records a **simulated** email with its intended recipients. No email is sent.
 
@@ -97,18 +97,31 @@ Brand assets (`public/brand/`): official wordmark (white on navy surfaces: login
 
 Tokens added in `styles.scss`: `--nav-bg`, `--nav-bg-raised`, `--nav-border`, `--nav-text`, `--nav-text-muted`, `--nav-active`. Headings are now bold (700), as in the reference.
 
+## 5b. Production polish (latest)
+
+- **Copy.** All "demo / sample / simulated / prototype" wording has been removed from the UI. Copy now reads as a finished product; the limits of this build are listed in the README.
+- **Fictional data.** Seed companies, people and domains are realistic and fictional (`*.example`). Internal team mailboxes use `@mobi.xyz`. Login IDs are unchanged, so existing test steps still work.
+- **Test helpers, restyled.** The login "Use a test account" list and the OTP **Email preview** remain, restyled neutrally. The role switcher is now a plain **View as** control in the sidebar.
+- **Guided validation (default).** Fields still validate and show errors, but missing input never blocks a step. This relaxes acceptance criterion 7 at the product owner's request. `mobiDemo.strictValidation(true)` restores the full rules (criterion 7 then holds as originally written).
+- **Visual system.**
+  - Base size is 14 px, with 40 px controls, 8 px control radius and 12 px card radius.
+  - Cards use borders without shadows.
+  - The sidebar is 248 px with a single "Coming soon" group label (no per-item badges).
+  - The top bar is 64 px, with inline-label filters and a 36 px search field.
+  - The merchant list uses filter chips instead of stat cards, and the dashboard KPIs are compact.
+
 ## 6. Demo data (`merchant-seed.ts`, all marked *Demo data*)
 
 | Merchant | Scenario |
 | --- | --- |
-| GM-100101 Mobi Demo Trading Sdn Bhd → GA-1001 | MY/ID/VN operational, **TH in CS configuration** (2 of 4 done), PH rejected. This matches GA-1001's active/pending/failed countries. |
-| GM-100102 New Demo Merchant Sdn Bhd → GA-4004 | MY pending Risk review, VN rejected |
-| GM-100103 PT Demo Kopi Nusantara | ID returned for correction (documents, business) |
-| GM-100104 Demo Saigon Travel JSC | VN partial draft |
-| GM-100105 Demo Bangkok Bites Co., Ltd. | TH in merchant integration |
-| GM-100106 Demo Manila Learning Inc. | PH in go-live verification; MY expansion draft (prefilled) |
-| GM-100107 Demo FreshMart Sdn Bhd | MY resubmitted after a return; screening flag |
-| GM-100108 Demo Pixel Games Pte. Ltd. (SG) | No applications yet |
+| GM-100101 Tanjung Global Trading Sdn Bhd → GA-1001 | MY/ID/VN operational, **TH in CS configuration** (2 of 4 done), PH rejected. This matches GA-1001's active/pending/failed countries. |
+| GM-100102 Lumi Home Living Sdn Bhd → GA-4004 | MY pending Risk review, VN rejected |
+| GM-100103 PT Kopi Nusantara Sejahtera | ID returned for correction (documents, business) |
+| GM-100104 Saigon Journeys JSC | VN partial draft |
+| GM-100105 Bangkok Bites Co., Ltd. | TH in merchant integration |
+| GM-100106 Manila Learning Hub Inc. | PH in go-live verification; MY expansion draft (prefilled) |
+| GM-100107 FreshMart Retail Sdn Bhd | MY resubmitted after a return; screening flag |
+| GM-100108 Pixel Forge Games Pte. Ltd. (SG) | No applications yet |
 
 Reset all data with `mobiDemo.reset()`, or only the merchant data with `mobiDemo.resetMerchants()`, in the browser console.
 

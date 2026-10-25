@@ -2,12 +2,14 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--border);
+  padding: 12px;
+  border-bottom: 1px solid var(--border-soft);
 
   .f-input {
     width: auto;
     min-width: 180px;
+    height: 36px;
+    font-size: 13px;
   }
 }
 
@@ -18,19 +20,20 @@
   border-radius: var(--radius);
 
   button {
-    padding: 0 14px;
-    height: 36px;
+    padding: 0 12px;
+    height: 30px;
     border: 0;
     border-radius: 7px;
     background: none;
-    font-size: 14px;
-    font-weight: 600;
+    font-size: 13px;
+    font-weight: 500;
     color: var(--text-muted);
     cursor: pointer;
 
     &.on {
-      background: var(--mobi-blue-tint);
-      color: var(--mobi-blue);
+      background: var(--surface-muted);
+      color: var(--text);
+      font-weight: 600;
     }
 
     &:focus-visible {
@@ -47,8 +50,8 @@
 
   > li:not(.empty-state) {
     position: relative;
-    padding: 16px 22px 16px 34px;
-    border-bottom: 1px solid var(--surface-muted);
+    padding: 14px 20px 14px 32px;
+    border-bottom: 1px solid var(--border-soft);
 
     &.unread::before {
       content: '';
@@ -73,10 +76,12 @@
 .title {
   flex: 1;
   min-width: 220px;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .when {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 
@@ -85,8 +90,8 @@
   border-radius: 999px;
   background: var(--mobi-blue-tint);
   color: var(--mobi-blue);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 600;
 
   &.returned {
     background: var(--warning-bg);
@@ -106,8 +111,8 @@
 }
 
 .body {
-  margin: 6px 0 8px;
-  font-size: 14px;
+  margin: 4px 0 8px;
+  font-size: 13px;
   color: var(--text-muted);
 }
 
@@ -115,7 +120,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px 18px;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-muted);
 
   span {

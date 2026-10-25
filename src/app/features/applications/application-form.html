@@ -4,7 +4,7 @@
 
 <div class="wizard">
   <nav class="steps" aria-label="Application sections">
-    <p class="progress-label">{{ completeCount() }} of {{ steps.length - 1 }} sections complete</p>
+    <p class="progress-label"><strong>{{ completeCount() }} of {{ steps.length - 1 }}</strong> sections complete</p>
     <span class="progress"><span [style.width.%]="(completeCount() / (steps.length - 1)) * 100"></span></span>
     <ol>
       @for (s of steps; track s; let i = $index) {
@@ -20,8 +20,8 @@
             }
             <span class="s-label">
               {{ label[s] }}
-              @if (s !== 'review' && corrections()?.sections?.includes(s)) {<span class="tag warn">Correction</span>}
-              @if (s !== 'review' && sectionState()[s].state === 'incomplete' && (visited().has(s) || attempted())) {<span class="s-issues">{{ sectionState()[s].issues }} to complete</span>}
+              @if (s !== 'review' && corrections()?.sections?.includes(s)) {<span class="tag warn">Update</span>}
+              @if (s !== 'review' && sectionState()[s].state === 'incomplete' && (visited().has(s) || attempted())) {<span class="s-issues">{{ sectionState()[s].issues }} missing</span>}
             </span>
           </button>
         </li>
@@ -35,7 +35,7 @@
         <h2 id="section-title" tabindex="-1">{{ label[step()] }}</h2>
         <p>{{ c.name }} application · {{ a.id }}</p>
       </div>
-      <span class="save-state" [class.dirty]="dirty()" aria-live="polite">{{ dirty() ? 'Unsaved changes' : 'All changes saved' }}</span>
+      <span class="save-state" [class.dirty]="dirty()" aria-live="polite">{{ dirty() ? 'Unsaved changes' : 'Saved' }}</span>
     </div>
 
     <div class="panel-body">
@@ -50,7 +50,7 @@
         @if (step() !== 'review' && corr.sections.includes($any(step()))) {
           <div class="alert warning compact" role="note">
             <app-icon name="alert-circle" />
-            <div><strong>Risk requested a correction in this section</strong>{{ corr.reason }}</div>
+            <div><strong>Risk asked for changes here</strong>{{ corr.reason }}</div>
           </div>
         }
       }
@@ -60,8 +60,8 @@
           <div class="from-profile">
             <div class="fp-head">
               <app-icon name="building" [size]="18" />
-              <strong>From the Global Merchant profile</strong>
-              <a [routerLink]="['/merchants', merchant().id]">Edit in profile</a>
+              <strong>From the merchant profile</strong>
+              <a [routerLink]="['/merchants', merchant().id]">Edit</a>
             </div>
             <dl class="kv">
               <div><dt>Legal name</dt><dd>{{ merchant().legalName }}</dd></div>
@@ -109,11 +109,11 @@
             </div>
             <div class="f-field">
               <label for="localReg">{{ c.localRegistration.label }} <span class="req">*</span><span class="tag country">{{ c.code }}-specific</span>
-                @if (sameCountry()) {<span class="tag prefill">From Global profile</span>}
+                @if (sameCountry()) {<span class="tag prefill">From profile</span>}
               </label>
               @if (sameCountry()) {
                 <input id="localReg" class="f-input" [value]="merchant().registrationNumber" readonly />
-                <p class="f-hint">The merchant is registered in {{ c.name }}, so the Global profile number is used.</p>
+                <p class="f-hint">Taken from the merchant profile, since they're registered in {{ c.name }}.</p>
               } @else {
                 <input id="localReg" class="f-input" [class.invalid]="err('business.localRegistrationNumber')" [value]="d.business.localRegistrationNumber" (input)="setBusiness('localRegistrationNumber', $any($event.target).value)" (blur)="touch('business.localRegistrationNumber')" />
                 @if (err('business.localRegistrationNumber'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>} @else if (c.localRegistration.hint) {<p class="f-hint">{{ c.localRegistration.hint }}</p>}
@@ -139,7 +139,7 @@
 
         @case ('contact') {
           @if (!c.directors.required) {
-            <p class="section-note"><app-icon name="info" [size]="16" />In {{ c.name }} this contact is also recorded as the legal representative.</p>
+            <p class="section-note"><app-icon name="info" [size]="16" />In {{ c.name }}, this person is also the legal representative.</p>
           }
           <div class="f-grid">
             <div class="f-field full">
@@ -171,11 +171,11 @@
               @if (err('contact.supportEmail'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>} @else {<p class="f-hint">Optional. Shown to customers on receipts.</p>}
             </div>
           </div>
-          <p class="f-hint">Prefilled from the Global profile. Change it here only if the {{ c.name }} contact is different.</p>
+          <p class="f-hint">Filled in from the merchant profile. Change it only if someone else handles {{ c.name }}.</p>
         }
 
         @case ('bank') {
-          <p class="section-note"><app-icon name="bank" [size]="16" />Settlement in <strong>{{ c.currency }}</strong>. Bank details are specific to {{ c.name }} and are never copied from other countries.</p>
+          <p class="section-note"><app-icon name="bank" [size]="16" />Settlements are paid in {{ c.currency }} to a local account in {{ c.name }}.</p>
           <div class="f-grid">
             @for (f of c.bankFields; track f.key) {
               <div class="f-field">
@@ -196,12 +196,12 @@
             </div>
           } @else {
             <p class="section-note"><app-icon name="users" [size]="16" />{{ c.directors.note }}
-              @if (prefilled().get('directors'); as src) {<span class="tag prefill">{{ src }} · please confirm</span>}
+              @if (prefilled().get('directors'); as src) {<span class="tag prefill">{{ src }} · please check</span>}
             </p>
             @if (err('directors'); as m) {<p class="f-error block"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
             @for (p of d.directors; track p.id; let i = $index) {
               <fieldset class="person">
-                <legend>Person {{ i + 1 }}</legend>
+                <legend>{{ p.name || 'Person ' + (i + 1) }}</legend>
                 <button type="button" class="btn ghost sm remove" (click)="removePerson(p.id)" [attr.aria-label]="'Remove person ' + (i + 1)"><app-icon name="trash" [size]="15" />Remove</button>
                 <div class="f-grid">
                   <div class="f-field">
@@ -237,12 +237,12 @@
                 </div>
               </fieldset>
             }
-            <button type="button" class="btn" (click)="addPerson()"><app-icon name="plus" [size]="16" />Add director or owner</button>
+            <button type="button" class="btn" (click)="addPerson()"><app-icon name="plus" [size]="16" />Add person</button>
           }
         }
 
         @case ('documents') {
-          <p class="section-note"><app-icon name="file" [size]="16" />Documents required in {{ c.name }}. PDF, JPG or PNG, up to 10 MB. <span class="tag demo">Prototype: only file name and size are recorded</span></p>
+          <p class="section-note"><app-icon name="file" [size]="16" />Upload each document as a PDF, JPG or PNG, up to 10 MB.</p>
           <ul class="doc-list">
             @for (rule of c.documents; track rule.type) {
               @let files = filesFor(rule.type);
@@ -250,12 +250,11 @@
                 <div class="doc-head">
                   <app-icon [name]="files.length ? 'check-circle' : 'file'" [size]="20" [class.ok]="files.length > 0" />
                   <span class="doc-label">{{ rule.label }}
-                    @if (rule.required) {<span class="tag country">Required in {{ c.code }}</span>} @else {<span class="tag">Optional</span>}
+                    @if (!rule.required) {<span class="tag">Optional</span>}
                   </span>
                   <span class="doc-actions">
-                    <button type="button" class="btn sm" (click)="attachSample(rule.type)"><app-icon name="plus" [size]="15" />Attach sample file</button>
-                    <label class="btn sm ghost">
-                      <app-icon name="upload" [size]="15" />Choose file
+                    <label class="btn sm">
+                      <app-icon name="upload" [size]="14" />{{ files.length ? 'Add another' : 'Upload' }}
                       <input type="file" class="sr-only" accept=".pdf,.jpg,.jpeg,.png" (change)="attachFile(rule.type, $any($event.target))" />
                     </label>
                   </span>
@@ -265,25 +264,24 @@
                     @for (f of files; track f.id) {
                       <li>
                         <span>{{ f.fileName }} · {{ f.sizeKb }} KB</span>
-                        @if (f.sample) {<span class="tag demo">Sample</span>}
                         <button type="button" class="link-button sm" (click)="removeDoc(f.id)" [attr.aria-label]="'Remove ' + f.fileName">Remove</button>
                       </li>
                     }
                   </ul>
                 }
                 @if (docErrors()[rule.type]; as m) {<p class="f-error">{{ m }}</p>}
-                @if (err('documents.' + rule.type); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }} Submission is blocked until it's attached.</p>}
+                @if (err('documents.' + rule.type); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
               </li>
             }
           </ul>
         }
 
         @case ('pricing') {
-          <p class="section-note"><app-icon name="card" [size]="16" />Payment methods available in {{ c.name }}, priced in {{ c.currency }}. MDR must stay within the country's allowed range. <span class="tag demo">Demo pricing configuration</span></p>
+          <p class="section-note"><app-icon name="card" [size]="16" />Choose what {{ merchant().legalName }} will accept in {{ c.name }}, and set the rate (MDR) for each.</p>
           @if (err('pricing'); as m) {<p class="f-error block"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
           <div class="table-wrap">
             <table class="data-table pricing">
-              <thead><tr><th scope="col">Enable</th><th scope="col">Payment method</th><th scope="col">MDR (%)</th><th scope="col">Allowed range</th></tr></thead>
+              <thead><tr><th scope="col"><span class="sr-only">Offer</span></th><th scope="col">Payment method</th><th scope="col">MDR (%)</th><th scope="col">Allowed</th></tr></thead>
               <tbody>
                 @for (m of c.paymentMethods; track m.code) {
                   @let l = line(m.code);
@@ -294,7 +292,7 @@
                       <input class="f-input mdr" type="number" step="0.05" [min]="m.minMdr" [max]="m.maxMdr" [disabled]="!l.enabled" [class.invalid]="err('pricing.' + m.code)" [value]="l.mdr ?? ''" (input)="setPricing(m.code, 'mdr', $any($event.target).value)" (blur)="touch('pricing.' + m.code)" [attr.aria-label]="m.name + ' MDR percent'" />
                       @if (err('pricing.' + m.code); as e) {<p class="f-error">{{ e }}</p>}
                     </td>
-                    <td class="muted">{{ m.minMdr }}–{{ m.maxMdr }}% · default {{ m.defaultMdr }}%</td>
+                    <td class="muted">{{ m.minMdr }}–{{ m.maxMdr }}%</td>
                   </tr>
                 }
               </tbody>
@@ -307,7 +305,7 @@
             <div class="alert danger compact" role="alert">
               <app-icon name="alert-circle" />
               <div>
-                <strong>{{ issues().length }} item{{ issues().length === 1 ? '' : 's' }} to complete before submission</strong>
+                <strong>{{ issues().length }} item{{ issues().length === 1 ? '' : 's' }} still missing</strong>
                 <ul class="issue-list">
                   @for (g of issuesBySection(); track g.section) {
                     <li>
@@ -323,12 +321,18 @@
           } @else if (!issues().length) {
             <div class="alert success compact" role="status">
               <app-icon name="check-circle" />
-              <div>All sections are complete. Review the summary, then submit for Risk review.</div>
+              <div>Everything's complete. Check the summary below, then submit.</div>
+            </div>
+          }
+          @if (confirmIncomplete() && issues().length) {
+            <div class="alert warning compact" role="alert">
+              <app-icon name="alert-circle" />
+              <div><strong>Submit with missing items?</strong>Risk will see what's missing and may return the application for correction.</div>
             </div>
           }
           @if (a.status === 'returned') {
             <div class="f-field resubmit">
-              <label for="note">What did you change? <span class="f-hint inline">(optional, shared with Risk)</span></label>
+              <label for="note">What did you change? <span class="f-hint inline">Optional · Risk will see this</span></label>
               <textarea id="note" class="f-input" rows="2" [value]="resubmitNote()" (input)="resubmitNote.set($any($event.target).value)"></textarea>
             </div>
           }
@@ -340,14 +344,14 @@
     </div>
 
     <div class="form-foot">
-      <button type="button" class="btn" (click)="back()" [disabled]="step() === 'business'"><app-icon name="arrow-left" [size]="16" />Back</button>
+      <button type="button" class="btn ghost" (click)="back()" [disabled]="step() === 'business'"><app-icon name="arrow-left" [size]="16" />Back</button>
       <span class="spacer"></span>
       <button type="button" class="btn" (click)="saveDraft()" [disabled]="saving() || submitting()">
-        @if (saving()) {<span class="spinner" aria-hidden="true"></span>} @else {<app-icon name="save" [size]="16" />}Save draft
+        @if (saving()) {<span class="spinner" aria-hidden="true"></span>}Save draft
       </button>
       @if (step() === 'review') {
         <button type="button" class="btn primary" (click)="submit()" [disabled]="submitting() || saving()">
-          @if (submitting()) {<span class="spinner" aria-hidden="true"></span>Submitting…} @else {<app-icon name="send" [size]="16" />{{ a.status === 'returned' ? 'Resubmit for Risk review' : 'Submit for Risk review' }}}
+          @if (submitting()) {<span class="spinner" aria-hidden="true"></span>Submitting…} @else { {{ confirmIncomplete() && issues().length ? 'Submit anyway' : a.status === 'returned' ? 'Resubmit to Risk' : 'Submit to Risk' }} }
         </button>
       } @else {
         <button type="button" class="btn primary" (click)="next()">Continue<app-icon name="arrow-right" [size]="16" /></button>

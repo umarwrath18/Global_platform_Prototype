@@ -2,98 +2,62 @@
   <main class="page">
     <div class="portal-head">
       <div>
-        <p class="eyebrow">{{ context()?.country ? context()!.country!.name + ' workspace' : 'Global overview' }}</p>
-        <h1>Global Dashboard</h1>
-        <p class="sub">Welcome, {{ s.user.name.split(' ')[0] }}. Monitor merchant onboarding and workspace access · {{ rangeLabel() }}</p>
+        <h1>Overview</h1>
+        <p class="sub">Merchant onboarding across {{ context()?.country ? context()!.country!.name : 'all countries' }} · {{ rangeLabel() }}</p>
       </div>
       <div class="head-side">
-        @if (activeCountries().length) {
-          <label class="workspace-select">
-            <span class="ws-cap">Workspace</span>
-            <span class="ws-row">
-              <app-icon name="globe" [size]="16" />
-              <select (change)="switchCountry($any($event.target).value)" aria-label="Workspace country">
-                <option value="" [selected]="!country()">All countries · {{ s.baseCurrency }}</option>
-                @for (c of activeCountries(); track c.code) {
-                  <option [value]="c.code" [selected]="c.code === country()?.toUpperCase()">{{ c.name }} · {{ c.currency }}</option>
-                }
-              </select>
-              <app-icon name="chevron-down" [size]="16" />
-            </span>
-          </label>
-        }
-        <p class="live"><span class="live-dot" aria-hidden="true"></span>Simulated data<span class="sep" aria-hidden="true"></span>Updated {{ rel(loadedAt()) }}</p>
+        <span class="updated">Updated {{ rel(loadedAt()) }}</span>
+        <button type="button" class="btn sm" (click)="loadData()" [disabled]="dataLoading()" aria-label="Refresh">
+          <app-icon name="rotate" [size]="15" />Refresh
+        </button>
       </div>
     </div>
 
     @if (!activeCountries().length) {
-      <section class="card notice">
-        <div class="icon-tile"><app-icon name="globe" [size]="22" /></div>
-        <div>
-          <h2>No active countries yet</h2>
-          <p>Your Global Account doesn't have any approved and activated countries. Country access becomes available once activation is complete. Contact Mobi Support if you need help.</p>
-        </div>
+      <section class="notice" role="status">
+        <app-icon name="globe" [size]="18" />
+        <div><strong>No active countries yet.</strong> Countries become available here once they're approved and activated.</div>
       </section>
-    } @else if (loading()) {
-      <section class="card skeleton" aria-busy="true" aria-label="Loading workspace"><span></span><span></span><span></span></section>
     } @else if (error(); as e) {
-      <section class="card notice denied" role="alert">
+      <section class="notice warn" role="alert">
         @switch (e.code) {
           @case ('COUNTRY_NOT_AUTHORISED') {
-            <div class="icon-tile danger"><app-icon name="shield" [size]="22" /></div>
-            <div>
-              <h2>You don't have access to this country</h2>
-              <p>This country isn't enabled for your Global Account. You can continue in a country you have access to.</p>
-              <a class="btn" routerLink="/dashboard">Go to all countries</a>
-            </div>
+            <app-icon name="shield" [size]="18" />
+            <div><strong>You don't have access to this country.</strong> It isn't enabled for your account. <a routerLink="/dashboard">Show all countries</a></div>
           }
           @case ('COUNTRY_NOT_ACTIVE') {
-            <div class="icon-tile warning"><app-icon name="clock" [size]="22" /></div>
-            <div>
-              <h2>{{ 'countryStatus' in e && e.countryStatus === 'failed' ? 'Country activation failed' : 'Country activation pending' }}</h2>
-              <p>This country isn't available until it's approved and activated. Contact Mobi Support for the latest status.</p>
-              <a class="btn" routerLink="/dashboard">Go to all countries</a>
-            </div>
+            <app-icon name="clock" [size]="18" />
+            <div><strong>{{ 'countryStatus' in e && e.countryStatus === 'failed' ? 'This country could not be activated.' : 'This country is still being activated.' }}</strong> It will be available once activation is complete. <a routerLink="/dashboard">Show all countries</a></div>
           }
           @default {
-            <div class="icon-tile warning"><app-icon name="alert-circle" [size]="22" /></div>
-            <div>
-              <h2>We couldn't load your workspace</h2>
-              <p>Check your connection and try again.</p>
-              <button type="button" class="btn" (click)="retry()">Try again</button>
-            </div>
+            <app-icon name="alert-circle" [size]="18" />
+            <div><strong>We couldn't load this workspace.</strong> Check your connection and <button type="button" class="link-button" (click)="retry()">try again</button>.</div>
           }
         }
       </section>
     }
 
-    <!-- KPI cards -->
     @if (dataLoading() && !merchants().length) {
-      <section class="kpis" aria-busy="true" aria-label="Loading onboarding metrics">
-        @for (i of [1, 2, 3, 4, 5, 6]; track i) {<div class="kpi card skel"><span></span><span></span></div>}
+      <section class="kpis" aria-busy="true" aria-label="Loading">
+        @for (i of [1, 2, 3, 4, 5, 6]; track i) {<div class="kpi skel"><span></span><span></span></div>}
       </section>
     } @else if (dataError()) {
-      <section class="card notice" role="alert">
-        <div class="icon-tile warning"><app-icon name="alert-circle" [size]="22" /></div>
-        <div>
-          <h2>We couldn't load onboarding metrics</h2>
-          <p>Check your connection and try again.</p>
-          <button type="button" class="btn" (click)="loadData()">Try again</button>
-        </div>
+      <section class="notice warn" role="alert">
+        <app-icon name="alert-circle" [size]="18" />
+        <div><strong>We couldn't load onboarding data.</strong> Check your connection and <button type="button" class="link-button" (click)="loadData()">try again</button>.</div>
       </section>
     } @else {
-      <section class="kpis" aria-label="Onboarding metrics">
+      <section class="kpis" aria-label="Key figures">
         @for (k of kpis(); track k.label) {
-          <a class="kpi card" [routerLink]="k.link" [queryParams]="k.queue ? { queue: k.queue } : null">
+          <a class="kpi" [routerLink]="k.link" [queryParams]="k.queue ? { queue: k.queue } : null">
             <span class="k-label">{{ k.label }}</span>
             <span class="k-value">{{ k.value }}</span>
-            <span class="k-delta" [class]="'k-delta ' + k.trend">
+            <span class="k-foot">
               @if (k.delta) {
-                @if (k.trend === 'up') {<app-icon name="trend-up" [size]="16" />} @else if (k.trend === 'down') {<app-icon name="arrow-down" [size]="16" />}
-                <strong>{{ k.delta }}</strong>
+                <span class="k-delta" [class.up]="k.trend === 'up'">@if (k.trend === 'up') {<app-icon name="trend-up" [size]="14" />}{{ k.delta }}</span>
               }
+              <span class="k-note">{{ k.note }}</span>
             </span>
-            <span class="k-note">{{ k.note }}</span>
             @if (k.spark) {
               <svg class="spark" viewBox="0 0 140 36" preserveAspectRatio="none" aria-hidden="true"><path [attr.d]="sparkPath(k.spark)" /></svg>
             }
@@ -101,129 +65,118 @@
         }
       </section>
 
-      <!-- Pipeline health -->
-      <div class="section-head">
-        <div>
-          <h2>Onboarding pipeline</h2>
-          <p>Country applications across review and operational readiness</p>
-        </div>
-        <a class="see-all" routerLink="/applications" [queryParams]="{ queue: 'all' }">View all applications<app-icon name="arrow-right" [size]="18" /></a>
-      </div>
-      <section class="pipeline">
-        <div class="card ring-card">
-          <span class="ring" [style.--p]="approvalRate() ?? 0" role="img" [attr.aria-label]="'Approval rate ' + (approvalRate() ?? 0) + '%'">
-            <span><strong>{{ approvalRate() !== null ? approvalRate() + '%' : '—' }}</strong><small>Approved</small></span>
-          </span>
-          <span>
-            <strong class="ring-title">Risk approval rate</strong>
-            <span class="ring-sub">Approved vs rejected decisions</span>
-          </span>
-        </div>
-        @for (st of stages(); track st.label) {
-          <a class="card stage" [routerLink]="'/applications'" [queryParams]="{ queue: st.queue }">
-            <span class="st-icon" [class]="'st-icon ' + st.tone"><app-icon [name]="st.icon" [size]="20" /></span>
-            <span class="st-text"><span class="st-label">{{ st.label }}</span><strong>{{ st.value }}</strong></span>
-            <app-icon name="chevron-right" [size]="18" class="chev" />
-          </a>
-        }
-      </section>
-
-      <div class="two-col">
-        <section class="card panel">
-          <div class="panel-top">
+      <div class="grid-main">
+        <section class="panel-card">
+          <div class="panel-head">
             <div>
-              <h2>Applications by country</h2>
-              <p>{{ apps().length }} applications · {{ rangeLabel() }}</p>
+              <h2>Pipeline</h2>
+              <p>{{ apps().length }} applications</p>
+            </div>
+            <a class="btn ghost sm" routerLink="/applications" [queryParams]="{ queue: 'all' }">View all<app-icon name="arrow-right" [size]="14" /></a>
+          </div>
+          <div class="stages">
+            @for (st of stages(); track st.label) {
+              <a class="stage" routerLink="/applications" [queryParams]="{ queue: st.queue }">
+                <span class="st-icon" [class]="'st-icon ' + st.tone"><app-icon [name]="st.icon" [size]="16" /></span>
+                <span class="st-label">{{ st.label }}</span>
+                <strong>{{ st.value }}</strong>
+              </a>
+            }
+            <div class="stage rate">
+              <span class="st-icon success"><app-icon name="check-circle" [size]="16" /></span>
+              <span class="st-label">Approval rate</span>
+              <strong>{{ approvalRate() !== null ? approvalRate() + '%' : '—' }}</strong>
             </div>
           </div>
-          <ul class="legend" aria-hidden="true">
-            @for (seg of segments; track seg.key) {<li><span class="sw" [class]="'sw ' + seg.key"></span>{{ seg.label }}</li>}
-          </ul>
-          @if (byCountry().length) {
-            <ul class="bars">
-              @for (r of byCountry(); track r.code) {
-                <li>
-                  <span class="bar-label"><span class="cc">{{ r.code }}</span>{{ r.name }}<span class="cur">{{ r.currency }}</span></span>
-                  <span class="bar-track" role="img" [attr.aria-label]="r.name + ': ' + r.total + ' applications'">
-                    <span class="bar-fill" [style.width.%]="(r.total / maxCountry()) * 100">
-                      @for (p of r.parts; track p.key) {
-                        @if (p.value) {<span [class]="'seg ' + p.key" [style.flex]="p.value" [title]="p.label + ': ' + p.value"></span>}
-                      }
+
+          <div class="by-country">
+            <div class="bc-head">
+              <h3>By country</h3>
+              <ul class="legend" aria-hidden="true">
+                @for (seg of segments; track seg.key) {<li><span class="sw" [class]="'sw ' + seg.key"></span>{{ seg.label }}</li>}
+              </ul>
+            </div>
+            @if (byCountry().length) {
+              <ul class="bars">
+                @for (r of byCountry(); track r.code) {
+                  <li>
+                    <span class="bar-label">{{ r.name }}</span>
+                    <span class="bar-track" role="img" [attr.aria-label]="r.name + ': ' + r.total + ' applications'">
+                      <span class="bar-fill" [style.width.%]="(r.total / maxCountry()) * 100">
+                        @for (p of r.parts; track p.key) {
+                          @if (p.value) {<span [class]="'seg ' + p.key" [style.flex]="p.value" [title]="p.label + ': ' + p.value"></span>}
+                        }
+                      </span>
                     </span>
-                  </span>
-                  <span class="bar-total">{{ r.total }}</span>
-                </li>
-              }
-            </ul>
-          } @else {
-            <div class="empty-state"><h3>No applications match the filters</h3><button type="button" class="btn" (click)="filters.clear()">Clear filters</button></div>
-          }
+                    <span class="bar-total">{{ r.total }}</span>
+                  </li>
+                }
+              </ul>
+            } @else {
+              <p class="muted-line">No applications match your filters. <button type="button" class="link-button" (click)="filters.clear()">Reset filters</button></p>
+            }
+          </div>
         </section>
 
-        <section class="card panel attention">
-          <div class="panel-top">
+        <section class="panel-card">
+          <div class="panel-head">
             <div>
-              <h2>Attention required</h2>
-              <p>{{ attention().length }} {{ attention().length === 1 ? 'item needs' : 'items need' }} action</p>
+              <h2>Needs attention</h2>
+              <p>{{ attention().length ? attention().length + ' open' : 'Nothing waiting' }}</p>
             </div>
-            @if (attention().length) {<span class="open-pill">{{ attention().length }} open</span>}
           </div>
           <ul class="att-list">
-            @for (a of attention().slice(0, 4); track a.app.id) {
+            @for (a of attention().slice(0, 5); track a.app.id) {
               <li>
-                <span class="att-icon" [class]="'att-icon ' + a.tone"><app-icon [name]="a.icon" [size]="20" /></span>
-                <div>
-                  <strong>{{ a.title }}</strong>
-                  <span class="att-meta">{{ a.meta }}</span>
-                  <span class="att-impact">{{ a.app.id }} · <app-status [status]="a.app.status" /> · {{ a.impact }}</span>
-                  <a class="investigate" [routerLink]="['/applications', a.app.id]">Open application<app-icon name="arrow-right" [size]="16" /></a>
-                </div>
+                <a [routerLink]="['/applications', a.app.id]">
+                  <span class="att-icon" [class]="'att-icon ' + a.tone"><app-icon [name]="a.icon" [size]="16" /></span>
+                  <span class="att-text">
+                    <strong>{{ a.title }}</strong>
+                    <span>{{ a.meta }} · {{ a.impact }}</span>
+                  </span>
+                  <app-icon name="chevron-right" [size]="16" class="chev" />
+                </a>
               </li>
             } @empty {
-              <li class="att-empty"><app-icon name="check-circle" [size]="20" />Nothing needs attention for these filters.</li>
+              <li class="att-empty"><app-icon name="check-circle" [size]="18" />You're all caught up.</li>
             }
           </ul>
-          @if (attention().length > 4) {
-            <a class="see-all small" routerLink="/applications" [queryParams]="{ queue: 'all' }">View all {{ attention().length }} items<app-icon name="arrow-right" [size]="16" /></a>
+          @if (attention().length > 5) {
+            <a class="att-more" routerLink="/applications" [queryParams]="{ queue: 'all' }">View {{ attention().length - 5 }} more</a>
           }
         </section>
       </div>
     }
 
-    <!-- Batch 1: workspace & country access -->
-    <div class="section-head">
-      <div>
-        <h2>Your workspace access</h2>
-        <p>Global Account {{ s.account.name }} · {{ s.account.id }}</p>
+    <section class="panel-card access">
+      <div class="panel-head">
+        <div>
+          <h2>Your access</h2>
+          <p>{{ s.account.name }} · {{ s.account.id }}</p>
+        </div>
+        @if (activeCountries().length) {
+          <label class="ws-select">
+            <span>Workspace</span>
+            <select class="f-input" (change)="switchCountry($any($event.target).value)" aria-label="Workspace">
+              <option value="" [selected]="!country()">All countries · {{ s.baseCurrency }}</option>
+              @for (c of activeCountries(); track c.code) {
+                <option [value]="c.code" [selected]="c.code === country()?.toUpperCase()">{{ c.name }} · {{ c.currency }}</option>
+              }
+            </select>
+          </label>
+        }
       </div>
-    </div>
-    <div class="two-col equal">
-      @if (context(); as ctx) {
-        <section class="card panel summary">
-          <div><p class="label">Workspace</p><p class="value">{{ ctx.country ? ctx.country.name : 'All countries' }}</p></div>
-          <div><p class="label">Currency</p><p class="value">{{ ctx.currency }}</p></div>
-          <div><p class="label">Role</p><p class="value">{{ s.role.name }}</p></div>
-        </section>
-      } @else {
-        <section class="card panel summary muted-card"><p class="label">Workspace details appear once a country you can access is selected.</p></section>
-      }
-      <section class="card panel">
-        <h3 class="mini-head">Country access</h3>
-        <p class="card-sub">Only approved and activated countries can be opened.</p>
-        <ul class="countries">
-          @for (c of s.countries; track c.code) {
-            <li>
-              <span class="flag" aria-hidden="true">{{ c.code }}</span>
-              <span class="c-name">{{ c.name }}<span class="c-cur">{{ c.currency }}</span></span>
-              <span class="badge" [class]="c.status">{{ statusLabel[c.status] }}</span>
-            </li>
-          } @empty {
-            <li class="none">No countries configured.</li>
-          }
-        </ul>
-      </section>
-    </div>
-
-    <p class="footnote"><app-icon name="shield" [size]="14" /> For your security, you'll be signed out after 30 minutes of inactivity.</p>
+      <ul class="countries">
+        @for (c of s.countries; track c.code) {
+          <li>
+            <span class="c-name">{{ c.name }}</span>
+            <span class="c-cur">{{ c.currency }}</span>
+            <span class="status" [class]="'status ' + (c.status === 'active' ? 'success' : c.status === 'pending' ? 'warning' : 'danger')">{{ statusLabel[c.status] }}</span>
+          </li>
+        } @empty {
+          <li class="muted-line">No countries yet.</li>
+        }
+      </ul>
+    </section>
   </main>
 }

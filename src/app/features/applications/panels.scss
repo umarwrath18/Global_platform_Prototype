@@ -1,23 +1,21 @@
 :host {
   display: block;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .role-panel {
-  border-top: 3px solid var(--mobi-blue);
-
-  &.risk {
-    border-top-color: #6941c6;
-  }
-
-  &.cs {
-    border-top-color: var(--brand-teal);
-  }
+  border-color: #c9dcf1;
+  box-shadow: 0 1px 0 rgba(0, 92, 172, 0.04), 0 4px 16px -8px rgba(0, 92, 172, 0.18);
 
   h2 {
     display: flex;
     align-items: center;
     gap: 8px;
+    color: var(--text);
+
+    app-icon {
+      color: var(--mobi-blue);
+    }
   }
 }
 
@@ -26,15 +24,15 @@
   align-items: center;
   gap: 6px;
   margin: 0 0 14px;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-muted);
 }
 
 .evidence {
   margin-bottom: 20px;
   padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-control);
   background: var(--surface-page);
 
   ul {
@@ -47,7 +45,7 @@
     display: flex;
     gap: 10px;
     padding: 8px 0;
-    font-size: 14px;
+    font-size: 13px;
 
     & + li {
       border-top: 1px solid var(--surface-muted);
@@ -76,8 +74,26 @@
 
 .ev-meta,
 .ev-detail {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-muted);
+}
+
+.ev-result {
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 600;
+
+  .pass & {
+    color: var(--success);
+  }
+
+  .review & {
+    color: #b54708;
+  }
+
+  .fail & {
+    color: var(--danger);
+  }
 }
 
 .ev-note {
@@ -96,8 +112,8 @@ fieldset {
 
   legend {
     margin-bottom: 8px;
-    font-size: 14px;
-    font-weight: 700;
+    font-size: 13px;
+    font-weight: 600;
   }
 }
 
@@ -121,14 +137,16 @@ fieldset {
   align-items: flex-start;
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  font-size: 13px;
+  border-radius: var(--r-control);
+  font-size: 12px;
   color: var(--text-muted);
   cursor: pointer;
 
   strong {
     display: block;
-    font-size: 15px;
+    margin-bottom: 2px;
+    font-size: 14px;
+    font-weight: 600;
     color: var(--text);
   }
 
@@ -165,7 +183,7 @@ fieldset {
     display: flex;
     gap: 6px;
     align-items: center;
-    font-size: 14px;
+    font-size: 13px;
   }
 
   .f-error {
@@ -178,8 +196,8 @@ fieldset {
   gap: 8px;
   align-items: center;
   margin-top: 14px;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
 
   input {
     width: 18px;
@@ -215,14 +233,14 @@ fieldset {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 18px;
-  padding: 14px 16px;
+  padding: 12px 14px;
   border: 1px solid var(--info-border);
-  border-radius: var(--radius);
+  border-radius: var(--r-control);
   background: var(--info-bg);
 
   p {
     margin: 0;
-    font-size: 14px;
+    font-size: 13px;
   }
 }
 
@@ -265,13 +283,13 @@ fieldset {
 
   h3 {
     margin: 0;
-    font-size: 15px;
-    font-weight: 700;
+    font-size: 14px;
+    font-weight: 600;
   }
 
   p {
     margin: 2px 0 0;
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-muted);
   }
 }
@@ -323,8 +341,8 @@ fieldset {
     display: flex;
     gap: 10px;
     align-items: flex-start;
-    padding: 6px 0;
-    font-size: 14px;
+    padding: 5px 0;
+    font-size: 13px;
 
     &.done > span {
       color: var(--text-muted);
@@ -350,9 +368,10 @@ fieldset {
   gap: 10px;
   margin-top: 10px;
   padding: 10px 14px;
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius);
-  font-size: 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-control);
+  background: var(--surface-page);
+  font-size: 13px;
 
   p {
     margin: 2px 0 0;

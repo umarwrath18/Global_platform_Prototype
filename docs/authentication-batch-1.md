@@ -47,7 +47,7 @@ country access and post-login redirect only. No other MVP module is included.
 | Set new password *(new — no design supplied)* | live policy checklist · policy violation · confirm mismatch · confirm required · show/hide on both fields · updating · verification expired → start again |
 | Password updated *(new)* | success confirmation · back to login |
 | Dashboard placeholder *(new)* | loading skeleton · global workspace (USD) · country workspace (local currency) · country not authorised · country pending / failed · no active countries · load error with retry · user menu · sign out |
-| Demo inbox *(prototype only)* | shows the OTP email on screen; copy code; dismiss |
+| Email preview *(prototype only)* | shows the OTP email on screen; copy code; dismiss |
 
 ## 4. Global Account, country & role rules (as implemented)
 
@@ -105,7 +105,7 @@ HttpOnly cookie, and the OTP is shown on screen instead of being emailed.
 | ID | Steps | Expected |
 | --- | --- | --- |
 | L-01 | Submit an empty login form | Both field errors shown; no request sent |
-| L-02 | `123` / `Mobi@123` | Dashboard, "All countries · USD" |
+| L-02 | `123` / `Mobi@123` | Overview dashboard |
 | L-03 | `123` / wrong password | "Global Account ID or password is incorrect"; password field cleared |
 | L-04 | `GHOST` / anything | Same message as L-03 |
 | L-05 | 4 wrong attempts | Warning shows 1 attempt left |
@@ -127,13 +127,13 @@ HttpOnly cookie, and the OTP is shown on screen instead of being emailed.
 | C-04 | Visit `/dashboard/SG` | "You don't have access to this country" |
 | C-05 | Sign in as `MOBI-DEMO-NOCOUNTRY` | "No active countries yet"; no switcher |
 | F-01 | Forgot password, enter `abc` | Email format error |
-| F-02 | Enter `admin@mobidemo.test` | OTP screen + Demo inbox code |
+| F-02 | Enter `sarah.lim@tanjungtrading.example` | OTP screen + Email preview code |
 | F-03 | Enter `ghost@example.com` | Same OTP screen; no inbox email |
 | F-04 | Wrong code | "Incorrect, 4 attempts remaining" |
 | F-05 | 5 wrong codes | "Too many incorrect attempts"; *Send a new code* |
 | F-06 | Click *Resend* before 60 s | Not possible (countdown); after 60 s, a new code arrives and the old code fails |
 | F-07 | Wait 10 min, then verify | "Code expired" |
-| F-08 | `bounce@mobidemo.test` | "We couldn't send the code" |
+| F-08 | `farid@tanjungtrading.example` | "We couldn't send the code" |
 | F-09 | New password `Mobi@123` | Too short + common; blocked |
 | F-10 | Confirm field doesn't match | "Passwords don't match" |
 | F-11 | Valid passphrase | Success screen; old password no longer works; new one does |

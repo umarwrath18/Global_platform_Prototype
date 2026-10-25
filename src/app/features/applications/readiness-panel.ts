@@ -4,6 +4,7 @@ import { MerchantApi, toMerchantError } from '../../core/merchants/merchant-api.
 import { ApplicationStatus, ChecklistItem, CountryApplication, ReadinessAction, ReadinessStage } from '../../core/merchants/merchant-models';
 import { ONBOARDING_COUNTRIES } from '../../core/merchants/onboarding-config';
 import { Icon } from '../../shared/icon';
+import { isStrictValidation } from '../../core/merchants/validation-mode';
 import { fmtDateTime } from '../../shared/merchant-ui';
 
 interface StageView {
@@ -47,10 +48,10 @@ export class ReadinessPanel {
     const i = ORDER.indexOf(this.application().status);
     const state = (start: number, end: number): StageView['state'] => (i >= end ? 'done' : i >= start ? 'current' : 'upcoming');
     return [
-      { key: 'configuration', title: 'CS configuration', description: 'Configure the country, settlement, payment methods and pricing.', state: state(0, 2), checklist: 'configuration' },
-      { key: 'keys', title: 'Production keys', description: 'Generated only after Risk approval and completed configuration.', state: i >= 2 ? 'done' : 'upcoming', checklist: null },
-      { key: 'integration', title: 'Merchant integration', description: 'The merchant integrates using the production keys.', state: state(2, 4), checklist: 'integration' },
-      { key: 'go_live', title: 'Go-live verification', description: 'Must pass before the country becomes operational.', state: state(4, 5), checklist: 'go_live' },
+      { key: 'configuration', title: 'CS configuration', description: 'Set up settlement, payment methods and pricing for the country.', state: state(0, 2), checklist: 'configuration' },
+      { key: 'keys', title: 'Production keys', description: 'Issued once setup is complete.', state: i >= 2 ? 'done' : 'upcoming', checklist: null },
+      { key: 'integration', title: 'Merchant integration', description: 'The merchant connects to Mobi with their production keys.', state: state(2, 4), checklist: 'integration' },
+      { key: 'go_live', title: 'Go-live verification', description: 'Final checks before the country goes live.', state: state(4, 5), checklist: 'go_live' },
     ];
   });
 
@@ -58,8 +59,15 @@ export class ReadinessPanel {
     return this.application().readiness[stage];
   }
 
+  protected readonly strict = isStrictValidation();
+
   protected allDone(stage: ReadinessStage) {
     return this.items(stage).every((i) => i.done);
+  }
+
+  /** Guided mode lets the next step go ahead and completes any open items. */
+  protected canAdvance(stage: ReadinessStage) {
+    return !this.strict || this.allDone(stage);
   }
 
   protected checklistOpen(stage: ReadinessStage) {
@@ -79,7 +87,7 @@ export class ReadinessPanel {
       if (action.action === 'confirm_go_live') void this.auth.refresh();
       this.changed.emit({ application: app, message });
     } catch (e) {
-      this.error.set(toMerchantError(e).message ?? 'We could not update readiness. Please try again.');
+      this.error.set(toMerchantError(e).message ?? "We couldn't save that step. Please try again.");
     } finally {
       this.busy.set(null);
     }

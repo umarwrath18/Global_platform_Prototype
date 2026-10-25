@@ -1,26 +1,26 @@
 <main class="page narrow">
   <ol class="crumbs">
     <li><a routerLink="/merchants">Merchants</a></li>
-    <li aria-current="page">Add country to existing merchant</li>
+    <li aria-current="page">Add a country</li>
   </ol>
 
   <div class="portal-head">
     <div>
-      <h1>Add country to existing merchant</h1>
-      <p class="sub">Expand a Global Merchant into a new country. No new Global Merchant is created.</p>
+      <h1>Add a country</h1>
+      <p class="sub">Take an existing merchant into a new country. Their details carry over.</p>
     </div>
   </div>
 
   <ol class="flow-steps" aria-label="Steps">
-    <li [class.current]="!detail()" [class.done]="!!detail()"><span>1</span>Find merchant</li>
-    <li [class.current]="!!detail()"><span>2</span>New country</li>
-    <li><span>3</span>Country application</li>
+    <li [class.current]="!detail()" [class.done]="!!detail()"><span>1</span>Merchant</li>
+    <li [class.current]="!!detail()"><span>2</span>Country</li>
+    <li><span>3</span>Application</li>
   </ol>
 
   @if (roles.role() !== 'sales') {
     <div class="alert warning compact" role="status">
       <app-icon name="info" />
-      <div>Only Sales / Operations can start country applications. Use the prototype role switcher in the top bar to act as Sales / Operations.</div>
+      <div>Only Sales / Operations can start country applications. Switch your view to Sales / Operations to continue.</div>
     </div>
   }
 
@@ -40,18 +40,18 @@
         </div>
         <div class="actions">
           <app-status [globalStatus]="d.merchant.globalStatus" />
-          <button type="button" class="btn sm" (click)="change()">Change merchant</button>
+          <button type="button" class="btn sm" (click)="change()">Change</button>
         </div>
       </div>
       <div class="panel-body">
         <dl class="kv">
-          <div><dt>Primary contact</dt><dd>{{ d.merchant.primaryContact.name }}</dd></div>
+          <div><dt>Main contact</dt><dd>{{ d.merchant.primaryContact.name }}</dd></div>
           <div><dt>Email</dt><dd>{{ d.merchant.primaryContact.email }}</dd></div>
           <div><dt>Phone</dt><dd>{{ d.merchant.primaryContact.phone }}</dd></div>
           <div><dt>Created</dt><dd>{{ date(d.merchant.createdAt) }}</dd></div>
         </dl>
         <div class="existing">
-          <h3>Existing country applications</h3>
+          <h3>Current countries</h3>
           @if (d.applications.length) {
             <div class="table-wrap">
               <table class="data-table">
@@ -69,7 +69,7 @@
               </table>
             </div>
           } @else {
-            <p class="f-hint">No country applications yet.</p>
+            <p class="f-hint">No countries yet.</p>
           }
         </div>
       </div>
@@ -78,8 +78,8 @@
     <section class="panel-card">
       <div class="panel-head">
         <div>
-          <h2>Select the new country</h2>
-          <p>Shared details (contact, industry, website, directors) are prefilled. You'll only be asked for missing or country-specific information.</p>
+          <h2>Choose the new country</h2>
+          <p>Contact, industry, website and directors carry over. You'll only fill in what's new for this country.</p>
         </div>
       </div>
       <div class="panel-body">
@@ -89,9 +89,9 @@
   } @else {
     <section class="panel-card">
       <div class="panel-body">
-        <label class="f-label" for="find">Search Global Merchants</label>
-        <input id="find" class="f-input" type="search" placeholder="Name, Global Merchant ID, registration number or contact email" [value]="q()" (input)="q.set($any($event.target).value)" autocomplete="off" [disabled]="loading()" />
-        <p class="f-hint">Type at least 2 characters.</p>
+        <label class="f-label" for="find">Find the merchant</label>
+        <input id="find" class="f-input" type="search" placeholder="Name, merchant ID, registration number or email" [value]="q()" (input)="q.set($any($event.target).value)" autocomplete="off" [disabled]="loading()" />
+        <p class="f-hint">Type at least 2 characters to search.</p>
         @if (loadingDetail()) {
           <div class="skeleton-rows" aria-busy="true"><span></span><span></span></div>
         } @else if (results().length) {
@@ -108,9 +108,9 @@
           </ul>
         } @else if (q().trim().length >= 2) {
           <div class="empty-state">
-            <h3>No Global Merchant found</h3>
-            <p>Check the spelling or registration number. If this is a new organisation, create it instead.</p>
-            <a class="btn" routerLink="/merchants/new">Add new merchant</a>
+            <h3>No merchant found</h3>
+            <p>Check the spelling or registration number. If they're new to Mobi, create the merchant first.</p>
+            <a class="btn" routerLink="/merchants/new">New merchant</a>
           </div>
         }
       </div>

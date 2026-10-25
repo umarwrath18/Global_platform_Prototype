@@ -3,6 +3,7 @@ import { SECTION_ORDER } from '../../core/merchants/application-rules';
 import { MerchantApi, toMerchantError } from '../../core/merchants/merchant-api.service';
 import { CountryApplication, ReviewDecision, SECTION_LABEL, SectionKey } from '../../core/merchants/merchant-models';
 import { Icon } from '../../shared/icon';
+import { isStrictValidation } from '../../core/merchants/validation-mode';
 import { fmtDateTime } from '../../shared/merchant-ui';
 
 /** Risk decision on a submitted application. Verification evidence informs, but never makes, the decision. */
@@ -42,7 +43,9 @@ export class ReviewPanel {
     const p: Record<string, string> = {};
     const d = this.decision();
     if (!d) p['decision'] = 'Choose a decision.';
-    if (!this.reviewed()) p['reviewed'] = 'Confirm you have reviewed the documents and verification evidence.';
+    // Guided mode only needs the decision itself; the server fills in sensible defaults.
+    if (!isStrictValidation()) return p;
+    if (!this.reviewed()) p['reviewed'] = "Confirm you've reviewed the documents and verification results.";
     if (d && d !== 'approve' && this.comment().trim().length < 10) {
       p['comment'] = d === 'return' ? 'Explain what must be corrected (at least 10 characters).' : 'Give the reason for rejection (at least 10 characters).';
     }
@@ -83,7 +86,7 @@ export class ReviewPanel {
       this.decided.emit(app);
     } catch (e) {
       const err = toMerchantError(e);
-      this.error.set(('errors' in err && err.errors?.[0]?.message) || err.message || 'We could not record the decision. Please try again.');
+      this.error.set(('errors' in err && err.errors?.[0]?.message) || err.message || "We couldn't save your decision. Please try again.");
     } finally {
       this.busy.set(false);
     }

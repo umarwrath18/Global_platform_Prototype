@@ -87,6 +87,7 @@ export class PortalShell {
 
   protected readonly roleOptions = Object.entries(STAFF_ROLE_LABEL) as [StaffRole, string][];
   protected readonly roleLabel = STAFF_ROLE_LABEL;
+  protected readonly shortRole: Record<StaffRole, string> = { sales: 'Sales / Ops', risk: 'Risk', cs: 'Customer Success' };
   protected readonly countries = Object.values(ONBOARDING_COUNTRIES);
   protected readonly currencies = [...new Set(Object.values(ONBOARDING_COUNTRIES).map((c) => c.currency))];
   protected readonly ranges = Object.entries(DATE_RANGE_LABEL) as [DateRange, string][];
@@ -115,7 +116,7 @@ export class PortalShell {
     const out: SearchHit[] = [];
     for (const m of this.merchants()) {
       if ([m.id, m.legalName, m.registrationNumber, m.primaryContact.email].join(' ').toLowerCase().includes(q)) {
-        out.push({ kind: 'merchant', id: m.id, title: m.legalName, meta: `${m.id} · Global Merchant`, link: ['/merchants', m.id] });
+        out.push({ kind: 'merchant', id: m.id, title: m.legalName, meta: m.id, link: ['/merchants', m.id] });
       }
       for (const a of m.applications) {
         if (a.id.toLowerCase().includes(q)) {

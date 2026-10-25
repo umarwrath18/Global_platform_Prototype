@@ -22,7 +22,7 @@ const READINESS: { status: ApplicationStatus; label: string }[] = [
   template: `
     <div class="lanes">
       <div class="lane">
-        <p class="lane-label">Application review</p>
+        <p class="lane-label">Review</p>
         <ol>
           @for (s of review(); track $index) {
             <li [class]="s.state" [attr.aria-current]="s.state === 'current' || s.state === 'warning' ? 'step' : null">
@@ -32,7 +32,7 @@ const READINESS: { status: ApplicationStatus; label: string }[] = [
         </ol>
       </div>
       <div class="lane">
-        <p class="lane-label">Operational readiness</p>
+        <p class="lane-label">Go-live</p>
         <ol>
           @for (s of readiness(); track $index) {
             <li [class]="s.state" [attr.aria-current]="s.state === 'current' ? 'step' : null">
@@ -48,12 +48,12 @@ const READINESS: { status: ApplicationStatus; label: string }[] = [
       display: grid;
       grid-template-columns: minmax(0, 3fr) minmax(0, 5fr);
       gap: 24px;
-      padding: 18px 22px;
+      padding: 16px 20px 18px;
     }
     .lane-label {
-      margin: 0 0 10px;
-      font-size: 12px;
-      font-weight: 700;
+      margin: 0 0 12px;
+      font-size: 11px;
+      font-weight: 600;
       letter-spacing: 0.06em;
       text-transform: uppercase;
       color: var(--text-muted);
@@ -69,15 +69,15 @@ const READINESS: { status: ApplicationStatus; label: string }[] = [
       flex: 1;
       display: flex;
       flex-direction: column;
-      gap: 6px;
-      font-size: 13px;
+      gap: 8px;
+      font-size: 12px;
       color: var(--text-subtle);
     }
     li::after {
       content: '';
       position: absolute;
-      top: 6px;
-      left: 16px;
+      top: 5px;
+      left: 14px;
       right: 4px;
       height: 2px;
       background: var(--border);
@@ -88,8 +88,8 @@ const READINESS: { status: ApplicationStatus; label: string }[] = [
     .dot {
       position: relative;
       z-index: 1;
-      width: 14px;
-      height: 14px;
+      width: 12px;
+      height: 12px;
       border: 2px solid var(--border-strong);
       border-radius: 50%;
       background: var(--surface);
@@ -110,15 +110,15 @@ const READINESS: { status: ApplicationStatus; label: string }[] = [
     }
     .current {
       color: var(--mobi-blue);
-      font-weight: 700;
+      font-weight: 600;
     }
     .current .dot {
       border-color: var(--mobi-blue);
       box-shadow: 0 0 0 4px rgba(0, 92, 172, 0.15);
     }
     .warning {
-      color: var(--warning);
-      font-weight: 700;
+      color: #b54708;
+      font-weight: 600;
     }
     .warning .dot {
       border-color: var(--warning);
@@ -126,7 +126,7 @@ const READINESS: { status: ApplicationStatus; label: string }[] = [
     }
     .danger {
       color: var(--danger);
-      font-weight: 700;
+      font-weight: 600;
     }
     .danger .dot {
       border-color: var(--danger);

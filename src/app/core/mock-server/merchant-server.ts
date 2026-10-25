@@ -35,7 +35,7 @@ import { simulateVerification } from './verification';
 // runs in the browser for the prototype, but enforces every rule itself: role permissions,
 // status transitions, validation and duplicate checks are never left to the UI.
 
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export type MerchantRecord = Omit<GlobalMerchant, 'globalStatus'>;
 
@@ -70,6 +70,8 @@ export interface MerchantServerOptions {
   storageKey?: string;
   now?: () => number;
   auth: AuthBridge;
+  /** When false (guided mode), missing input is recorded but never blocks a step. Default: strict. */
+  strictValidation?: () => boolean;
 }
 
 class ApiError {
@@ -86,11 +88,11 @@ const fail = (status: number, code: MerchantApiErrorCode, extra: Omit<MerchantAp
 const STAFF_ROLES: StaffRole[] = ['sales', 'risk', 'cs'];
 const EDITABLE: ApplicationStatus[] = ['draft', 'returned'];
 
-/** Simulated team mailboxes for the target email behaviour. */
+/** Team mailboxes that receive workflow emails. */
 export const TEAM_MAILBOX: Record<StaffRole, string> = {
-  sales: 'sales-ops@mobi-demo.test',
-  risk: 'risk-review@mobi-demo.test',
-  cs: 'cs-onboarding@mobi-demo.test',
+  sales: 'sales-ops@mobi.xyz',
+  risk: 'risk-review@mobi.xyz',
+  cs: 'cs-onboarding@mobi.xyz',
 };
 
 const str = (v: unknown, max = 200) => (typeof v === 'string' ? v.slice(0, max) : '');
@@ -120,6 +122,10 @@ export class MerchantServer {
   constructor(private readonly opts: MerchantServerOptions) {
     this.storageKey = opts.storageKey ?? 'mobi.gp.merchantdb';
     this.now = opts.now ?? Date.now;
+  }
+
+  private get strict() {
+    return this.opts.strictValidation?.() ?? true;
   }
 
   static handles(path: string) {
@@ -190,7 +196,7 @@ export class MerchantServer {
     const db = this.load();
 
     // Hard stop: the same registration number in the same country is the same organisation.
-    const sameReg = db.merchants.find((x) => x.registrationCountry === input.registrationCountry && normReg(x.registrationNumber) === normReg(input.registrationNumber));
+    const sameReg = input.registrationNumber ? db.merchants.find((x) => x.registrationCountry === input.registrationCountry && normReg(x.registrationNumber) === normReg(input.registrationNumber)) : undefined;
     if (sameReg) {
       fail(409, 'DUPLICATE_MERCHANT', { existingMerchantId: sameReg.id, message: `${sameReg.legalName} (${sameReg.id}) already uses this registration number.` });
     }
@@ -223,7 +229,7 @@ export class MerchantServer {
     const db = this.load();
     const m = this.findMerchant(db, id);
     const input = this.readMerchantInput({ ...m, ...body });
-    const clash = db.merchants.find((x) => x.id !== m.id && x.registrationCountry === input.registrationCountry && normReg(x.registrationNumber) === normReg(input.registrationNumber));
+    const clash = !input.registrationNumber ? undefined : db.merchants.find((x) => x.id !== m.id && x.registrationCountry === input.registrationCountry && normReg(x.registrationNumber) === normReg(input.registrationNumber));
     if (clash) fail(409, 'DUPLICATE_MERCHANT', { existingMerchantId: clash.id, message: `${clash.legalName} (${clash.id}) already uses this registration number.` });
     Object.assign(m, { legalName: input.legalName, registrationCountry: input.registrationCountry, registrationNumber: input.registrationNumber, primaryContact: input.primaryContact, updatedAt: this.now() });
     this.save(db);
@@ -249,8 +255,14 @@ export class MerchantServer {
     if (!primaryContact.name) issue('primaryContact.name', 'Enter the primary contact name.');
     if (!isEmail(primaryContact.email)) issue('primaryContact.email', 'Enter a valid email address, e.g. name@company.com');
     if (!isPhone(primaryContact.phone)) issue('primaryContact.phone', 'Enter a valid phone number including the country code.');
-    if (errors.length) fail(422, 'VALIDATION_FAILED', { errors });
-    return { legalName, registrationCountry, registrationNumber, primaryContact };
+    if (errors.length && this.strict) fail(422, 'VALIDATION_FAILED', { errors });
+    // Guided mode: keep what was entered and fill only what a record can't exist without.
+    return {
+      legalName: legalName.slice(0, 160) || 'Untitled merchant',
+      registrationCountry: REGISTRATION_COUNTRIES.some((x) => x.code === registrationCountry) ? registrationCountry : 'MY',
+      registrationNumber,
+      primaryContact,
+    };
   }
 
   // ----------------------------------------------------------- applications
@@ -368,7 +380,7 @@ export class MerchantServer {
     if (!EDITABLE.includes(app.status)) fail(409, 'INVALID_TRANSITION', { message: 'Only draft or returned applications can be submitted.' });
     if (body?.data) app.data = this.readData(app.country, body.data);
     const errors = validateApplication(app.country, app.data, merchant);
-    if (errors.length) {
+    if (errors.length && this.strict) {
       app.updatedAt = this.now();
       this.save(db);
       fail(422, 'APPLICATION_INCOMPLETE', { errors, message: `${errors.length} item${errors.length === 1 ? '' : 's'} must be completed before submission.` });
@@ -382,9 +394,9 @@ export class MerchantServer {
     app.verification = simulateVerification(merchant, app.data, now);
     app.corrections = null;
     app.updatedAt = now;
-    const note = str(body?.comment, 1000).trim() || undefined;
+    const note = [str(body?.comment, 1000).trim(), errors.length ? `Submitted with ${errors.length} incomplete item${errors.length === 1 ? '' : 's'}.` : ''].filter(Boolean).join(' ') || undefined;
     this.event(app, caller, role, resubmission ? 'Resubmitted after correction' : 'Submitted for Risk review', from, app.status, note);
-    this.event(app, null, 'system', 'Verification evidence received (simulated)', null, null);
+    this.event(app, null, 'system', 'Verification checks completed', null, null);
     const cname = ONBOARDING_COUNTRIES[app.country].name;
     this.notify(db, resubmission ? 'resubmitted' : 'submitted', app, merchant, ['risk', 'sales'], {
       title: `${resubmission ? 'Resubmitted' : 'Submitted'}: ${merchant.legalName} · ${cname}`,
@@ -414,7 +426,13 @@ export class MerchantServer {
       errors.push({ section: 'business', field: 'comment', message: req.decision === 'return' ? 'Explain what must be corrected (at least 10 characters).' : 'Give the reason for rejection (at least 10 characters).' });
     }
     if (req.decision === 'return' && !req.sections?.length) errors.push({ section: 'business', field: 'sections', message: 'Select at least one section to correct.' });
-    if (errors.length) fail(422, 'VALIDATION_FAILED', { errors });
+    if (errors.length && (this.strict || errors.some((e) => e.field === 'decision'))) fail(422, 'VALIDATION_FAILED', { errors });
+    if (req.decision === 'return' && !req.sections?.length) {
+      const open = [...new Set(validateApplication(app.country, app.data, merchant).map((e) => e.section))];
+      req.sections = open.length ? open : ['documents'];
+    }
+    if (!req.comment && req.decision === 'return') req.comment = 'Please review and update the highlighted sections, then resubmit.';
+    if (!req.comment && req.decision === 'reject') req.comment = 'The application does not meet our onboarding requirements.';
 
     const from = app.status;
     const cname = ONBOARDING_COUNTRIES[app.country].name;
@@ -463,7 +481,12 @@ export class MerchantServer {
     };
     const requireDone = (stage: ReadinessStage) => {
       const open = r[stage].filter((i) => !i.done);
-      if (open.length) fail(409, 'CHECKLIST_INCOMPLETE', { message: `Complete: ${open.map((i) => i.label).join('; ')}.` });
+      if (open.length && this.strict) fail(409, 'CHECKLIST_INCOMPLETE', { message: `Complete: ${open.map((i) => i.label).join('; ')}.` });
+      // Guided mode: moving on completes whatever is still open, and the history says so.
+      for (const item of open) {
+        Object.assign(item, { done: true, doneAt: this.now(), doneBy: caller.name });
+        this.event(app, caller, role, `Completed: ${item.label}`, null, null);
+      }
     };
     const now = this.now();
 
@@ -484,11 +507,11 @@ export class MerchantServer {
       }
       case 'generate_keys':
         requireDone('configuration');
-        move('cs_configuration', 'keys_generated', 'Production keys generated (simulated)');
-        r.keySet = { reference: `KS-DEMO-${randomToken(3).toUpperCase()}`, generatedAt: now, environment: 'production', simulated: true };
+        move('cs_configuration', 'keys_generated', 'Production keys generated');
+        r.keySet = { reference: `KS-${randomToken(3).toUpperCase()}`, generatedAt: now, environment: 'production', simulated: true };
         this.notify(db, 'configuration_ready', app, merchant, ['cs', 'sales'], {
           title: `Configuration ready: ${merchant.legalName} · ${cname}`,
-          body: `CS configuration is complete and production keys are generated (simulated) for ${app.id}. Merchant integration can start.`,
+          body: `CS configuration is complete and production keys are generated for ${app.id}. Merchant integration can start.`,
           to: [merchant.primaryContact.email, TEAM_MAILBOX.cs],
         });
         break;

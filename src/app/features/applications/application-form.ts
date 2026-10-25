@@ -5,6 +5,7 @@ import { MerchantApi, toMerchantError } from '../../core/merchants/merchant-api.
 import { ApplicationData, CountryApplication, Director, GlobalMerchant, SECTION_LABEL, SectionKey } from '../../core/merchants/merchant-models';
 import { INDUSTRIES, ONBOARDING_COUNTRIES, countryName } from '../../core/merchants/onboarding-config';
 import { Icon } from '../../shared/icon';
+import { isStrictValidation } from '../../core/merchants/validation-mode';
 import { ApplicationSummaryView } from './application-summary';
 
 type Step = SectionKey | 'review';
@@ -39,6 +40,9 @@ export class ApplicationForm implements OnInit {
   protected readonly submitting = signal(false);
   protected readonly message = signal<{ tone: 'success' | 'danger'; text: string } | null>(null);
   protected readonly resubmitNote = signal('');
+  /** Guided mode: set once the user has seen what's missing and chosen to submit anyway. */
+  protected readonly confirmIncomplete = signal(false);
+  protected readonly strict = isStrictValidation();
   protected readonly docErrors = signal<Record<string, string>>({});
 
   protected readonly steps = STEPS;
@@ -54,7 +58,7 @@ export class ApplicationForm implements OnInit {
   protected readonly prefilled = computed(() => {
     const map = new Map<string, string>();
     for (const p of this.application().prefill) {
-      map.set(p.field, p.from === 'global_profile' ? 'From Global profile' : `From ${p.applicationId} (${p.country})`);
+      map.set(p.field, p.from === 'global_profile' ? 'From profile' : `From ${p.country} application`);
     }
     return map;
   });
@@ -162,15 +166,7 @@ export class ApplicationForm implements OnInit {
     return this.data().documents.filter((d) => d.type === type);
   }
 
-  /** Prototype: records a sample document. No file content is stored or uploaded. */
-  protected attachSample(type: string) {
-    this.edit((d) =>
-      d.documents.push({ id: newId(), type, fileName: `${type.replace(/_/g, '-')}-sample.pdf`, sizeKb: 180 + Math.round(Math.random() * 400), uploadedAt: Date.now(), sample: true }),
-    );
-    this.docErrors.update(({ [type]: _, ...rest }) => rest);
-  }
-
-  /** Records only the selected file's name and size (prototype); the file itself is not uploaded. */
+  /** Adds the chosen file to the application's document list. */
   protected attachFile(type: string, input: HTMLInputElement) {
     const file = input.files?.[0];
     input.value = '';
@@ -211,10 +207,10 @@ export class ApplicationForm implements OnInit {
     try {
       const app = await this.api.saveDraft(this.application().id, this.data());
       this.savedJson.set(JSON.stringify(this.data()));
-      this.message.set({ tone: 'success', text: 'Draft saved. You can leave and resume this application at any time.' });
+      this.message.set({ tone: 'success', text: 'Draft saved. You can come back to it any time.' });
       this.saved.emit({ application: app, submitted: false });
     } catch (e) {
-      this.message.set({ tone: 'danger', text: toMerchantError(e).message ?? 'We could not save the draft. Your changes are still on this page; try again.' });
+      this.message.set({ tone: 'danger', text: toMerchantError(e).message ?? "We couldn't save the draft. Your changes are still here, so please try again." });
     } finally {
       this.saving.set(false);
     }
@@ -222,8 +218,13 @@ export class ApplicationForm implements OnInit {
 
   protected async submit() {
     this.attempted.set(true);
-    if (this.issues().length) {
-      this.message.set({ tone: 'danger', text: `Complete ${this.issues().length} item${this.issues().length === 1 ? '' : 's'} before submitting.` });
+    const open = this.issues().length;
+    if (open && this.strict) {
+      this.message.set({ tone: 'danger', text: `Complete ${open} item${open === 1 ? '' : 's'} before submitting.` });
+      return;
+    }
+    if (open && !this.confirmIncomplete()) {
+      this.confirmIncomplete.set(true);
       return;
     }
     this.submitting.set(true);
@@ -234,7 +235,7 @@ export class ApplicationForm implements OnInit {
       this.saved.emit({ application: app, submitted: true });
     } catch (e) {
       const err = toMerchantError(e);
-      this.message.set({ tone: 'danger', text: err.message ?? 'We could not submit the application. Please try again.' });
+      this.message.set({ tone: 'danger', text: err.message ?? "We couldn't submit the application. Please try again." });
     } finally {
       this.submitting.set(false);
     }

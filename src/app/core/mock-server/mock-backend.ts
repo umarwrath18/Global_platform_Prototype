@@ -4,6 +4,7 @@ import { from, mergeMap, Observable, timer } from 'rxjs';
 import { DemoInboxService } from '../../shared/demo-inbox.service';
 import { AuthServer } from './auth-server';
 import { MerchantServer } from './merchant-server';
+import { isStrictValidation, setStrictValidation } from '../merchants/validation-mode';
 
 /**
  * Hosts the simulated backend for the prototype and exposes QA hooks on
@@ -18,7 +19,7 @@ export class MockBackend {
     sendEmail: (email) => this.inbox.deliver(email),
   });
 
-  readonly merchants = new MerchantServer({ storage: localStorage, auth: this.server });
+  readonly merchants = new MerchantServer({ storage: localStorage, auth: this.server, strictValidation: isStrictValidation });
 
   constructor() {
     (window as any).mobiDemo = {
@@ -34,6 +35,7 @@ export class MockBackend {
         await this.merchants.resetAll();
       },
       resetMerchants: () => this.merchants.resetAll(),
+      strictValidation: (on: boolean) => setStrictValidation(on),
     };
   }
 }

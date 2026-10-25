@@ -24,8 +24,8 @@ npm run build      # production build → dist/global-platform/browser
 
 ## Demo accounts
 
-All demo users share the password **`Mobi@123`**. The login screen also lists
-them under "View sample accounts".
+All test users share the password **`Mobi@123`**. The login screen also lists
+them under "Use a test account".
 
 | Global Account ID     | Scenario                                              |
 | --------------------- | ----------------------------------------------------- |
@@ -38,16 +38,34 @@ them under "View sample accounts".
 | `MOBI-DEMO-INACTIVE`  | Global Account inactive                               |
 | `MOBI-DEMO-OUTAGE`    | Simulated auth service outage                         |
 
-Registered emails for password recovery follow the user, e.g. `admin@mobidemo.test`
-(user `123`), `aisyah@mobidemo.test`, `budi@mobidemo.test`, `lan@mobidemo.test`.
-`bounce@mobidemo.test` simulates an email delivery failure. OTP codes appear on
-screen in a **Demo inbox** card instead of being emailed.
+Registered emails for password recovery follow the user, e.g. `sarah.lim@tanjungtrading.example`
+(user `123`), `aisyah@tanjungtrading.example`, `budi@tanjungtrading.example`, `lan@lumihome.example`.
+`farid@tanjungtrading.example` simulates an email delivery failure. OTP codes appear on
+screen in an **Email preview** card instead of being emailed.
 
 ### Merchant onboarding (Batch 2)
 
-Sign in as `123`, then open **Merchants** in the sidebar. Use the pink **Prototype · Acting as** control in the
-sidebar to switch between Sales / Operations, Risk and Customer Success. It is a
-prototype-only stand-in for real role permissions. All sample merchants are labelled *Demo data*.
+Sign in as `123`, then open **Merchants** in the sidebar. Use **View as** in the sidebar to
+switch between Sales / Operations, Risk and Customer Success. This control stands in for
+real role permissions and exists only in this prototype.
+
+**Validation modes.** By default the app runs in *guided* mode:
+- Fields validate and show errors as they would in production, but missing input never
+  blocks a step.
+- Submitting with gaps asks for confirmation.
+- Risk decisions without a reason get a default reason.
+- Moving a CS step forward completes any open checklist items.
+
+Run `mobiDemo.strictValidation(true)` in the browser console, then reload, to apply the full
+production rules. Run `mobiDemo.strictValidation(false)` to go back to guided mode.
+
+**What isn't real in this build.** Everything runs in the browser, with no external services:
+- Verification results are generated from the application data.
+- Production key-set references are generated locally; no credentials are created.
+- No emails are sent. Notifications record the intended recipients, and OTP codes appear
+  in an on-screen **Email preview**.
+- Uploaded documents keep only their file name and size.
+- Company names, people and domains (`*.example`) are fictional.
 
 ### QA hooks (browser console)
 
@@ -59,7 +77,8 @@ mobiDemo.enableUser('123')
 mobiDemo.expireSessions()            // simulate 30-minute idle timeout
 mobiDemo.audit()                     // print audit events
 mobiDemo.reset()                     // restore all demo data (auth + merchants)
-mobiDemo.resetMerchants()            // restore only the merchant demo data
+mobiDemo.resetMerchants()            // restore only the merchant data
+mobiDemo.strictValidation(true)      // full production validation (reload after)
 ```
 
 ## Deploy to Vercel

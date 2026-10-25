@@ -35,30 +35,29 @@ interface CountryOption {
             <span class="tag">{{ c.currency }}</span>
           </span>
           @if (c.open; as o) {
-            <span class="c-note">Already has <a [routerLink]="['/applications', o.id]">{{ o.id }}</a></span>
+            <span class="c-note">Open application <a [routerLink]="['/applications', o.id]">{{ o.id }}</a></span>
             <app-status [status]="o.status" />
           } @else {
-            <span class="c-note">{{ c.documents }} required documents · {{ c.methods }} payment methods · {{ c.directors ? 'Directors required' : 'Directors not required' }}</span>
+            <span class="c-note">{{ c.documents }} documents · {{ c.methods }} payment methods{{ c.directors ? ' · directors' : '' }}</span>
             @if (c.rejected) {
-              <span class="c-note warn">Previous application {{ c.rejected }} was rejected. A new application will be created.</span>
+              <span class="c-note warn">{{ c.rejected }} was rejected. This starts a new application.</span>
             }
           }
         </label>
       }
     </fieldset>
-    <p class="f-hint">Requirements shown are demo country configuration.</p>
     @if (error(); as e) {
       <div class="alert danger compact" role="alert">
         <app-icon name="alert-circle" />
-        <div>{{ e.message ?? 'We could not create the application. Please try again.' }}</div>
+        <div>{{ e.message ?? 'We couldn't create the application. Please try again.' }}</div>
       </div>
     }
     <div class="picker-foot">
       <button type="button" class="btn primary" [disabled]="!selected() || busy() || roles.role() !== 'sales'" (click)="create()">
         @if (busy()) {
-          <span class="spinner" aria-hidden="true"></span>Creating application…
+          <span class="spinner" aria-hidden="true"></span>Creating…
         } @else {
-          Create {{ selectedName() }} application<app-icon name="arrow-right" [size]="18" />
+          {{ selected() ? 'Start ' + selectedName() + ' application' : 'Choose a country' }}<app-icon name="arrow-right" [size]="16" />
         }
       </button>
     </div>
@@ -66,8 +65,8 @@ interface CountryOption {
   styles: `
     .countries {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+      gap: 10px;
       margin: 0;
       padding: 0;
       border: 0;
@@ -78,9 +77,9 @@ interface CountryOption {
       flex-direction: column;
       align-items: flex-start;
       gap: 6px;
-      padding: 14px 16px;
+      padding: 14px;
       border: 1px solid var(--border);
-      border-radius: var(--radius);
+      border-radius: var(--r-control);
       background: var(--surface);
       cursor: pointer;
     }
@@ -89,7 +88,7 @@ interface CountryOption {
     }
     .c-card.selected {
       border-color: var(--mobi-blue);
-      box-shadow: var(--focus-ring);
+      background: var(--mobi-blue-tint);
     }
     .c-card.disabled {
       background: var(--surface-page);
@@ -122,10 +121,10 @@ interface CountryOption {
     }
     .c-name {
       flex: 1;
-      font-weight: 700;
+      font-weight: 600;
     }
     .c-note {
-      font-size: 13px;
+      font-size: 12px;
       color: var(--text-muted);
     }
     .c-note.warn {

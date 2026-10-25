@@ -1,9 +1,8 @@
 <main class="page">
   <div class="portal-head">
     <div>
-      <p class="eyebrow">Merchant Management</p>
-      <h1>Country applications</h1>
-      <p class="sub">Work queues by team. Each application is tracked independently of the merchant's other countries.</p>
+      <h1>Applications</h1>
+      <p class="sub">Each country application, grouped by the team that acts next.</p>
     </div>
   </div>
 
@@ -12,12 +11,12 @@
       @for (t of queues; track t.key) {
         <button type="button" role="tab" [class.on]="queue() === t.key" [attr.aria-selected]="queue() === t.key" (click)="select(t.key)">
           {{ t.label }}<span class="n">{{ counts()[t.key] }}</span>
-          @if (t.owner === roles.role()) {<span class="mine">Your team</span>}
+          @if (t.owner === roles.role()) {<span class="mine" title="Your team" aria-label="Your team"></span>}
         </button>
       }
     </div>
     <div class="toolbar">
-      <input class="f-input grow" type="search" placeholder="Search application ID, Global Merchant ID or name" aria-label="Search applications" [value]="q()" (input)="q.set($any($event.target).value)" />
+      <input class="f-input grow" type="search" placeholder="Search by application ID, merchant ID or name" aria-label="Search applications" [value]="q()" (input)="q.set($any($event.target).value)" />
     </div>
 
     @if (loading()) {
@@ -33,16 +32,16 @@
       <div class="empty-state">
         <div class="icon-tile"><app-icon name="check-circle" /></div>
         <h3>{{ q() || filters.active() ? 'No applications match' : current().empty }}</h3>
-        @if (filters.active()) {<button type="button" class="btn" (click)="filters.clear()">Clear top-bar filters</button>}
+        @if (filters.active()) {<button type="button" class="btn" (click)="filters.clear()">Reset filters</button>}
       </div>
     } @else {
       <div class="table-wrap">
         <table class="data-table">
           <thead>
             <tr>
-              <th scope="col">Application ID</th>
               <th scope="col">Merchant</th>
               <th scope="col">Country</th>
+              <th scope="col">Application</th>
               <th scope="col">Status</th>
               <th scope="col">Submissions</th>
               <th scope="col">Created</th>
@@ -52,12 +51,12 @@
           <tbody>
             @for (a of rows(); track a.id) {
               <tr>
-                <td class="mono"><a class="row-link" [routerLink]="['/applications', a.id]">{{ a.id }}</a></td>
                 <td>
-                  <a class="row-link" [routerLink]="['/merchants', a.merchantId]">{{ a.merchantName }}</a>
+                  <a class="row-link" [routerLink]="['/applications', a.id]">{{ a.merchantName }}</a>
                   <div class="meta">{{ a.merchantId }}</div>
                 </td>
-                <td>{{ countryName(a.country) }} <span class="tag">{{ a.currency }}</span></td>
+                <td>{{ countryName(a.country) }}<span class="cur">{{ a.currency }}</span></td>
+                <td class="mono muted">{{ a.id }}</td>
                 <td><app-status [status]="a.status" /></td>
                 <td class="muted">{{ a.submissionCount }}</td>
                 <td class="muted">{{ date(a.createdAt) }}</td>

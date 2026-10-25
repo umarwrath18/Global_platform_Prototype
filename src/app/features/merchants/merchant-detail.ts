@@ -5,6 +5,7 @@ import { MerchantApi, MerchantClientError, toMerchantError } from '../../core/me
 import { HistoryEvent, MerchantDetail, READINESS_STATUSES, STAFF_ROLE_LABEL } from '../../core/merchants/merchant-models';
 import { REGISTRATION_COUNTRIES, countryName } from '../../core/merchants/onboarding-config';
 import { StaffRoleService } from '../../core/merchants/staff-role.service';
+import { isStrictValidation } from '../../core/merchants/validation-mode';
 import { Icon } from '../../shared/icon';
 import { StatusBadge, fmtDate, fmtDateTime } from '../../shared/merchant-ui';
 
@@ -67,7 +68,7 @@ export class MerchantDetailPage {
     return e;
   });
 
-  protected readonly hasDraftErrors = computed(() => Object.keys(this.draftErrors()).length > 0);
+  protected readonly hasDraftErrors = computed(() => isStrictValidation() && Object.keys(this.draftErrors()).length > 0);
 
   constructor() {
     effect(() => void this.load(this.id()));
@@ -107,7 +108,7 @@ export class MerchantDetailPage {
 
   protected async saveProfile() {
     const d = this.draft();
-    if (!d || Object.keys(this.draftErrors()).length) return;
+    if (!d || this.hasDraftErrors()) return;
     this.saving.set(true);
     this.saveError.set(null);
     try {
@@ -119,10 +120,10 @@ export class MerchantDetailPage {
       });
       this.editing.set(false);
       await this.load();
-      this.flash('Global Merchant profile updated');
+      this.flash('Profile saved');
     } catch (e) {
       const err = toMerchantError(e);
-      this.saveError.set(err.message || ('errors' in err && err.errors?.[0]?.message) || 'We could not save the profile.');
+      this.saveError.set(err.message || ('errors' in err && err.errors?.[0]?.message) || "We couldn't save the profile.");
     } finally {
       this.saving.set(false);
     }

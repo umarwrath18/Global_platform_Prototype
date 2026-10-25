@@ -1,11 +1,10 @@
 import { COUNTRY_CATALOGUE } from '../mock-server/seed';
 import { ReadinessStage } from './merchant-models';
 
-// DEMO CONFIGURATION — sample per-country onboarding rules for the prototype.
-// These values are illustrative only and have NOT been approved by Mobi Risk, Legal or
-// Product. They stand in for the Country, Currency, Payment Method and Pricing
-// configuration modules, which are out of scope for Batch 2. Replace this file with
-// the real configuration service when it exists.
+// Per-country onboarding rules. NOTE: these values are illustrative and have NOT been
+// approved by Mobi Risk, Legal or Product. They stand in for the Country, Currency,
+// Payment Method and Pricing configuration modules (out of scope for Batch 2); replace
+// this file with the real configuration service when it exists.
 
 export interface FieldRule {
   key: string;
@@ -117,7 +116,7 @@ export const ONBOARDING_COUNTRIES: Record<string, CountryOnboardingConfig> = {
       { key: 'accountName', label: 'Account holder name', required: true },
       { key: 'accountNumber', label: 'Account number', required: true, pattern: '^\\d{6,19}$', hint: '6–19 digits' },
     ],
-    directors: { required: false, minCount: 0, ownershipThresholdPct: null, note: 'Not required for Vietnam in this demo configuration. The legal representative is captured under Contact information.' },
+    directors: { required: false, minCount: 0, ownershipThresholdPct: null, note: "Directors aren't needed for Vietnam. The legal representative is recorded under Contact information." },
     documents: [
       { type: 'erc', label: 'Enterprise registration certificate (ERC)', required: true },
       { type: 'legal_rep_id', label: 'Legal representative ID / passport', required: true },
@@ -226,5 +225,5 @@ export const READINESS_CHECKLISTS: Record<ReadinessStage, { key: string; label: 
   ],
 };
 
-/** Verification is represented generically; no provider has been confirmed. */
-export const VERIFICATION_PROVIDER_LABEL = 'Verification provider (to be confirmed)';
+/** Verification is shown generically; no provider has been confirmed (see docs). */
+export const VERIFICATION_PROVIDER_LABEL = 'Automated verification';

@@ -2,13 +2,13 @@
 <section class="panel-card role-panel cs">
   <div class="panel-head">
     <div>
-      <h2><app-icon name="check-circle" [size]="18" />Operational readiness</h2>
-      <p>Risk approval does not activate the merchant. Each step below must be completed in order. <span class="tag demo">Simulated downstream steps</span></p>
+      <h2><app-icon name="check-circle" [size]="16" />Go-live</h2>
+      <p>From approval to live, one step at a time.</p>
     </div>
   </div>
   <div class="panel-body">
     @if (!canAct() && a.status !== 'operational') {
-      <p class="hint-line"><app-icon name="info" [size]="16" />Customer Success completes these steps. Switch the prototype role to CS to act.</p>
+      <p class="hint-line"><app-icon name="lock" [size]="14" />Customer Success completes these steps.</p>
     }
     @if (error(); as e) {
       <div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>
@@ -16,9 +16,9 @@
 
     @if (a.status === 'risk_approved' && canAct()) {
       <div class="start">
-        <p>Risk approved this application. Start the {{ cfg().name }} configuration to begin operational readiness.</p>
+        <p>Approved by Risk and ready for setup in {{ cfg().name }}.</p>
         <button type="button" class="btn primary" (click)="run({ action: 'start_configuration' }, 'start_configuration', 'CS configuration started')" [disabled]="!!busy()">
-          @if (busy() === 'start_configuration') {<span class="spinner" aria-hidden="true"></span>}Start CS configuration
+          @if (busy() === 'start_configuration') {<span class="spinner" aria-hidden="true"></span>}Start setup
         </button>
       </div>
     }
@@ -38,7 +38,7 @@
             <div class="config-summary">
               <span><strong>Country</strong> {{ cfg().name }}</span>
               <span><strong>Currency</strong> {{ a.currency }}</span>
-              <span><strong>Approved methods</strong>
+              <span><strong>Methods</strong>
                 @for (x of pricing(); track x.m.code; let last = $last) {<span>{{ x.m.name }} {{ x.line!.mdr }}%{{ last ? '' : ', ' }}</span>}
               </span>
             </div>
@@ -66,8 +66,8 @@
               <div class="keyset">
                 <app-icon name="key" [size]="18" />
                 <div>
-                  <strong>{{ k.reference }}</strong> · Production · {{ dateTime(k.generatedAt) }}
-                  <p>Sample key-set reference only. No real credentials were generated or issued.</p>
+                  <strong>Key set {{ k.reference }}</strong> · Production · {{ dateTime(k.generatedAt) }}
+                  <p>Shared with the merchant through the merchant portal.</p>
                 </div>
               </div>
             }
@@ -76,10 +76,10 @@
           @if (canAct()) {
             @if (s.key === 'configuration' && a.status === 'cs_configuration') {
               <div class="stage-actions">
-                <button type="button" class="btn primary" [disabled]="!allDone('configuration') || !!busy()" (click)="run({ action: 'generate_keys' }, 'generate_keys', 'Production keys generated (simulated)')">
-                  @if (busy() === 'generate_keys') {<span class="spinner" aria-hidden="true"></span>} @else {<app-icon name="key" [size]="16" />}Generate production keys (simulated)
+                <button type="button" class="btn primary" [disabled]="!canAdvance('configuration') || !!busy()" (click)="run({ action: 'generate_keys' }, 'generate_keys', 'Production keys issued')">
+                  @if (busy() === 'generate_keys') {<span class="spinner" aria-hidden="true"></span>} @else {<app-icon name="key" [size]="16" />}Issue production keys
                 </button>
-                @if (!allDone('configuration')) {<span class="hint">Complete every configuration item first.</span>}
+                @if (!allDone('configuration')) {<span class="hint">{{ strict ? 'Complete every item first.' : 'Open items will be marked complete.' }}</span>}
               </div>
             }
             @if (s.key === 'integration' && a.status === 'keys_generated') {
@@ -91,18 +91,18 @@
             }
             @if (s.key === 'integration' && a.status === 'integration') {
               <div class="stage-actions">
-                <button type="button" class="btn primary" [disabled]="!allDone('integration') || !!busy()" (click)="run({ action: 'request_go_live' }, 'request_go_live', 'Go-live verification started')">
-                  @if (busy() === 'request_go_live') {<span class="spinner" aria-hidden="true"></span>}Integration complete: start go-live verification
+                <button type="button" class="btn primary" [disabled]="!canAdvance('integration') || !!busy()" (click)="run({ action: 'request_go_live' }, 'request_go_live', 'Go-live checks started')">
+                  @if (busy() === 'request_go_live') {<span class="spinner" aria-hidden="true"></span>}Integration done. Start go-live checks
                 </button>
-                @if (!allDone('integration')) {<span class="hint">Complete every integration item first.</span>}
+                @if (!allDone('integration')) {<span class="hint">{{ strict ? 'Complete every item first.' : 'Open items will be marked complete.' }}</span>}
               </div>
             }
             @if (s.key === 'go_live' && a.status === 'go_live_verification') {
               <div class="stage-actions">
-                <button type="button" class="btn primary" [disabled]="!allDone('go_live') || !!busy()" (click)="run({ action: 'confirm_go_live' }, 'confirm_go_live', cfg().name + ' is now operational')">
-                  @if (busy() === 'confirm_go_live') {<span class="spinner" aria-hidden="true"></span>}Confirm go-live
+                <button type="button" class="btn primary" [disabled]="!canAdvance('go_live') || !!busy()" (click)="run({ action: 'confirm_go_live' }, 'confirm_go_live', cfg().name + ' is live')">
+                  @if (busy() === 'confirm_go_live') {<span class="spinner" aria-hidden="true"></span>}Go live
                 </button>
-                @if (!allDone('go_live')) {<span class="hint">All go-live checks must pass first.</span>}
+                @if (!allDone('go_live')) {<span class="hint">{{ strict ? 'Every check must pass first.' : 'Open checks will be marked complete.' }}</span>}
               </div>
             }
           }

@@ -5,6 +5,7 @@ import { MerchantApi, MerchantClientError, toMerchantError } from '../../core/me
 import { GlobalMerchant } from '../../core/merchants/merchant-models';
 import { ONBOARDING_COUNTRIES, REGISTRATION_COUNTRIES } from '../../core/merchants/onboarding-config';
 import { StaffRoleService } from '../../core/merchants/staff-role.service';
+import { isStrictValidation } from '../../core/merchants/validation-mode';
 import { Icon } from '../../shared/icon';
 import { CountryPicker } from './country-picker';
 
@@ -80,7 +81,8 @@ export class NewMerchant {
 
   protected async create(confirmNotDuplicate = false) {
     this.submitted.set(true);
-    if (Object.keys(this.errors()).length) {
+    // Guided mode: errors are shown, but never stop the flow (see validation-mode.ts).
+    if (Object.keys(this.errors()).length && isStrictValidation()) {
       document.querySelector<HTMLElement>('.invalid')?.focus();
       return;
     }

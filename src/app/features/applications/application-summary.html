@@ -5,11 +5,11 @@
 <section class="sum" [class.flag]="flagged().has('business')">
   <header>
     <h3>{{ label.business }}</h3>
-    @if (flagged().has('business')) {<span class="tag warn">Correction requested</span>}
-    @if (editable()) {<button type="button" class="btn ghost sm" (click)="edit.emit('business')"><app-icon name="edit" [size]="15" />Edit</button>}
+    @if (flagged().has('business')) {<span class="tag warn">Update requested</span>}
+    @if (editable()) {<button type="button" class="btn ghost sm" (click)="edit.emit('business')">Edit</button>}
   </header>
   <dl class="kv">
-    <div><dt>Legal name (Global profile)</dt><dd>{{ profile().legalName }}</dd></div>
+    <div><dt>Legal name</dt><dd>{{ profile().legalName }}</dd></div>
     <div><dt>Registered in</dt><dd>{{ countryName(profile().registrationCountry) }} · {{ profile().registrationNumber }}</dd></div>
     <div><dt>Trading name</dt><dd>{{ data.business.tradingName || '—' }}</dd></div>
     <div><dt>Business type</dt><dd>{{ data.business.businessType || '—' }}</dd></div>
@@ -25,11 +25,11 @@
 <section class="sum" [class.flag]="flagged().has('contact')">
   <header>
     <h3>{{ label.contact }}</h3>
-    @if (flagged().has('contact')) {<span class="tag warn">Correction requested</span>}
-    @if (editable()) {<button type="button" class="btn ghost sm" (click)="edit.emit('contact')"><app-icon name="edit" [size]="15" />Edit</button>}
+    @if (flagged().has('contact')) {<span class="tag warn">Update requested</span>}
+    @if (editable()) {<button type="button" class="btn ghost sm" (click)="edit.emit('contact')">Edit</button>}
   </header>
   <dl class="kv">
-    <div><dt>{{ c.directors.required ? 'Country contact' : 'Contact / legal representative' }}</dt><dd>{{ data.contact.name || '—' }}</dd></div>
+    <div><dt>{{ c.directors.required ? 'Contact' : 'Contact (legal representative)' }}</dt><dd>{{ data.contact.name || '—' }}</dd></div>
     <div><dt>Email</dt><dd>{{ data.contact.email || '—' }}</dd></div>
     <div><dt>Phone</dt><dd>{{ data.contact.phone || '—' }}</dd></div>
     <div><dt>Support email</dt><dd>{{ data.contact.supportEmail || '—' }}</dd></div>
@@ -39,8 +39,8 @@
 <section class="sum" [class.flag]="flagged().has('bank')">
   <header>
     <h3>{{ label.bank }}</h3>
-    @if (flagged().has('bank')) {<span class="tag warn">Correction requested</span>}
-    @if (editable()) {<button type="button" class="btn ghost sm" (click)="edit.emit('bank')"><app-icon name="edit" [size]="15" />Edit</button>}
+    @if (flagged().has('bank')) {<span class="tag warn">Update requested</span>}
+    @if (editable()) {<button type="button" class="btn ghost sm" (click)="edit.emit('bank')">Edit</button>}
   </header>
   <dl class="kv">
     <div><dt>Settlement currency</dt><dd>{{ a.currency }}</dd></div>
@@ -53,8 +53,8 @@
 <section class="sum" [class.flag]="flagged().has('directors')">
   <header>
     <h3>{{ label.directors }}</h3>
-    @if (flagged().has('directors')) {<span class="tag warn">Correction requested</span>}
-    @if (editable() && c.directors.required) {<button type="button" class="btn ghost sm" (click)="edit.emit('directors')"><app-icon name="edit" [size]="15" />Edit</button>}
+    @if (flagged().has('directors')) {<span class="tag warn">Update requested</span>}
+    @if (editable() && c.directors.required) {<button type="button" class="btn ghost sm" (click)="edit.emit('directors')">Edit</button>}
   </header>
   @if (!c.directors.required) {
     <p class="muted">{{ c.directors.note }}</p>
@@ -68,15 +68,15 @@
       </tbody>
     </table>
   } @else {
-    <p class="muted">No directors or beneficial owners added.</p>
+    <p class="muted">No one added yet.</p>
   }
 </section>
 
 <section class="sum" [class.flag]="flagged().has('documents')">
   <header>
     <h3>{{ label.documents }}</h3>
-    @if (flagged().has('documents')) {<span class="tag warn">Correction requested</span>}
-    @if (editable()) {<button type="button" class="btn ghost sm" (click)="edit.emit('documents')"><app-icon name="edit" [size]="15" />Edit</button>}
+    @if (flagged().has('documents')) {<span class="tag warn">Update requested</span>}
+    @if (editable()) {<button type="button" class="btn ghost sm" (click)="edit.emit('documents')">Edit</button>}
   </header>
   <ul class="docs">
     @for (x of docs(); track x.rule.type) {
@@ -85,9 +85,9 @@
         <span class="doc-name">{{ x.rule.label }}@if (!x.rule.required) {<span class="tag">Optional</span>}</span>
         <span class="doc-files">
           @for (f of x.files; track f.id) {
-            <span>{{ f.fileName }} · {{ f.sizeKb }} KB · {{ date(f.uploadedAt) }}@if (f.sample) {<span class="tag demo">Sample</span>}</span>
+            <span>{{ f.fileName }} · {{ f.sizeKb }} KB · {{ date(f.uploadedAt) }}</span>
           } @empty {
-            <span class="muted">{{ x.rule.required ? 'Missing' : 'Not provided' }}</span>
+            <span class="muted">{{ x.rule.required ? 'Not uploaded' : 'Not provided' }}</span>
           }
         </span>
       </li>
@@ -98,12 +98,12 @@
 <section class="sum" [class.flag]="flagged().has('pricing')">
   <header>
     <h3>{{ label.pricing }}</h3>
-    @if (flagged().has('pricing')) {<span class="tag warn">Correction requested</span>}
-    @if (editable()) {<button type="button" class="btn ghost sm" (click)="edit.emit('pricing')"><app-icon name="edit" [size]="15" />Edit</button>}
+    @if (flagged().has('pricing')) {<span class="tag warn">Update requested</span>}
+    @if (editable()) {<button type="button" class="btn ghost sm" (click)="edit.emit('pricing')">Edit</button>}
   </header>
   @if (pricing().length) {
     <table class="data-table">
-      <thead><tr><th scope="col">Payment method</th><th scope="col">MDR</th><th scope="col">Allowed range (demo)</th></tr></thead>
+      <thead><tr><th scope="col">Payment method</th><th scope="col">MDR</th><th scope="col">Allowed</th></tr></thead>
       <tbody>
         @for (x of pricing(); track x.m.code) {
           <tr><td>{{ x.m.name }}</td><td class="mono">{{ x.line!.mdr }}%</td><td class="muted">{{ x.m.minMdr }}–{{ x.m.maxMdr }}%</td></tr>
@@ -111,6 +111,6 @@
       </tbody>
     </table>
   } @else {
-    <p class="muted">No payment methods enabled.</p>
+    <p class="muted">No payment methods selected.</p>
   }
 </section>

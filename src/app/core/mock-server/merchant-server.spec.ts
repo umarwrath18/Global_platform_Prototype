@@ -166,7 +166,7 @@ describe('MerchantServer', () => {
     }
     const keyed = (await call<CountryApplication>('POST', `/api/applications/${id}/readiness`, { action: 'generate_keys' }, 'cs')).body;
     expect(keyed.status).toBe('keys_generated');
-    expect(keyed.readiness.keySet).toMatchObject({ reference: expect.stringMatching(/^KS-DEMO-/), simulated: true });
+    expect(keyed.readiness.keySet).toMatchObject({ reference: expect.stringMatching(/^KS-[0-9A-F]{6}$/), simulated: true });
 
     await call('POST', `/api/applications/${id}/readiness`, { action: 'start_integration' }, 'cs');
     for (const key of ['docs_shared', 'sandbox_tests', 'webhook_verified']) await call('POST', `/api/applications/${id}/readiness`, { action: 'set_item', stage: 'integration', key, done: true }, 'cs');
@@ -226,6 +226,36 @@ describe('MerchantServer', () => {
     const app = (await call<any>('GET', '/api/applications/APP-2026-0013')).body.application as CountryApplication;
     expect(app.status).toBe('pending_risk_review');
     expect(app.verification?.checks.find((c) => c.name.startsWith('Sanctions'))?.result).toBe('review');
+  });
+
+  it('guided mode records gaps but never blocks a step', async () => {
+    const guided = new MerchantServer({ storage: new MemoryStorage(), now: () => now, auth, strictValidation: () => false });
+    const g = <T = any>(method: string, path: string, body: unknown = null, role: StaffRole = 'sales') =>
+      guided.handle(method, path, body, token, role) as Promise<{ status: number; body: T }>;
+
+    const m = (await g<GlobalMerchant>('POST', '/api/merchants', {})).body;
+    expect(m.legalName).toBe('Untitled merchant');
+    const id = (await g<CountryApplication>('POST', `/api/merchants/${m.id}/applications`, { country: 'MY' })).body.id;
+
+    const submitted = (await g<CountryApplication>('POST', `/api/applications/${id}/submit`, {})).body;
+    expect(submitted.status).toBe('pending_risk_review');
+    expect(submitted.history.find((h) => h.action === 'Submitted for Risk review')?.comment).toMatch(/incomplete item/);
+
+    // A decision is still required; everything else gets a sensible default.
+    expect((await g('POST', `/api/applications/${id}/review`, {}, 'risk')).status).toBe(422);
+    const returned = (await g<CountryApplication>('POST', `/api/applications/${id}/review`, { decision: 'return' }, 'risk')).body;
+    expect(returned.corrections?.reason).toMatch(/resubmit/);
+    expect(returned.corrections?.sections.length).toBeGreaterThan(0);
+
+    await g('POST', `/api/applications/${id}/submit`, {});
+    await g('POST', `/api/applications/${id}/review`, { decision: 'approve' }, 'risk');
+    await g('POST', `/api/applications/${id}/readiness`, { action: 'start_configuration' }, 'cs');
+    const keyed = (await g<CountryApplication>('POST', `/api/applications/${id}/readiness`, { action: 'generate_keys' }, 'cs')).body;
+    expect(keyed.status).toBe('keys_generated');
+    expect(keyed.readiness.configuration.every((i) => i.done)).toBe(true);
+
+    // Order is still enforced.
+    expect((await g('POST', `/api/applications/${id}/readiness`, { action: 'confirm_go_live' }, 'cs')).status).toBe(409);
   });
 
   it('marks notifications as read per role', async () => {

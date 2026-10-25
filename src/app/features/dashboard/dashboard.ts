@@ -8,11 +8,11 @@ import { MerchantApi } from '../../core/merchants/merchant-api.service';
 import { ApplicationStatus, ApplicationSummary, MerchantSummary, READINESS_STATUSES } from '../../core/merchants/merchant-models';
 import { ONBOARDING_COUNTRIES } from '../../core/merchants/onboarding-config';
 import { Icon, IconName } from '../../shared/icon';
-import { StatusBadge, fmtRelative } from '../../shared/merchant-ui';
+import { fmtRelative } from '../../shared/merchant-ui';
 
 const STATUS_LABEL: Record<CountryStatus, string> = {
   active: 'Active',
-  pending: 'Activation pending',
+  pending: 'Activating',
   failed: 'Activation failed',
 };
 
@@ -62,7 +62,7 @@ interface Attention {
 @Component({
   selector: 'app-dashboard',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, RouterLink, StatusBadge],
+  imports: [Icon, RouterLink],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
 })
@@ -110,12 +110,12 @@ export class Dashboard {
     const newApps = recent(apps);
     const resubmitted = apps.filter((a) => a.status === 'pending_risk_review' && a.submissionCount > 1).length;
     return [
-      { label: 'Global Merchants', value: merchants.length, delta: `+${newMerchants}`, trend: newMerchants ? 'up' : 'flat', note: 'created in last 30 days', spark: this.weekly(merchants.map((m) => m.createdAt), true), link: '/merchants' },
-      { label: 'Country applications', value: apps.length, delta: `+${newApps}`, trend: newApps ? 'up' : 'flat', note: 'opened in last 30 days', spark: this.weekly(apps.map((a) => a.createdAt), true), link: '/applications', queue: 'all' },
-      { label: 'Pending Risk review', value: count(['pending_risk_review']), delta: `${resubmitted}`, trend: 'flat', note: 'resubmitted after correction', spark: null, link: '/applications', queue: 'risk' },
-      { label: 'Returned for correction', value: count(['returned']), delta: '', trend: 'flat', note: 'waiting on Sales / Operations', spark: null, link: '/applications', queue: 'sales' },
-      { label: 'In operational readiness', value: count(IN_READINESS), delta: `${count(['go_live_verification'])}`, trend: 'flat', note: 'in go-live verification', spark: null, link: '/applications', queue: 'cs' },
-      { label: 'Operational countries', value: count(['operational']), delta: `${count(['rejected'])}`, trend: count(['rejected']) ? 'down' : 'flat', note: 'rejected applications', spark: null, link: '/applications', queue: 'operational' },
+      { label: 'Merchants', value: merchants.length, delta: `+${newMerchants}`, trend: newMerchants ? 'up' : 'flat', note: 'in the last 30 days', spark: this.weekly(merchants.map((m) => m.createdAt), true), link: '/merchants' },
+      { label: 'Applications', value: apps.length, delta: `+${newApps}`, trend: newApps ? 'up' : 'flat', note: 'in the last 30 days', spark: this.weekly(apps.map((a) => a.createdAt), true), link: '/applications', queue: 'all' },
+      { label: 'Pending review', value: count(['pending_risk_review']), delta: '', trend: 'flat', note: resubmitted ? `${resubmitted} resubmitted` : 'No resubmissions', spark: null, link: '/applications', queue: 'risk' },
+      { label: 'Returned', value: count(['returned']), delta: '', trend: 'flat', note: 'With Sales / Ops', spark: null, link: '/applications', queue: 'sales' },
+      { label: 'In readiness', value: count(IN_READINESS), delta: '', trend: 'flat', note: `${count(['go_live_verification'])} in go-live checks`, spark: null, link: '/applications', queue: 'cs' },
+      { label: 'Operational', value: count(['operational']), delta: '', trend: 'flat', note: `${count(['rejected'])} rejected`, spark: null, link: '/applications', queue: 'operational' },
     ];
   });
 
@@ -132,15 +132,15 @@ export class Dashboard {
     const n = (s: Segment) => apps.filter((a) => SEGMENT_OF[a.status] === s).length;
     return [
       { label: 'Drafts', value: n('draft'), icon: 'edit' as IconName, tone: 'neutral', queue: 'sales' },
-      { label: 'Pending Risk review', value: n('review'), icon: 'shield' as IconName, tone: 'info', queue: 'risk' },
-      { label: 'Returned for correction', value: n('returned'), icon: 'alert-circle' as IconName, tone: 'warning', queue: 'sales' },
-      { label: 'CS readiness', value: n('readiness'), icon: 'clock' as IconName, tone: 'progress', queue: 'cs' },
+      { label: 'Pending review', value: n('review'), icon: 'shield' as IconName, tone: 'info', queue: 'risk' },
+      { label: 'Returned', value: n('returned'), icon: 'alert-circle' as IconName, tone: 'warning', queue: 'sales' },
+      { label: 'In readiness', value: n('readiness'), icon: 'clock' as IconName, tone: 'progress', queue: 'cs' },
     ];
   });
 
   protected readonly segments: { key: Segment; label: string }[] = [
     { key: 'operational', label: 'Operational' },
-    { key: 'readiness', label: 'CS readiness' },
+    { key: 'readiness', label: 'In readiness' },
     { key: 'review', label: 'Risk review' },
     { key: 'returned', label: 'Returned' },
     { key: 'draft', label: 'Draft' },
@@ -165,11 +165,11 @@ export class Dashboard {
     for (const a of this.apps()) {
       const c = this.countryName(a.country);
       if (a.status === 'returned') {
-        items.push({ tone: 'warning', icon: 'alert-circle', title: 'Returned for correction', meta: `${c} · ${a.merchantName} · ${fmtRelative(a.updatedAt)}`, impact: 'Sales / Operations must correct and resubmit', app: a });
+        items.push({ tone: 'warning', icon: 'alert-circle', title: `${a.merchantName} was returned for correction`, meta: `${c} · returned ${fmtRelative(a.updatedAt)}`, impact: 'Sales / Ops to update and resubmit', app: a });
       } else if (a.status === 'pending_risk_review') {
-        items.push({ tone: 'info', icon: 'shield', title: a.submissionCount > 1 ? 'Resubmission awaiting Risk review' : 'Awaiting Risk review', meta: `${c} · ${a.merchantName} · ${fmtRelative(a.updatedAt)}`, impact: `Submission ${a.submissionCount}`, app: a });
+        items.push({ tone: 'info', icon: 'shield', title: `${a.merchantName} is waiting for Risk`, meta: `${c} · ${a.submissionCount > 1 ? 'resubmitted' : 'submitted'} ${fmtRelative(a.updatedAt)}`, impact: 'Risk to review', app: a });
       } else if (a.status === 'go_live_verification' || a.status === 'risk_approved') {
-        items.push({ tone: 'progress', icon: 'clock', title: a.status === 'risk_approved' ? 'Approved, CS configuration not started' : 'Go-live verification in progress', meta: `${c} · ${a.merchantName} · ${fmtRelative(a.updatedAt)}`, impact: 'Customer Success action', app: a });
+        items.push({ tone: 'progress', icon: 'clock', title: a.status === 'risk_approved' ? `${a.merchantName} is approved and ready for setup` : `${a.merchantName} is in go-live checks`, meta: `${c} · updated ${fmtRelative(a.updatedAt)}`, impact: 'Customer Success to continue', app: a });
       }
     }
     return items.sort((x, y) => x.app.updatedAt - y.app.updatedAt);

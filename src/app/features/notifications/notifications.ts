@@ -14,8 +14,8 @@ const EVENT_LABEL: Record<NotificationEvent, string> = {
   returned: 'Returned for correction',
   approved: 'Risk approved',
   rejected: 'Rejected',
-  configuration_ready: 'Configuration ready',
-  go_live: 'Go-live',
+  configuration_ready: 'Keys issued',
+  go_live: 'Live',
 };
 
 /** In-portal notification history, with the target (simulated) email for each event. */

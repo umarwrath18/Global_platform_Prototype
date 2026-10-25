@@ -1,33 +1,33 @@
 @if (session(); as s) {
   <aside class="sidebar" aria-label="Main navigation">
     <div class="brand">
-      <a routerLink="/dashboard" class="home-link" aria-label="Global Platform home" (click)="navigated()">
+      <a routerLink="/dashboard" class="home-link" aria-label="Mobi Global Platform home" (click)="navigated()">
         <img class="mini-logo" src="brand/mobi-mark-white.svg" alt="" aria-hidden="true" />
-        <app-mobi-logo class="full-logo" [showProduct]="false" style="--logo-size: 40px" />
+        <app-mobi-logo class="full-logo" [showProduct]="false" style="--logo-size: 34px" />
       </a>
-      <button type="button" class="collapse-btn" (click)="toggleCollapsed()" [attr.aria-label]="collapsed() ? 'Expand sidebar' : 'Collapse sidebar'" [attr.aria-pressed]="collapsed()">
-        <app-icon [name]="collapsed() ? 'arrow-right' : 'arrow-left'" [size]="18" />
+      <button type="button" class="collapse-btn" (click)="toggleCollapsed()" [attr.aria-label]="collapsed() ? 'Expand sidebar' : 'Collapse sidebar'" [attr.aria-pressed]="collapsed()" [title]="collapsed() ? 'Expand sidebar' : 'Collapse sidebar'">
+        <app-icon name="sidebar" [size]="18" />
       </button>
       <button type="button" class="close-mobile" (click)="mobileOpen.set(false)" aria-label="Close navigation"><app-icon name="x" [size]="20" /></button>
     </div>
 
-    <div class="workspace" [title]="s.account.name">
-      <span class="ws-avatar" aria-hidden="true">{{ accountInitials() }}</span>
-      <span class="ws-text">
-        <span class="ws-name">{{ s.account.name }}</span>
-        <span class="ws-sub">Global workspace · {{ s.account.id }}</span>
+    <div class="account" [title]="s.account.name + ' · ' + s.account.id">
+      <span class="acc-avatar" aria-hidden="true">{{ accountInitials() }}</span>
+      <span class="acc-text">
+        <span class="acc-name">{{ s.account.name }}</span>
+        <span class="acc-id">{{ s.account.id }}</span>
       </span>
     </div>
 
-    <label class="role-switch" title="Prototype only: switch the internal team you are acting as">
-      <span class="proto">Prototype</span>
-      <span class="role-label">Acting as</span>
-      <app-icon name="user-switch" [size]="16" class="role-icon" />
-      <select [value]="roles.role()" (change)="switchRole($any($event.target).value)" aria-label="Prototype only: acting as role">
+    <label class="view-as" title="Switch the team view">
+      <app-icon name="users" [size]="16" class="va-icon" />
+      <span class="va-label">View as</span>
+      <select [value]="roles.role()" (change)="switchRole($any($event.target).value)" aria-label="View as team">
         @for (r of roleOptions; track r[0]) {
-          <option [value]="r[0]" [selected]="r[0] === roles.role()">{{ r[1] }}</option>
+          <option [value]="r[0]" [selected]="r[0] === roles.role()">{{ shortRole[r[0]] }}</option>
         }
       </select>
+      <app-icon name="chevron-down" [size]="14" class="va-chev" />
     </label>
 
     <nav class="nav">
@@ -35,51 +35,46 @@
         @for (item of nav; track item.label) {
           <li>
             <a [routerLink]="item.link" routerLinkActive="active" [title]="item.label" (click)="navigated()">
-              <app-icon [name]="item.icon" [size]="20" />
+              <app-icon [name]="item.icon" [size]="18" />
               <span class="nav-label">{{ item.label }}</span>
               @if (item.link === '/notifications' && api.unreadCount()) {
-                <span class="nav-count" [attr.aria-label]="api.unreadCount() + ' unread'">{{ api.unreadCount() > 9 ? '9+' : api.unreadCount() }}</span>
+                <span class="nav-count" [attr.aria-label]="api.unreadCount() + ' unread'">{{ api.unreadCount() > 99 ? '99+' : api.unreadCount() }}</span>
               }
             </a>
           </li>
         }
+      </ul>
+      <p class="nav-group">Coming soon</p>
+      <ul>
         @for (item of later; track item.label) {
           <li>
-            <span class="disabled" aria-disabled="true" [title]="item.label + ' · coming in a later batch'">
-              <app-icon [name]="item.icon" [size]="20" />
+            <span class="disabled" aria-disabled="true" [title]="item.label + ' (coming soon)'">
+              <app-icon [name]="item.icon" [size]="18" />
               <span class="nav-label">{{ item.label }}</span>
-              <span class="later">Later</span>
             </span>
           </li>
         }
       </ul>
     </nav>
 
-    <div class="side-foot">
-      <div class="env" title="Prototype environment">
-        <app-icon name="shield" [size]="20" />
-        <span class="env-text"><strong>Prototype environment</strong><span>Simulated backend · Demo data</span></span>
-      </div>
-      <div class="user">
-        <button type="button" class="user-card" (click)="toggle('menu')" [attr.aria-expanded]="menuOpen()" aria-haspopup="menu">
-          <span class="avatar" aria-hidden="true">{{ initials() }}</span>
-          <span class="user-text">
-            <span class="user-name">{{ s.user.name }}</span>
-            <span class="user-role">{{ s.role.name }}</span>
-          </span>
-          <app-icon name="more" [size]="20" class="more" />
-        </button>
-        @if (menuOpen()) {
-          <div class="menu" role="menu">
-            <div class="menu-head">
-              <strong>{{ s.user.name }}</strong>
-              <span>{{ s.user.email }}</span>
-              <span>ID: {{ s.user.loginId }}</span>
-            </div>
-            <button type="button" role="menuitem" (click)="logout()"><app-icon name="logout" [size]="18" />Sign out</button>
+    <div class="user">
+      <button type="button" class="user-card" (click)="toggle('menu')" [attr.aria-expanded]="menuOpen()" aria-haspopup="menu">
+        <span class="avatar" aria-hidden="true">{{ initials() }}</span>
+        <span class="user-text">
+          <span class="user-name">{{ s.user.name }}</span>
+          <span class="user-role">{{ roleLabel[roles.role()] }}</span>
+        </span>
+        <app-icon name="more" [size]="18" class="more" />
+      </button>
+      @if (menuOpen()) {
+        <div class="menu" role="menu">
+          <div class="menu-head">
+            <strong>{{ s.user.name }}</strong>
+            <span>{{ s.user.email }}</span>
           </div>
-        }
-      </div>
+          <button type="button" role="menuitem" (click)="logout()"><app-icon name="logout" [size]="16" />Sign out</button>
+        </div>
+      }
     </div>
   </aside>
 
@@ -89,58 +84,62 @@
     <header class="topbar">
       <button type="button" class="icon-btn hamburger" (click)="mobileOpen.set(true)" aria-label="Open navigation"><app-icon name="menu" [size]="20" /></button>
 
-      <div class="filters" [class.inactive]="!filtersApply()" role="group" aria-label="Global filters" [attr.title]="filtersApply() ? null : 'Filters apply to the dashboard, merchant, application and notification lists'">
-        <label class="filter">
-          <span class="f-cap">Country</span>
-          <select (change)="setFilter('country', $any($event.target).value)">
-            <option value="" [selected]="!filters.country()">All countries</option>
-            @for (c of countries; track c.code) {
-              <option [value]="c.code" [selected]="c.code === filters.country()">{{ c.name }}</option>
-            }
-          </select>
-          <app-icon name="chevron-down" [size]="16" />
-        </label>
-        <label class="filter">
-          <span class="f-cap">Merchant</span>
-          <select (change)="setFilter('merchantId', $any($event.target).value)" [attr.aria-label]="'Merchant: ' + selectedMerchantName()">
-            <option value="" [selected]="!filters.merchantId()">All merchants</option>
-            @for (m of merchants(); track m.id) {
-              <option [value]="m.id" [selected]="m.id === filters.merchantId()">{{ m.legalName }}</option>
-            }
-          </select>
-          <app-icon name="chevron-down" [size]="16" />
-        </label>
-        <label class="filter">
-          <span class="f-cap">Currency</span>
-          <select (change)="setFilter('currency', $any($event.target).value)">
-            <option value="" [selected]="!filters.currency()">All currencies</option>
-            @for (c of currencies; track c) {
-              <option [value]="c" [selected]="c === filters.currency()">{{ c }}</option>
-            }
-          </select>
-          <app-icon name="chevron-down" [size]="16" />
-        </label>
-        <label class="filter">
-          <span class="f-cap">Date range · last update</span>
-          <select (change)="setFilter('range', $any($event.target).value)">
-            @for (r of ranges; track r[0]) {
-              <option [value]="r[0]" [selected]="r[0] === filters.range()">{{ r[1] }}</option>
-            }
-          </select>
-          <app-icon name="chevron-down" [size]="16" />
-        </label>
-        @if (filters.active()) {
-          <button type="button" class="clear" (click)="filters.clear()">Clear</button>
-        }
-      </div>
+      @if (filtersApply()) {
+        <div class="filters" role="group" aria-label="Filters">
+          <label class="filter" [class.set]="!!filters.country()">
+            <span class="f-cap">Country</span>
+            <select (change)="setFilter('country', $any($event.target).value)">
+              <option value="" [selected]="!filters.country()">All</option>
+              @for (c of countries; track c.code) {
+                <option [value]="c.code" [selected]="c.code === filters.country()">{{ c.name }}</option>
+              }
+            </select>
+            <app-icon name="chevron-down" [size]="14" />
+          </label>
+          <label class="filter" [class.set]="!!filters.merchantId()">
+            <span class="f-cap">Merchant</span>
+            <select (change)="setFilter('merchantId', $any($event.target).value)">
+              <option value="" [selected]="!filters.merchantId()">All</option>
+              @for (m of merchants(); track m.id) {
+                <option [value]="m.id" [selected]="m.id === filters.merchantId()">{{ m.legalName }}</option>
+              }
+            </select>
+            <app-icon name="chevron-down" [size]="14" />
+          </label>
+          <label class="filter" [class.set]="!!filters.currency()">
+            <span class="f-cap">Currency</span>
+            <select (change)="setFilter('currency', $any($event.target).value)">
+              <option value="" [selected]="!filters.currency()">All</option>
+              @for (c of currencies; track c) {
+                <option [value]="c" [selected]="c === filters.currency()">{{ c }}</option>
+              }
+            </select>
+            <app-icon name="chevron-down" [size]="14" />
+          </label>
+          <label class="filter" [class.set]="filters.range() !== 'all'">
+            <span class="f-cap">Updated</span>
+            <select (change)="setFilter('range', $any($event.target).value)">
+              @for (r of ranges; track r[0]) {
+                <option [value]="r[0]" [selected]="r[0] === filters.range()">{{ r[1] }}</option>
+              }
+            </select>
+            <app-icon name="chevron-down" [size]="14" />
+          </label>
+          @if (filters.active()) {
+            <button type="button" class="clear" (click)="filters.clear()">Reset</button>
+          }
+        </div>
+      } @else {
+        <span class="spacer"></span>
+      }
 
       <div class="tools">
         <div class="search" (click)="searchInput.focus()">
-          <app-icon name="search" [size]="20" class="s-icon" />
+          <app-icon name="search" [size]="16" class="s-icon" />
           <input
             #searchInput
             type="search"
-            placeholder="Search Mobi"
+            placeholder="Search"
             aria-label="Search merchants and applications"
             autocomplete="off"
             [value]="query()"
@@ -148,41 +147,40 @@
             (focus)="searchOpen.set(true)"
             (keydown.enter)="onSearchEnter()"
           />
-          <kbd aria-hidden="true">{{ isMac ? '⌘' : 'Ctrl' }} K</kbd>
+          <kbd aria-hidden="true">{{ isMac ? '⌘K' : 'Ctrl K' }}</kbd>
           @if (searchOpen() && query().trim().length >= 2) {
             <div class="pop search-pop" role="listbox" aria-label="Search results">
               @for (h of hits(); track h.kind + h.id) {
                 <button type="button" role="option" class="hit" (click)="openHit(h)">
-                  <app-icon [name]="h.kind === 'merchant' ? 'store' : 'file'" [size]="18" />
+                  <app-icon [name]="h.kind === 'merchant' ? 'store' : 'file'" [size]="16" />
                   <span><strong>{{ h.title }}</strong><span class="hit-meta">{{ h.meta }}</span></span>
                 </button>
               } @empty {
-                <p class="n-empty">No merchants or applications match “{{ query() }}”.</p>
+                <p class="n-empty">No results for “{{ query() }}”</p>
               }
             </div>
           }
         </div>
 
         <div class="help-wrap">
-          <button type="button" class="icon-btn" (click)="toggle('help')" [attr.aria-expanded]="helpOpen()" aria-label="Help">
-            <app-icon name="help" [size]="20" />
+          <button type="button" class="icon-btn" (click)="toggle('help')" [attr.aria-expanded]="helpOpen()" aria-label="Help" title="Help">
+            <app-icon name="help" [size]="18" />
           </button>
           @if (helpOpen()) {
-            <div class="pop help" role="dialog" aria-label="Prototype guide">
-              <div class="pop-head"><strong>Prototype guide</strong></div>
-              <ul class="help-list">
-                <li>Use <strong>Acting as</strong> in the sidebar to switch between Sales / Operations, Risk and Customer Success.</li>
-                <li>Top-bar filters narrow the dashboard, merchant, application and notification lists.</li>
-                <li>Search by merchant name, Global Merchant ID, registration number or application ID ({{ isMac ? '⌘' : 'Ctrl' }}+K).</li>
-                <li>All data is simulated and stored in this browser. Run <code>mobiDemo.reset()</code> in the console to restore it.</li>
-              </ul>
+            <div class="pop help" role="dialog" aria-label="Help">
+              <div class="pop-head"><strong>Help</strong></div>
+              <dl class="help-list">
+                <div><dt>Search</dt><dd><kbd>{{ isMac ? '⌘' : 'Ctrl' }}</kbd> <kbd>K</kbd></dd></div>
+                <div><dt>Close a panel</dt><dd><kbd>Esc</kbd></dd></div>
+              </dl>
+              <p class="help-foot">Questions about onboarding? Email <a href="mailto:support@mobi.xyz">support&#64;mobi.xyz</a></p>
             </div>
           }
         </div>
 
         <div class="bell-wrap">
-          <button type="button" class="icon-btn" (click)="toggle('bell')" [attr.aria-expanded]="bellOpen()" aria-haspopup="dialog" [attr.aria-label]="'Notifications, ' + api.unreadCount() + ' unread'">
-            <app-icon name="bell" [size]="20" />
+          <button type="button" class="icon-btn" (click)="toggle('bell')" [attr.aria-expanded]="bellOpen()" aria-haspopup="dialog" [attr.aria-label]="'Notifications, ' + api.unreadCount() + ' unread'" title="Notifications">
+            <app-icon name="bell" [size]="18" />
             @if (api.unreadCount()) {
               <span class="dot-badge" aria-hidden="true"></span>
             }
@@ -191,9 +189,8 @@
             <div class="pop notifications" role="dialog" aria-label="Notifications">
               <div class="pop-head">
                 <strong>Notifications</strong>
-                <span class="for">For {{ roleLabel[roles.role()] }}</span>
                 @if (api.unreadCount()) {
-                  <button type="button" class="link-button sm" (click)="api.markRead()">Mark all read</button>
+                  <button type="button" class="link-button sm" (click)="api.markRead()">Mark all as read</button>
                 }
               </div>
               <ul>
@@ -202,14 +199,14 @@
                     <button type="button" class="n-item" [class.unread]="isUnread(n)" (click)="openNotification(n)">
                       <span class="n-title">{{ n.title }}</span>
                       <span class="n-body">{{ n.body }}</span>
-                      <span class="n-meta">{{ rel(n.at) }} · Email: simulated</span>
+                      <span class="n-meta">{{ rel(n.at) }}</span>
                     </button>
                   </li>
                 } @empty {
-                  <li class="n-empty">No notifications for {{ roleLabel[roles.role()] }} yet.</li>
+                  <li class="n-empty">You're all caught up.</li>
                 }
               </ul>
-              <a class="pop-foot" routerLink="/notifications" (click)="bellOpen.set(false)">View notification history</a>
+              <a class="pop-foot" routerLink="/notifications" (click)="bellOpen.set(false)">View all notifications</a>
             </div>
           }
         </div>

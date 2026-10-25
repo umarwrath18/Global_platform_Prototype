@@ -11,10 +11,10 @@ import { StatusBadge, fmtDate, fmtRelative } from '../../shared/merchant-ui';
 type QueueKey = 'sales' | 'risk' | 'cs' | 'rejected' | 'operational' | 'all';
 
 const QUEUES: { key: QueueKey; label: string; statuses: ApplicationStatus[] | null; owner?: StaffRole; empty: string }[] = [
-  { key: 'sales', label: 'Drafts & returned', statuses: ['draft', 'returned'], owner: 'sales', empty: 'No drafts or returned applications.' },
-  { key: 'risk', label: 'Risk review queue', statuses: ['pending_risk_review'], owner: 'risk', empty: 'Nothing is waiting for Risk review.' },
-  { key: 'cs', label: 'CS readiness', statuses: ['risk_approved', 'cs_configuration', 'keys_generated', 'integration', 'go_live_verification'], owner: 'cs', empty: 'No approved applications are waiting for CS.' },
-  { key: 'operational', label: 'Operational', statuses: ['operational'], empty: 'No operational countries yet.' },
+  { key: 'sales', label: 'To complete', statuses: ['draft', 'returned'], owner: 'sales', empty: 'No drafts or returned applications.' },
+  { key: 'risk', label: 'Risk review', statuses: ['pending_risk_review'], owner: 'risk', empty: 'Nothing is waiting for Risk review.' },
+  { key: 'cs', label: 'Setup & go-live', statuses: ['risk_approved', 'cs_configuration', 'keys_generated', 'integration', 'go_live_verification'], owner: 'cs', empty: 'Nothing is waiting for setup.' },
+  { key: 'operational', label: 'Operational', statuses: ['operational'], empty: 'No countries are live yet.' },
   { key: 'rejected', label: 'Rejected', statuses: ['rejected'], empty: 'No rejected applications.' },
   { key: 'all', label: 'All', statuses: null, empty: 'No applications yet.' },
 ];
@@ -26,18 +26,18 @@ const QUEUES: { key: QueueKey; label: string; statuses: ApplicationStatus[] | nu
   imports: [RouterLink, Icon, StatusBadge],
   templateUrl: './application-list.html',
   styles: `
-    .tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 14px 0; border-bottom: 1px solid var(--border); }
-    .tabs button { display: inline-flex; align-items: center; gap: 8px; padding: 10px 12px; border: 0; border-bottom: 2px solid transparent; background: none; font-size: 14px; font-weight: 600; color: var(--text-muted); cursor: pointer; }
+    .tabs { display: flex; flex-wrap: wrap; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--border-soft); }
+    .tabs button { position: relative; display: inline-flex; align-items: center; gap: 8px; height: 46px; padding: 0 10px; border: 0; border-bottom: 2px solid transparent; background: none; font-size: 13px; font-weight: 500; color: var(--text-muted); cursor: pointer; }
     .tabs button:hover { color: var(--text); }
-    .tabs button.on { border-bottom-color: var(--mobi-blue); color: var(--mobi-blue); }
-    .tabs button:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: 6px; }
-    .n { min-width: 22px; padding: 0 6px; border-radius: 999px; background: var(--surface-muted); font-size: 12px; line-height: 20px; text-align: center; }
-    .on .n { background: var(--mobi-blue-tint); }
-    .mine { font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--brand-teal); }
-    .toolbar { display: flex; flex-wrap: wrap; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--surface-muted); }
-    .toolbar .f-input { width: auto; min-width: 180px; }
-    .toolbar .grow { flex: 1 1 260px; }
-    .meta { margin-top: 2px; font-size: 13px; color: var(--text-muted); }
+    .tabs button.on { border-bottom-color: var(--mobi-blue); color: var(--text); font-weight: 600; }
+    .tabs button:focus-visible { outline: none; box-shadow: inset var(--focus-ring); border-radius: 6px; }
+    .n { min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--surface-muted); font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; color: var(--text-muted); }
+    .on .n { background: var(--mobi-blue-tint); color: var(--mobi-blue); }
+    .mine { width: 6px; height: 6px; border-radius: 50%; background: var(--mobi-blue); }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; border-bottom: 1px solid var(--border-soft); }
+    .toolbar .grow { flex: 1 1 260px; height: 36px; font-size: 13px; }
+    .meta { margin-top: 2px; font-size: 12px; color: var(--text-muted); }
+    .cur { margin-left: 4px; font-size: 12px; color: var(--text-muted); }
   `,
 })
 export class ApplicationList {

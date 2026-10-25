@@ -1,9 +1,8 @@
 <main class="page">
   <div class="portal-head">
     <div>
-      <p class="eyebrow">Merchant Management</p>
       <h1>Notifications</h1>
-      <p class="sub">Target behaviour: every event is shown in the portal and sent automatically by email. In this prototype no email is sent; each one is recorded as <strong>simulated</strong>.</p>
+      <p class="sub">Updates on applications, shown here and sent by email.</p>
     </div>
     @if (api.unreadCount()) {
       <button type="button" class="btn" (click)="api.markRead()">Mark all as read</button>
@@ -13,11 +12,11 @@
   <section class="panel-card">
     <div class="toolbar">
       <div class="seg" role="radiogroup" aria-label="Show">
-        <button type="button" role="radio" [attr.aria-checked]="scope() === 'mine'" [class.on]="scope() === 'mine'" (click)="scope.set('mine')">For {{ roleLabel[roles.role()] }}</button>
+        <button type="button" role="radio" [attr.aria-checked]="scope() === 'mine'" [class.on]="scope() === 'mine'" (click)="scope.set('mine')">My team</button>
         <button type="button" role="radio" [attr.aria-checked]="scope() === 'all'" [class.on]="scope() === 'all'" (click)="scope.set('all')">All teams</button>
       </div>
       <select class="f-input" aria-label="Event type" (change)="event.set($any($event.target).value)">
-        <option value="">All events</option>
+        <option value="">All updates</option>
         @for (e of events; track e[0]) {<option [value]="e[0]">{{ e[1] }}</option>}
       </select>
     </div>
@@ -32,16 +31,16 @@
           </div>
           <p class="body">{{ n.body }}</p>
           <div class="channels">
-            <span><app-icon name="bell" [size]="14" />In-portal · {{ audience(n.audience) }}</span>
-            <span><app-icon name="mail" [size]="14" />Email (simulated) → {{ n.email.to.join(', ') }}</span>
-            <a [routerLink]="['/applications', n.applicationId]" (click)="open(n)">Open {{ n.applicationId }}</a>
+            <span><app-icon name="users" [size]="14" />{{ audience(n.audience) }}</span>
+            <span><app-icon name="mail" [size]="14" />Emailed to {{ n.email.to.join(', ') }}</span>
+            <a [routerLink]="['/applications', n.applicationId]" (click)="open(n)">View application</a>
           </div>
         </li>
       } @empty {
         <li class="empty-state">
           <div class="icon-tile"><app-icon name="bell" /></div>
           <h3>No notifications</h3>
-          <p>Events such as submission, return, approval, rejection, configuration readiness and go-live will appear here.</p>
+          <p>You'll see updates here when applications are submitted, reviewed or go live.</p>
         </li>
       }
     </ul>
