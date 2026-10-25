@@ -1,0 +1,129 @@
+@if (session(); as s) {
+  <header class="topbar">
+    <div class="topbar-left">
+      <app-mobi-logo tone="dark" [showProduct]="false" style="--logo-size: 36px" />
+      <span class="product">Global Platform</span>
+    </div>
+
+    <div class="topbar-right">
+      @if (activeCountries().length) {
+        <label class="switcher">
+          <span class="sr-only">Workspace country</span>
+          <app-icon name="globe" [size]="18" />
+          <select (change)="switchCountry($any($event.target).value)">
+            <option value="" [selected]="!country()">All countries · {{ s.baseCurrency }}</option>
+            @for (c of activeCountries(); track c.code) {
+              <option [value]="c.code" [selected]="c.code === country()?.toUpperCase()">{{ c.name }} · {{ c.currency }}</option>
+            }
+          </select>
+        </label>
+      }
+
+      <div class="user">
+        <button type="button" class="user-chip" (click)="menuOpen.set(!menuOpen())" [attr.aria-expanded]="menuOpen()" aria-haspopup="menu">
+          <span class="avatar" aria-hidden="true">{{ initials() }}</span>
+          <span class="user-text">
+            <span class="user-name">{{ s.user.name }}</span>
+            <span class="user-role">{{ s.role.name }}</span>
+          </span>
+        </button>
+        @if (menuOpen()) {
+          <div class="menu" role="menu">
+            <div class="menu-head">
+              <strong>{{ s.user.name }}</strong>
+              <span>{{ s.user.email }}</span>
+              <span>ID: {{ s.user.loginId }}</span>
+            </div>
+            <button type="button" role="menuitem" (click)="logout()"><app-icon name="logout" [size]="18" />Sign out</button>
+          </div>
+        }
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="page-head">
+      <p class="eyebrow">{{ s.account.name }} · {{ s.account.id }}</p>
+      <h1>Welcome, {{ s.user.name.split(' ')[0] }}</h1>
+    </div>
+
+    @if (!activeCountries().length) {
+      <section class="card empty">
+        <div class="icon-tile"><app-icon name="globe" [size]="22" /></div>
+        <h2>No active countries yet</h2>
+        <p>Your Global Account doesn't have any approved and activated countries. Country access becomes available once activation is complete. Contact Mobi Support if you need help.</p>
+      </section>
+    } @else if (loading()) {
+      <section class="card skeleton" aria-busy="true" aria-label="Loading workspace">
+        <span></span><span></span><span></span>
+      </section>
+    } @else if (error(); as e) {
+      <section class="card denied" role="alert">
+        @switch (e.code) {
+          @case ('COUNTRY_NOT_AUTHORISED') {
+            <div class="icon-tile danger"><app-icon name="shield" [size]="22" /></div>
+            <h2>You don't have access to this country</h2>
+            <p>This country isn't enabled for your Global Account. You can continue in a country you have access to.</p>
+            <a class="btn-secondary" routerLink="/dashboard">Go to all countries</a>
+          }
+          @case ('COUNTRY_NOT_ACTIVE') {
+            <div class="icon-tile warning"><app-icon name="clock" [size]="22" /></div>
+            <h2>{{ 'countryStatus' in e && e.countryStatus === 'failed' ? 'Country activation failed' : 'Country activation pending' }}</h2>
+            <p>This country isn't available until it's approved and activated. Contact Mobi Support for the latest status.</p>
+            <a class="btn-secondary" routerLink="/dashboard">Go to all countries</a>
+          }
+          @default {
+            <div class="icon-tile warning"><app-icon name="alert-circle" [size]="22" /></div>
+            <h2>We couldn't load your workspace</h2>
+            <p>Check your connection and try again.</p>
+            <button type="button" class="btn-secondary" (click)="retry()">Try again</button>
+          }
+        }
+      </section>
+    } @else if (context(); as ctx) {
+      <section class="card summary">
+        <div>
+          <p class="label">Workspace</p>
+          <p class="value">{{ ctx.country ? ctx.country.name : 'All countries' }}</p>
+        </div>
+        <div>
+          <p class="label">Currency</p>
+          <p class="value">{{ ctx.currency }}</p>
+        </div>
+        <div>
+          <p class="label">Role</p>
+          <p class="value">{{ s.role.name }}</p>
+        </div>
+      </section>
+    }
+
+    <div class="grid">
+      <section class="card">
+        <h2>Country access</h2>
+        <p class="card-sub">Only approved and activated countries can be opened.</p>
+        <ul class="countries">
+          @for (c of s.countries; track c.code) {
+            <li>
+              <span class="flag" aria-hidden="true">{{ c.code }}</span>
+              <span class="c-name">{{ c.name }}<span class="c-cur">{{ c.currency }}</span></span>
+              <span class="badge" [class]="c.status">{{ statusLabel[c.status] }}</span>
+            </li>
+          } @empty {
+            <li class="none">No countries configured.</li>
+          }
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>Features</h2>
+        <p class="card-sub">Features permitted by your role will appear here.</p>
+        <div class="placeholder">
+          <app-icon name="lock" [size]="20" />
+          <p>The role-to-permission matrix and MVP modules are pending approval. They will be added in later phases.</p>
+        </div>
+      </section>
+    </div>
+
+    <p class="footnote"><app-icon name="shield" [size]="14" /> For your security, you'll be signed out after 30 minutes of inactivity.</p>
+  </main>
+}

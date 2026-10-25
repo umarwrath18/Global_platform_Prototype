@@ -1,0 +1,125 @@
+<app-auth-shell>
+  <p class="eyebrow">Welcome back</p>
+  <h1 class="screen-title">Sign in to Global Platform</h1>
+  <p class="screen-lead">
+    Use any sample Global Account ID and password to explore the prototype.
+    <button type="button" class="link-button samples-toggle" (click)="showSamples.set(!showSamples())" [attr.aria-expanded]="showSamples()" aria-controls="sample-accounts">
+      {{ showSamples() ? 'Hide sample accounts' : 'View sample accounts' }}
+    </button>
+  </p>
+
+  @if (showSamples()) {
+    <div id="sample-accounts" class="samples">
+      <p class="samples-head">All sample accounts use the password <code>{{ demoPassword }}</code>. Select one to fill the form.</p>
+      <ul>
+        @for (a of demoAccounts; track a.loginId) {
+          <li>
+            <button type="button" (click)="fillSample(a.loginId)">
+              <span class="sample-id">{{ a.loginId }}</span>
+              <span class="sample-desc">{{ a.scenario }}</span>
+            </button>
+          </li>
+        }
+      </ul>
+    </div>
+  }
+
+  @if (notice(); as n) {
+    <div class="alert" [class]="n.tone" role="status">
+      <app-icon [name]="n.tone === 'success' ? 'check-circle' : n.tone === 'info' ? 'info' : 'alert-circle'" />
+      <div>
+        @if (n.title) {
+          <strong>{{ n.title }}</strong>
+        }
+        {{ n.text }}
+      </div>
+    </div>
+  }
+
+  @if (errorNotice(); as n) {
+    <div class="alert" [class]="n.tone" role="alert">
+      <app-icon [name]="n.tone === 'info' ? 'info' : 'alert-circle'" />
+      <div>
+        @if (n.title) {
+          <strong>{{ n.title }}</strong>
+        }
+        {{ n.text }}
+      </div>
+    </div>
+  }
+
+  <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+    <div class="field">
+      <label class="field-label" for="loginId">Global Account ID</label>
+      <input
+        id="loginId"
+        class="input"
+        formControlName="loginId"
+        placeholder="e.g. MOBI-DEMO-ADMIN"
+        autocomplete="username"
+        autocapitalize="characters"
+        spellcheck="false"
+        [class.invalid]="fieldError('loginId')"
+        [attr.aria-invalid]="!!fieldError('loginId')"
+        [attr.aria-describedby]="fieldError('loginId') ? 'loginId-error' : null"
+      />
+      @if (fieldError('loginId'); as msg) {
+        <p class="field-error" id="loginId-error"><app-icon name="alert-circle" [size]="16" />{{ msg }}</p>
+      }
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="password">Password</label>
+      <div class="input-wrap">
+        <input
+          #passwordInput
+          id="password"
+          class="input has-toggle"
+          formControlName="password"
+          [type]="showPassword() ? 'text' : 'password'"
+          placeholder="Enter your password"
+          autocomplete="current-password"
+          [class.invalid]="fieldError('password')"
+          [attr.aria-invalid]="!!fieldError('password')"
+          [attr.aria-describedby]="fieldError('password') ? 'password-error' : null"
+        />
+        <button
+          type="button"
+          class="input-toggle"
+          (click)="showPassword.set(!showPassword())"
+          [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'"
+          [attr.aria-pressed]="showPassword()"
+        >
+          <app-icon [name]="showPassword() ? 'eye-off' : 'eye'" [size]="22" />
+        </button>
+      </div>
+      @if (fieldError('password'); as msg) {
+        <p class="field-error" id="password-error"><app-icon name="alert-circle" [size]="16" />{{ msg }}</p>
+      }
+    </div>
+
+    <div class="row">
+      <label class="checkbox">
+        <input type="checkbox" formControlName="remember" />
+        <span>Remember this device</span>
+      </label>
+      <a class="link-button" routerLink="/forgot-password">Forgot password?</a>
+    </div>
+
+    <button type="submit" class="btn-primary" [class.busy]="busy()" [disabled]="busy() || isLocked()">
+      @if (busy()) {
+        <span class="spinner" aria-hidden="true"></span>
+        Signing in…
+      } @else {
+        Sign in
+        <app-icon name="arrow-right" />
+      }
+    </button>
+  </form>
+
+  <hr class="divider" />
+  <p class="help">
+    Need help accessing your account?
+    <a class="link-button" href="#" (click)="$event.preventDefault()">Contact Mobi Support</a>
+  </p>
+</app-auth-shell>
