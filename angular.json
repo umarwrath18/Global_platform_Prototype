@@ -68,7 +68,13 @@
               "buildTarget": "global-platform:build:development"
             }
           },
-          "defaultConfiguration": "development"
+          "defaultConfiguration": "development",
+          "options": {
+            "allowedHosts": [
+              ".app.github.dev",
+              ".githubpreview.dev"
+            ]
+          }
         },
         "test": {
           "builder": "@angular/build:unit-test"

@@ -22,6 +22,13 @@ npm test           # unit tests for the auth and merchant onboarding rules
 npm run build      # production build → dist/global-platform/browser
 ```
 
+### Running in GitHub Codespaces
+
+Run `npm start`, then open the **Ports** tab and click the globe icon next to port **4200**.
+The dev server already allows `*.app.github.dev` addresses (see `allowedHosts` in
+`angular.json`). If you see a "page can't be found" or "Blocked request" page, pull the
+latest `main` and restart `npm start`.
+
 ## Demo accounts
 
 All test users share the password **`Mobi@123`**. The login screen also lists
