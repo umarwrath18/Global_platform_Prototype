@@ -6,17 +6,18 @@ import { MobiLogo } from '../../shared/mobi-logo';
   selector: 'app-auth-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MobiLogo],
+  host: { class: 'auth-screen' },
   template: `
     <div class="shell">
       <aside class="brand" aria-hidden="true">
-        <div class="rings"></div>
-        <app-mobi-logo class="brand-logo" />
-        <p class="tagline">Borderless Payments, Built for Global Businesses.</p>
+        <div class="streaks"></div>
+        <app-mobi-logo class="brand-logo" tone="dark" [showProduct]="false" style="--logo-size: 40px" />
+        <p class="tagline">Borderless Payments,<br />Built for Global Businesses.</p>
       </aside>
 
       <main class="panel">
         <header class="mobile-header">
-          <app-mobi-logo tone="dark" style="--logo-size: 44px" />
+          <app-mobi-logo tone="dark" [showProduct]="false" style="--logo-size: 34px" />
         </header>
         <div class="content">
           <ng-content />
@@ -35,33 +36,43 @@ import { MobiLogo } from '../../shared/mobi-logo';
   styles: `
     .shell {
       display: grid;
-      grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
+      grid-template-columns: minmax(0, 1fr) minmax(480px, 38%);
       min-height: 100vh;
       min-height: 100dvh;
     }
 
+    /* Light brand panel: soft sky gradient with diagonal light streaks in Mobi blues. */
     .brand {
       position: relative;
       overflow: hidden;
       display: flex;
       flex-direction: column;
-      padding: 60px 70px;
-      color: #fff;
-      /* Same navy surface as the signed-in sidebar, with a soft brand-blue glow. */
+      padding: 56px 64px 72px;
       background:
-        radial-gradient(90% 70% at 100% 100%, rgba(11, 92, 171, 0.55) 0%, rgba(11, 92, 171, 0) 65%),
-        radial-gradient(60% 50% at 0% 0%, rgba(19, 37, 61, 0.9) 0%, rgba(19, 37, 61, 0) 70%),
-        var(--nav-bg);
+        radial-gradient(70% 55% at 0% 100%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 70%),
+        radial-gradient(60% 60% at 100% 0%, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 65%),
+        linear-gradient(135deg, #f5fcff 0%, #e2f4fd 36%, #cdeefb 60%, #e9f9fb 100%);
     }
 
-    .rings {
+    .streaks {
       position: absolute;
-      inset: 0;
+      inset: -20%;
       pointer-events: none;
       background:
-        radial-gradient(circle at 96% 15%, transparent 0 370px, rgba(255, 255, 255, 0.07) 371px 485px, transparent 486px),
-        radial-gradient(circle at 96% 15%, transparent 0 485px, rgba(255, 255, 255, 0.045) 486px 610px, transparent 611px),
-        radial-gradient(circle at -10% 105%, transparent 0 300px, rgba(255, 255, 255, 0.06) 301px 420px, transparent 421px);
+        repeating-linear-gradient(
+          112deg,
+          rgba(255, 255, 255, 0) 0 60px,
+          rgba(255, 255, 255, 0.85) 90px,
+          rgba(255, 255, 255, 0) 130px,
+          rgba(110, 200, 240, 0.35) 160px,
+          rgba(170, 235, 215, 0.25) 175px,
+          rgba(255, 255, 255, 0) 210px,
+          rgba(0, 92, 172, 0.08) 250px,
+          rgba(255, 255, 255, 0) 290px 340px
+        );
+      filter: blur(10px);
+      mask-image: linear-gradient(115deg, transparent 8%, #000 30%, #000 70%, transparent 95%);
+      -webkit-mask-image: linear-gradient(115deg, transparent 8%, #000 30%, #000 70%, transparent 95%);
     }
 
     .brand-logo {
@@ -70,12 +81,13 @@ import { MobiLogo } from '../../shared/mobi-logo';
 
     .tagline {
       position: relative;
-      margin: auto 0;
-      max-width: 760px;
-      font-size: clamp(40px, 3.4vw, 62px);
-      line-height: 1.12;
+      max-width: 640px;
+      margin: auto 0 0;
+      font-size: clamp(32px, 2.8vw, 46px);
+      line-height: 1.15;
       font-weight: 700;
       letter-spacing: -0.02em;
+      color: var(--brand-dark);
     }
 
     .panel {
@@ -83,6 +95,7 @@ import { MobiLogo } from '../../shared/mobi-logo';
       flex-direction: column;
       min-width: 0;
       background: var(--surface);
+      box-shadow: -1px 0 0 var(--border-soft);
     }
 
     .mobile-header {
@@ -95,17 +108,17 @@ import { MobiLogo } from '../../shared/mobi-logo';
       flex-direction: column;
       justify-content: center;
       width: 100%;
-      max-width: 620px;
-      margin: 0 auto;
-      padding: 48px 24px;
+      max-width: 520px;
+      padding: 56px 64px 32px;
     }
 
     .footer {
       display: flex;
       justify-content: space-between;
       gap: 16px;
-      padding: 0 36px 26px;
-      font-size: 13px;
+      max-width: 520px;
+      padding: 0 64px 28px;
+      font-size: 12px;
       color: var(--text-subtle);
 
       a {
@@ -121,22 +134,25 @@ import { MobiLogo } from '../../shared/mobi-logo';
 
     @media (max-width: 960px) {
       .shell {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
       }
       .brand {
         display: none;
       }
       .mobile-header {
         display: block;
-        padding: 28px 24px 0;
+        padding: 24px 20px 0;
       }
       .content {
+        max-width: 480px;
         justify-content: flex-start;
-        padding: 40px 16px;
+        margin: 0 auto;
+        padding: 32px 20px;
       }
       .footer {
         flex-direction: column;
         align-items: center;
+        max-width: none;
         padding: 0 16px 24px;
       }
     }

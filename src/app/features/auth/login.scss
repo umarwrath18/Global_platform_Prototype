@@ -3,10 +3,10 @@
 }
 
 .samples {
-  margin: -16px 0 28px;
-  padding: 14px;
+  margin: -12px 0 24px;
+  padding: 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--r-control);
   background: var(--surface);
 
   code {
@@ -66,25 +66,41 @@
   color: var(--text-muted);
 }
 
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 24px;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #1a73d1 0%, var(--mobi-blue) 60%, #004c91 100%);
+  box-shadow: 0 6px 16px -6px rgba(0, 92, 172, 0.55);
+
+  img {
+    width: 34px;
+    height: 34px;
+  }
+}
+
 .row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: -6px 0 28px;
+  margin: -4px 0 24px;
 }
 
 .checkbox {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  font-size: 15px;
+  gap: 8px;
+  font-size: 14px;
   color: var(--text-muted);
   cursor: pointer;
 
   input {
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
     margin: 0;
     accent-color: var(--mobi-blue);
     cursor: pointer;
@@ -92,15 +108,14 @@
 }
 
 .divider {
-  margin: 40px 0 36px;
+  margin: 32px 0 24px;
   border: 0;
   border-top: 1px solid var(--border);
 }
 
 .help {
   margin: 0;
-  text-align: center;
-  font-size: 15px;
+  font-size: 13px;
   color: var(--text-muted);
 }
 
