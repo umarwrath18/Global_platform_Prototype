@@ -15,6 +15,8 @@ import {
   MerchantApiError,
   MerchantApiErrorCode,
   MerchantDetail,
+  MerchantLifecycleEvent,
+  MerchantLifecycleStatus,
   MerchantSummary,
   NotificationEvent,
   PortalNotification,
@@ -37,7 +39,7 @@ import { simulateVerification } from './verification';
 
 const DB_VERSION = 2;
 
-export type MerchantRecord = Omit<GlobalMerchant, 'globalStatus'>;
+export type MerchantRecord = Omit<GlobalMerchant, 'globalStatus' | 'lifecycleStatus'> & Partial<Pick<GlobalMerchant, 'lifecycleStatus' | 'lifecycleReason' | 'lifecycleUpdatedAt' | 'lifecycleUpdatedBy'>>;
 
 export interface MerchantDb {
   version: number;
@@ -45,6 +47,7 @@ export interface MerchantDb {
   merchants: MerchantRecord[];
   applications: CountryApplication[];
   notifications: PortalNotification[];
+  lifecycleEvents?: MerchantLifecycleEvent[];
 }
 
 export interface Caller {
@@ -150,6 +153,7 @@ export class MerchantServer {
         if (!id && m === 'POST') return ok(this.createMerchant(body, caller, role), 201);
         if (id && !sub && m === 'GET') return ok(this.merchantDetail(id));
         if (id && !sub && m === 'PATCH') return ok(this.updateMerchant(id, body, role));
+        if (id && sub === 'lifecycle' && m === 'POST') return ok(this.updateMerchantLifecycle(id, body, caller, role));
         if (id && sub === 'applications' && m === 'POST') return ok(this.createApplication(id, body, caller, role), 201);
       }
       if (resource === 'applications') {
@@ -187,7 +191,7 @@ export class MerchantServer {
   private merchantDetail(id: string): MerchantDetail {
     const db = this.load();
     const m = this.findMerchant(db, id);
-    return { merchant: this.withStatus(db, m), applications: db.applications.filter((a) => a.merchantId === m.id).sort((a, b) => a.createdAt - b.createdAt) };
+    return { merchant: this.withStatus(db, m), applications: db.applications.filter((a) => a.merchantId === m.id).sort((a, b) => a.createdAt - b.createdAt), lifecycleEvents: (db.lifecycleEvents ?? []).filter((e) => e.merchantId === id).sort((a, b) => b.at - a.at) };
   }
 
   private createMerchant(body: any, caller: Caller, role: StaffRole): GlobalMerchant {
@@ -220,6 +224,34 @@ export class MerchantServer {
       demo: false,
     };
     db.merchants.push(merchant);
+    this.save(db);
+    return this.withStatus(db, merchant);
+  }
+
+  private updateMerchantLifecycle(id: string, body: any, caller: Caller, role: StaffRole): GlobalMerchant {
+    const action = body?.action;
+    const reason = str(body?.reason, 500).trim();
+    if (action !== 'suspend' && action !== 'reactivate') fail(400, 'VALIDATION_FAILED', { message: 'Choose a valid lifecycle action.' });
+    if (reason.length < 5) fail(400, 'VALIDATION_FAILED', { message: 'Enter a reason with at least 5 characters.' });
+    if (action === 'suspend' && role !== 'sales' && role !== 'risk') fail(403, 'ROLE_NOT_PERMITTED', { message: 'Only Sales / Operations or Risk can suspend a merchant.' });
+    if (action === 'reactivate' && role !== 'risk') fail(403, 'ROLE_NOT_PERMITTED', { message: 'Only Risk can reactivate a suspended merchant.' });
+    const db = this.load();
+    const merchant = this.findMerchant(db, id);
+    const current = merchant.lifecycleStatus ?? 'active';
+    const globalStatus = deriveGlobalStatus(db.applications.filter((a) => a.merchantId === merchant.id));
+    if (action === 'suspend') {
+      if (current === 'suspended') fail(409, 'INVALID_TRANSITION', { message: 'This merchant is already suspended.' });
+      if (globalStatus !== 'active') fail(409, 'INVALID_TRANSITION', { message: 'Only a merchant with at least one operational country can be suspended.' });
+    } else if (current !== 'suspended') fail(409, 'INVALID_TRANSITION', { message: 'Only a suspended merchant can be reactivated.' });
+    const next: MerchantLifecycleStatus = action === 'suspend' ? 'suspended' : 'active';
+    const at = this.now();
+    merchant.lifecycleStatus = next;
+    merchant.lifecycleReason = next === 'suspended' ? reason : null;
+    merchant.lifecycleUpdatedAt = at;
+    merchant.lifecycleUpdatedBy = caller.name;
+    db.lifecycleEvents ??= [];
+    db.lifecycleEvents.unshift({ at, action: action === 'suspend' ? 'suspended' : 'reactivated', by: caller.name, role, reason, fromStatus: current, toStatus: next, merchantId: merchant.id });
+    db.lifecycleEvents = db.lifecycleEvents.slice(0, 500);
     this.save(db);
     return this.withStatus(db, merchant);
   }
@@ -601,7 +633,7 @@ export class MerchantServer {
   }
 
   private withStatus(db: MerchantDb, m: MerchantRecord): GlobalMerchant {
-    return { ...m, globalStatus: deriveGlobalStatus(db.applications.filter((a) => a.merchantId === m.id)) };
+    return { ...m, lifecycleStatus: m.lifecycleStatus ?? 'active', lifecycleReason: m.lifecycleReason ?? null, lifecycleUpdatedAt: m.lifecycleUpdatedAt ?? null, lifecycleUpdatedBy: m.lifecycleUpdatedBy ?? null, globalStatus: deriveGlobalStatus(db.applications.filter((a) => a.merchantId === m.id)) };
   }
 
   private summary(a: CountryApplication, m: MerchantRecord): ApplicationSummary {
@@ -670,7 +702,10 @@ export class MerchantServer {
 
   // Re-read on every request so changes made in another tab apply immediately.
   private load(): MerchantDb {
-    return JSON.parse(this.opts.storage.getItem(this.storageKey)!);
+    const db = JSON.parse(this.opts.storage.getItem(this.storageKey)!) as MerchantDb;
+    db.lifecycleEvents ??= [];
+    for (const merchant of db.merchants) merchant.lifecycleStatus ??= 'active';
+    return db;
   }
 
   private save(db: MerchantDb) {
