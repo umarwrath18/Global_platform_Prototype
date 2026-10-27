@@ -16,6 +16,9 @@ export const STAFF_ROLE_LABEL: Record<StaffRole, string> = {
 /** Derived from the merchant's country applications, never set by hand. */
 export type GlobalMerchantStatus = 'onboarding' | 'active' | 'no_active_applications';
 
+export type MerchantLifecycleStatus = 'active' | 'suspended';
+export interface MerchantLifecycleEvent { at: number; action: 'suspended' | 'reactivated'; by: string; role: StaffRole; reason: string; fromStatus: MerchantLifecycleStatus; toStatus: MerchantLifecycleStatus; merchantId?: string; }
+
 export interface PrimaryContact {
   name: string;
   email: string;
@@ -29,6 +32,10 @@ export interface GlobalMerchant {
   registrationNumber: string;
   primaryContact: PrimaryContact;
   globalStatus: GlobalMerchantStatus;
+  lifecycleStatus: MerchantLifecycleStatus;
+  lifecycleReason?: string | null;
+  lifecycleUpdatedAt?: number | null;
+  lifecycleUpdatedBy?: string | null;
   /** Batch 1 Global Account used for portal login; created on the first country go-live. */
   linkedAccountId: string | null;
   createdAt: number;
@@ -242,6 +249,7 @@ export interface MerchantSummary extends GlobalMerchant {
 export interface MerchantDetail {
   merchant: GlobalMerchant;
   applications: CountryApplication[];
+  lifecycleEvents: MerchantLifecycleEvent[];
 }
 
 export interface ApplicationDetail {
