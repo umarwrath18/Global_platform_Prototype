@@ -168,9 +168,24 @@
         </section>
       </div>
 
-      <aside class="col-side panel-card" aria-label="Application history">
-        <div class="panel-head"><div><h2>Activity</h2><p>All countries, latest first</p></div></div>
-        <ol class="timeline">
+      <aside class="col-side panel-card" aria-label="Merchant activity">
+        <section class="lifecycle-history">
+          <div class="panel-head"><div><h2>Merchant lifecycle</h2><p>Suspension and reactivation events</p></div></div>
+          <ol class="timeline">
+            @for (event of d.lifecycleEvents; track $index) {
+              <li>
+                <span class="t-action">{{ event.action === 'suspended' ? 'Merchant suspended' : 'Merchant reactivated' }}</span>
+                <span class="t-meta">{{ dateTime(event.at) }} · {{ event.by }} · {{ event.role === 'risk' ? 'Risk' : event.role === 'sales' ? 'Sales / Operations' : 'Customer Success' }}</span>
+                <span class="t-comment">{{ event.reason }}</span>
+              </li>
+            } @empty {
+              <li class="t-empty">No lifecycle actions recorded.</li>
+            }
+          </ol>
+        </section>
+        <section class="application-history">
+          <div class="panel-head"><div><h2>Application activity</h2><p>All countries, latest first</p></div></div>
+          <ol class="timeline">
           @for (h of history(); track $index) {
             <li [class.system]="h.role === 'system'">
               <span class="t-action">{{ h.action }}</span>
@@ -183,7 +198,8 @@
           } @empty {
             <li class="t-empty">Nothing yet.</li>
           }
-        </ol>
+          </ol>
+        </section>
       </aside>
     </div>
   }
