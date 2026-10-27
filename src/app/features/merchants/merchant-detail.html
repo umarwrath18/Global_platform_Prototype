@@ -24,11 +24,17 @@
           <app-status [globalStatus]="d.merchant.globalStatus" />
         </p>
       </div>
-      @if (roles.role() === 'sales') {
-        <div class="actions">
+      <div class="actions header-actions">
+        @if (roles.role() === 'sales') {
           <a class="btn primary" routerLink="/merchants/expand" [queryParams]="{ merchant: d.merchant.id }"><app-icon name="plus" [size]="16" />Add country</a>
-        </div>
-      }
+        }
+        @if (d.merchant.lifecycleStatus === 'suspended') {
+          <span class="lifecycle-pill suspended">Suspended</span>
+          @if (canReactivate()) { <button type="button" class="btn" (click)="openLifecycleAction('reactivate')">Reactivate</button> }
+        } @else if (canSuspend()) {
+          <button type="button" class="btn danger-outline" (click)="openLifecycleAction('suspend')">Suspend merchant</button>
+        }
+      </div>
     </div>
 
     <div class="layout">
@@ -182,6 +188,20 @@
     </div>
   }
 
+  @if (detail(); as d) {
+    @if (lifecycleAction(); as action) {
+      <div class="modal-backdrop" (click)="closeLifecycleAction()">
+        <section class="lifecycle-modal panel-card" role="dialog" aria-modal="true" aria-labelledby="lifecycle-title" (click)="$event.stopPropagation()">
+          <div class="panel-head"><div><h2 id="lifecycle-title">{{ action === 'suspend' ? 'Suspend merchant' : 'Reactivate merchant' }}</h2><p>{{ d.merchant.legalName }}</p></div><button type="button" class="btn sm" (click)="closeLifecycleAction()" [disabled]="lifecycleSaving()">Cancel</button></div>
+          @if (action === 'suspend') { <div class="alert warning compact">Suspending restricts the merchant lifecycle in this prototype. Pending transactions and financial obligations are not automatically cancelled.</div> }
+          @else { <div class="alert info compact">Confirm required operational and risk checks before allowing processing to resume.</div> }
+          @if (lifecycleError(); as msg) { <div class="alert danger compact" role="alert">{{ msg }}</div> }
+          <div class="f-field lifecycle-reason"><label for="lifecycle-reason">Reason <span class="req">*</span></label><textarea id="lifecycle-reason" class="f-input" rows="4" maxlength="500" [value]="lifecycleReason()" (input)="lifecycleReason.set($any($event.target).value)" placeholder="Record the reason for this action"></textarea><p class="f-hint">At least 5 characters. This reason is saved to the activity history.</p></div>
+          <div class="actions edit-actions"><button type="button" class="btn" (click)="closeLifecycleAction()" [disabled]="lifecycleSaving()">Cancel</button><button type="button" class="btn" [class.danger]="action === 'suspend'" [class.primary]="action === 'reactivate'" [disabled]="lifecycleSaving() || lifecycleReason().trim().length < 5" (click)="confirmLifecycleAction()">@if (lifecycleSaving()) {<span class="spinner" aria-hidden="true"></span>}{{ action === 'suspend' ? 'Confirm suspension' : 'Confirm reactivation' }}</button></div>
+        </section>
+      </div>
+    }
+  }
   @if (toast(); as t) {
     <div class="p-toast" role="status"><app-icon name="check-circle" [size]="18" />{{ t }}</div>
   }
