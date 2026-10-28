@@ -6,6 +6,7 @@ import type { MccAuditEvent, MccChangeRequest, MccRef, MerchantMcc } from './mcc
 import type { CountryOnboardingConfig } from './onboarding-config';
 import type { ProductGap } from './products';
 import type { ChangeRequest, ProfileEvent } from './change-requests';
+import type { SubMerchantView } from './sub-merchants';
 
 /** Prototype-only: the internal team the signed-in user is acting as. */
 export type StaffRole = 'sales' | 'risk' | 'cs' | 'finops';
@@ -293,6 +294,8 @@ export interface MerchantDetail {
   pendingChanges: ChangeRequest[];
   /** Profile history (contact edits, identity edits and requests), latest first. */
   profileEvents: ProfileEvent[];
+  /** Sub-merchants under this (parent) merchant. */
+  subMerchants: SubMerchantView[];
 }
 
 export interface ApplicationDetail {
@@ -342,7 +345,10 @@ export type NotificationEvent =
   | 'pricing_approval_requested'
   | 'pricing_decided'
   | 'change_requested'
-  | 'change_decided';
+  | 'change_decided'
+  | 'sub_merchant_submitted'
+  | 'sub_merchant_decided'
+  | 'sub_merchant_live';
 
 export interface PortalNotification {
   id: string;
@@ -388,6 +394,7 @@ export type MerchantApiErrorCode =
   | 'PRICING_PENDING'
   | 'CHANGE_REQUEST_REQUIRED'
   | 'CHANGE_PENDING'
+  | 'SUB_MERCHANT_ROUTE_NOT_ALLOWED'
   | 'NOT_FOUND';
 
 export interface MerchantApiError {

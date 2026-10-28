@@ -298,6 +298,8 @@
             </div>
           }
         </section>
+
+        <app-sub-merchants-panel [merchant]="d.merchant" [applications]="d.applications" [subMerchants]="d.subMerchants" (changed)="onChangeAction($event)" />
       </div>
 
       <aside class="col-side panel-card" aria-label="Merchant activity">

@@ -2,7 +2,7 @@
   <div class="portal-head">
     <div>
       <h1>Approvals</h1>
-      <p class="sub">Changes after onboarding that need a decision: profile and country changes and MCC changes (Risk), and pricing changes (FinOps).</p>
+      <p class="sub">Decisions waiting after onboarding: profile, country and MCC changes and new sub-merchants (Risk), and pricing changes (FinOps).</p>
     </div>
   </div>
 
@@ -21,7 +21,7 @@
               <div class="ap-main">
                 <span class="tag">{{ kindLabel[i.kind] }}</span>
                 <a class="row-link" [routerLink]="i.link">{{ i.title }}</a>
-                <span class="muted">{{ i.merchantName }} · {{ i.id }}</span>
+                <span class="muted">{{ i.merchantName }}@if (i.kind !== 'sub_merchant') { · {{ i.id }}}</span>
               </div>
               <p class="ap-summary">{{ i.summary }}</p>
               <p class="ap-meta">Requested {{ dateTime(i.requestedAt) }} by {{ i.requestedBy }} ({{ teamLabel[i.requestedRole] }}) · decided by {{ teamLabel[i.approverTeam] }}</p>
@@ -44,7 +44,7 @@
                 <span class="status" [class]="'status ' + status[i.status].tone">{{ status[i.status].label }}</span>
                 <span class="tag">{{ kindLabel[i.kind] }}</span>
                 <a class="row-link" [routerLink]="i.link">{{ i.title }}</a>
-                <span class="muted">{{ i.merchantName }} · {{ i.id }}</span>
+                <span class="muted">{{ i.merchantName }}@if (i.kind !== 'sub_merchant') { · {{ i.id }}}</span>
               </div>
               <p class="ap-summary">{{ i.summary }}</p>
               @if (i.decidedAt) {<p class="ap-meta">Decided {{ dateTime(i.decidedAt) }}</p>}

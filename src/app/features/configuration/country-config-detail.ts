@@ -5,7 +5,7 @@ import { CountryConfigService } from '../../core/merchants/country-config.servic
 import { MccService } from '../../core/merchants/mcc.service';
 import { MerchantClientError, toMerchantError } from '../../core/merchants/merchant-api.service';
 import { FieldIssue, STAFF_ROLE_LABEL } from '../../core/merchants/merchant-models';
-import { DocumentRule, FieldRule } from '../../core/merchants/onboarding-config';
+import { DocumentRule, FieldRule, subMerchantRoutes } from '../../core/merchants/onboarding-config';
 import { StaffRoleService } from '../../core/merchants/staff-role.service';
 import { HasUnsavedChanges } from '../applications/unsaved-changes.guard';
 import { Icon } from '../../shared/icon';
@@ -106,6 +106,16 @@ export class CountryConfigDetailPage implements HasUnsavedChanges {
   protected setEnabled(on: boolean) {
     this.patch((d) => (d.onboardingEnabled = on));
   }
+
+  protected setRoute(key: 'opsInitiated' | 'parentInitiated', on: boolean) {
+    this.patch((d) => (d.subMerchantCreation[key] = on));
+  }
+
+  protected readonly routesText = computed(() => {
+    const r = subMerchantRoutes(this.cfg() ?? undefined);
+    const on = [r.opsInitiated && 'Sales / Operations', r.parentInitiated && 'the parent merchant'].filter(Boolean);
+    return on.length ? `Created by ${on.join(' or ')}.` : 'Sub-merchants cannot be created in this country.';
+  });
 
   protected setRule(key: string, prop: keyof FieldRule, value: string | boolean) {
     this.patch((d) => Object.assign(d[key as 'localRegistration' | 'taxId'], { [prop]: value }));

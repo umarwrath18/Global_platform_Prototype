@@ -7,7 +7,7 @@ import { StaffRoleService } from '../../core/merchants/staff-role.service';
 import { Icon } from '../../shared/icon';
 import { fmtDateTime } from '../../shared/merchant-ui';
 
-const KIND_LABEL: Record<ApprovalItem['kind'], string> = { change: 'Change request', mcc: 'MCC change', pricing: 'Pricing change' };
+const KIND_LABEL: Record<ApprovalItem['kind'], string> = { change: 'Change request', mcc: 'MCC change', pricing: 'Pricing change', sub_merchant: 'Sub-merchant review' };
 const STATUS: Record<ApprovalItem['status'], { label: string; tone: string }> = {
   pending: { label: 'Pending', tone: 'warning' },
   approved: { label: 'Approved', tone: 'success' },

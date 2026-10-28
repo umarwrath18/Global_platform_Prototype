@@ -1,0 +1,137 @@
+@let role = roles.role();
+<section class="panel-card" aria-labelledby="subs-title">
+  <div class="panel-head">
+    <div>
+      <h2 id="subs-title">Sub-merchants</h2>
+      <p>Share this merchant's GMID and MCC, and use its products, pricing and settlement account in each country. Each goes live with its own MID.</p>
+    </div>
+    @if (canAdd() && !adding()) {<button type="button" class="btn sm" (click)="openAdd()"><app-icon name="plus" [size]="14" />Add sub-merchant</button>}
+  </div>
+
+  @if (adding()) {
+    @let f = form();
+    <form class="sm-form" (submit)="$event.preventDefault(); create(true)" novalidate aria-label="New sub-merchant">
+      <div class="f-grid">
+        <div class="f-field"><label for="sm-country">Country</label>
+          <select id="sm-country" class="f-input" (change)="set('country', $any($event.target).value)">
+            @for (c of countries(); track c) {<option [value]="c" [selected]="c === f.country">{{ countryName(c) }}</option>}
+          </select></div>
+        <div class="f-field"><label for="sm-name">Sub-merchant name <span class="req">*</span></label><input id="sm-name" class="f-input" [value]="f.displayName" (input)="set('displayName', $any($event.target).value)" />@if (issue('displayName'); as m) {<p class="f-error">{{ m }}</p>}</div>
+      </div>
+      <fieldset class="sm-entity">
+        <legend>Legal identity</legend>
+        <label class="check"><input type="radio" name="sm-entity" [checked]="!f.separate" (change)="set('separate', false)" />Trades under the parent ({{ merchant().legalName }})</label>
+        <label class="check"><input type="radio" name="sm-entity" [checked]="f.separate" (change)="set('separate', true)" />Separate legal entity</label>
+      </fieldset>
+      @if (f.separate) {
+        <div class="f-grid">
+          <div class="f-field"><label for="sm-legal">Registered legal name <span class="req">*</span></label><input id="sm-legal" class="f-input" [value]="f.legalName" (input)="set('legalName', $any($event.target).value)" />@if (issue('legalEntity.legalName'); as m) {<p class="f-error">{{ m }}</p>}</div>
+          <div class="f-field"><label for="sm-reg">{{ regRule()?.label ?? 'Registration number' }} <span class="req">*</span></label><input id="sm-reg" class="f-input" [value]="f.registrationNumber" (input)="set('registrationNumber', $any($event.target).value)" />@if (regRule()?.hint; as h) {<p class="f-hint">{{ h }}</p>}@if (issue('legalEntity.registrationNumber'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        </div>
+      }
+      <p class="f-hint">No documents, directors, bank details, MCC or keys are collected: the parent's apply. Risk reviews each new sub-merchant.</p>
+      @if (error(); as e) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
+      <div class="sm-actions">
+        <button type="button" class="btn sm" (click)="cancelAdd()" [disabled]="!!busy()">Cancel</button>
+        <button type="button" class="btn sm" (click)="create(false)" [disabled]="!!busy()">Save draft</button>
+        <button type="submit" class="btn sm primary" [disabled]="!!busy()">@if (busy() === 'create') {<span class="spinner" aria-hidden="true"></span>}Save and send to Risk</button>
+      </div>
+    </form>
+  }
+
+  @if (subMerchants().length) {
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th scope="col">Sub-merchant</th><th scope="col">Country</th><th scope="col">Status</th><th scope="col">Live MID</th><th scope="col"><span class="sr-only">Details</span></th></tr></thead>
+        <tbody>
+          @for (s of subMerchants(); track s.id) {
+            <tr [class.selected-row]="selected() === s.id">
+              <td><strong>{{ s.displayName }}</strong><span class="sm-sub">{{ s.legalEntity ? s.legalEntity.legalName + ' · ' + s.legalEntity.registrationNumber : 'Trades under the parent' }}</span></td>
+              <td>{{ countryName(s.country) }}</td>
+              <td>
+                <span class="status" [class]="'status ' + tone[s.status]">{{ statusLabel[s.status] }}</span>
+                @if (s.lifecycleStatus === 'suspended') {<span class="status danger">Suspended</span>}
+              </td>
+              <td>@if (s.mid; as mid) {<span class="mono">{{ mid.mid }}</span>} @else {<span class="muted">{{ s.status === 'rejected' ? '–' : 'Issued at go-live' }}</span>}</td>
+              <td class="row-actions"><button type="button" class="btn sm ghost" (click)="toggle(s.id)" [attr.aria-expanded]="selected() === s.id">{{ selected() === s.id ? 'Close' : 'Details' }}</button></td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else if (!adding()) {
+    <div class="panel-body"><p class="muted">No sub-merchants yet.</p></div>
+  }
+
+  @if (current(); as s) {
+    <div class="sm-detail" aria-label="Sub-merchant details">
+      <div class="sm-cols">
+        <div>
+          <h3>{{ s.displayName }}</h3>
+          <dl class="kv">
+            <div><dt>Legal identity</dt><dd>{{ s.legalEntity ? s.legalEntity.legalName + ' (' + s.legalEntity.registrationNumber + ')' : 'Trades under the parent' }}</dd></div>
+            <div><dt>Created</dt><dd>{{ dateTime(s.createdAt) }} · {{ s.createdBy }}</dd></div>
+            @if (s.lifecycleStatus === 'suspended') {<div><dt>Suspended</dt><dd>{{ s.lifecycleReason }}</dd></div>}
+          </dl>
+          <h4>Uses the parent's products and pricing in {{ countryName(s.country) }}</h4>
+          @if (s.inherited.products.length) {
+            <ul class="sm-products">@for (p of s.inherited.products; track p.name) {<li>{{ p.name }} · {{ p.mdrPct !== null ? p.mdrPct + '% MDR' : 'not priced' }} · settlement {{ p.settlement ?? 'not set' }}</li>}</ul>
+          } @else {
+            <p class="muted">The parent has no products switched on in {{ countryName(s.country) }} yet.</p>
+          }
+          @if (s.parentApplicationId) {<a [routerLink]="['/applications', s.parentApplicationId, 'products']">Parent's products &amp; pricing</a>}
+        </div>
+        <div>
+          <h4>History</h4>
+          <ol class="timeline">
+            @for (h of s.history; track $index) {
+              <li><span class="t-action">{{ h.action }}</span><span class="t-meta">{{ dateTime(h.at) }} · {{ h.by }}@if (h.role !== 'system') { · {{ teamLabel[h.role] }}}</span>@if (h.comment) {<span class="t-comment">{{ h.comment }}</span>}</li>
+            }
+          </ol>
+        </div>
+      </div>
+
+      <div class="sm-steps">
+        @if (s.status === 'draft' && role === 'sales') {
+          <button type="button" class="btn sm primary" [disabled]="!!busy()" (click)="act(s, 'submit', {}, s.displayName + ' sent to Risk')">Send to Risk</button>
+        }
+        @if (s.status === 'pending_risk_review') {
+          @if (role === 'risk') {
+            <div class="f-field"><label for="sm-comment">Comment <span class="muted">(required to reject)</span></label><textarea id="sm-comment" class="f-input" rows="2" [value]="comment()" (input)="comment.set($any($event.target).value)"></textarea></div>
+            <div class="sm-actions">
+              <button type="button" class="btn sm danger-outline" [disabled]="!!busy()" (click)="review(s, 'reject')">Reject</button>
+              <button type="button" class="btn sm primary" [disabled]="!!busy()" (click)="review(s, 'approve')">Approve</button>
+            </div>
+          } @else {
+            <p class="muted">Waiting for Risk review.</p>
+          }
+        }
+        @if (s.status === 'approved') {
+          <h4>Go-live checks (Customer Success)</h4>
+          <ul class="checklist">
+            @for (c of s.goLiveChecks; track c.key) {
+              <li><label><input type="checkbox" [checked]="c.done" [disabled]="role !== 'cs' || !!busy()" (change)="act(s, 'checks', { key: c.key, done: $any($event.target).checked }, c.label)" />{{ c.label }}@if (c.doneBy) {<span class="muted"> · {{ c.doneBy }}</span>}</label></li>
+            }
+          </ul>
+          @if (s.goLiveBlocker; as b) {<p class="sm-blocker"><app-icon name="alert-circle" [size]="14" />{{ b }}</p>}
+          @if (role === 'cs') {
+            <button type="button" class="btn sm primary" [disabled]="!!busy() || !!s.goLiveBlocker" (click)="act(s, 'go-live', {}, s.displayName + ' is live')">@if (busy() === 'go-live') {<span class="spinner" aria-hidden="true"></span>}Go live</button>
+          }
+        }
+        @if (s.status !== 'rejected' && (role === 'sales' || role === 'risk')) {
+          @if (s.lifecycleStatus !== 'suspended' || role === 'risk') {
+            <div class="sm-lifecycle">
+              <input class="f-input" [attr.aria-label]="'Reason to ' + (s.lifecycleStatus === 'suspended' ? 'reactivate ' : 'suspend ') + s.displayName" [placeholder]="'Reason to ' + (s.lifecycleStatus === 'suspended' ? 'reactivate' : 'suspend') + ' this sub-merchant'" [value]="lifecycleReason()" (input)="lifecycleReason.set($any($event.target).value)" />
+              @if (s.lifecycleStatus === 'suspended') {
+                <button type="button" class="btn sm" [disabled]="!!busy()" (click)="lifecycle(s, 'reactivate')">Reactivate</button>
+              } @else {
+                <button type="button" class="btn sm danger-outline" [disabled]="!!busy()" (click)="lifecycle(s, 'suspend')">Suspend</button>
+              }
+            </div>
+          }
+        }
+        @if (error(); as e) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
+      </div>
+    </div>
+  }
+</section>

@@ -70,6 +70,15 @@
             </section>
 
             <section class="panel-card">
+              <div class="panel-head"><div><h2>Sub-merchant creation</h2><p>Who may create sub-merchants under a parent merchant in this country.</p></div></div>
+              <div class="panel-body">
+                <label class="check"><input type="checkbox" [checked]="f.subMerchantCreation.opsInitiated" (change)="setRoute('opsInitiated', $any($event.target).checked)" />Sales / Operations create them in the portal</label>
+                <label class="check"><input type="checkbox" [checked]="f.subMerchantCreation.parentInitiated" (change)="setRoute('parentInitiated', $any($event.target).checked)" />The parent merchant creates them</label>
+                <p class="f-hint">There is no merchant-facing portal yet, so parent-created sub-merchants can't be made in this prototype even when allowed.</p>
+              </div>
+            </section>
+
+            <section class="panel-card">
               <div class="panel-head"><div><h2>Business</h2><p>Business types and registration rules.</p></div></div>
               <div class="panel-body">
                 <div class="f-field">
@@ -281,6 +290,11 @@
               </dl>
               @if (d.config.directors.note) {<p class="f-hint">{{ d.config.directors.note }}</p>}
             </div>
+          </section>
+
+          <section class="panel-card">
+            <div class="panel-head"><div><h2>Sub-merchant creation</h2></div></div>
+            <div class="panel-body"><p class="muted">{{ routesText() }}</p></div>
           </section>
 
           <section class="panel-card">

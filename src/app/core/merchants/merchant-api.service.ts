@@ -18,6 +18,7 @@ import {
 } from './merchant-models';
 import type { MccChangeRequest } from './mcc';
 import type { ApprovalsView, ChangeRequest, CreateChangeRequest } from './change-requests';
+import type { CreateSubMerchantRequest, SubMerchantView } from './sub-merchants';
 import type { PricingVersion, ProductPricingView, SaveProductsRequest, SetPricingRequest } from './products';
 import { StaffRoleService } from './staff-role.service';
 
@@ -138,6 +139,16 @@ export class MerchantApi {
 
   withdrawChange(id: string) {
     return this.run(this.http.post<ChangeRequest>(`/api/changes/${encodeURIComponent(id)}/withdraw`, {}, { headers: this.headers }), true);
+  }
+
+  // ------------------------------------------------------------ sub-merchants
+
+  createSubMerchant(merchantId: string, req: CreateSubMerchantRequest) {
+    return this.run(this.http.post<SubMerchantView>(`/api/merchants/${encodeURIComponent(merchantId)}/sub-merchants`, req, { headers: this.headers }), true);
+  }
+
+  subMerchantAction(id: string, action: 'submit' | 'review' | 'checks' | 'go-live' | 'lifecycle', body: object = {}) {
+    return this.run(this.http.post<SubMerchantView>(`/api/sub-merchants/${encodeURIComponent(id)}/${action}`, body, { headers: this.headers }), true);
   }
 
   getApprovals() {

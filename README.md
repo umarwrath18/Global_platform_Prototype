@@ -141,8 +141,20 @@ in the request form (leave the field blank to keep the current number). The appl
 submitted profile and rules snapshot keep what Risk originally reviewed. Before the first Risk
 approval, profile edits stay direct and are recorded too.
 
+**Sub-merchants.** Lightweight child records under a parent merchant (merchant page → Sub-merchants).
+Each has exactly one parent and shares its GMID and MCC; it can trade under the parent or be a
+separate legal entity (legal name and registration number, checked with the country's format). It
+collects no documents, directors, bank details or keys: the parent's products, pricing and
+settlement account in that country apply. Sales / Operations create them in countries where the
+parent has applied and Country configuration allows it ("Sub-merchant creation"; parent-created
+sub-merchants need a merchant-facing portal, which doesn't exist yet). Risk approves or rejects each
+one; Customer Success completes two go-live checks and takes it live with its own MID, only when the
+parent is live in that country and neither is suspended. Suspending a parent blocks new
+sub-merchants and their go-live but doesn't suspend them; a sub-merchant's suspension affects only
+itself. Every step is recorded on the sub-merchant.
+
 **Approvals.** One page lists what is waiting for the acting team: Risk sees profile, country and
-MCC change requests; FinOps sees pricing changes; Sales / Operations see their own requests; CS
+MCC change requests and new sub-merchants; FinOps sees pricing changes; Sales / Operations see their own requests; CS
 sees everything, read only. Each item links to the page where the decision is made. Approval is
 checked by team only: in this prototype one login can switch teams in "View as" and approve its own
 request. Production needs person-level separation of duties.

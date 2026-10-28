@@ -35,6 +35,7 @@ import { randomToken } from './crypto';
 import { entityOfApplication, GoLiveIntent, goLiveBlocker, isRuleError, issueMid, MerchantEntity, parentEntityOf, RegionalMid, toMidView } from './merchant-identity';
 import { MigrationFlag, migrationFlags, MigrationLogEntry, normaliseMerchantDb, SCHEMA_REVISION } from './merchant-migrations';
 import { buildMerchantSeed } from './merchant-seed';
+import { createSubMerchant, goLiveSubMerchant, reviewSubMerchant, setSubMerchantCheck, SubMerchantContext, subMerchantLifecycle, subMerchantsOf, submitSubMerchant } from './sub-merchants';
 import { approvalsFor, ChangeContext, decideChange, merchantRiskApproved, profileEvent, requestCountryChange, requestProfileChange, toChangeView, withdrawChange } from './change-requests';
 import { cancelPricing, decidePricing, DERIVED_CHECKLIST, onboardingGaps, ProductContext, productView, saveProducts, setPricing, syncDerivedChecklist } from './product-pricing';
 import { ApiError, fail } from './server-errors';
@@ -163,7 +164,7 @@ export class MerchantServer {
   }
 
   static handles(path: string) {
-    return /^\/api\/(merchants|applications|notifications|changes|approvals)(\/|\?|$)/.test(path);
+    return /^\/api\/(merchants|applications|notifications|changes|approvals|sub-merchants)(\/|\?|$)/.test(path);
   }
 
   async handle(method: string, path: string, body: any, token: string | null, roleHeader: string | null): Promise<ServerReply> {
@@ -186,6 +187,7 @@ export class MerchantServer {
         if (id && !sub && m === 'GET') return ok(this.merchantDetail(id));
         if (id && !sub && m === 'PATCH') return ok(this.updateMerchant(id, body, caller, role));
         if (id && sub === 'changes' && m === 'POST') return ok(this.changeAction(caller, role, (ctx) => requestProfileChange(ctx, id, body)), 201);
+        if (id && sub === 'sub-merchants' && m === 'POST') return ok(this.subMerchantAction(caller, role, (ctx) => createSubMerchant(ctx, id, body)), 201);
         if (id && sub === 'lifecycle' && m === 'POST') return ok(this.updateMerchantLifecycle(id, body, caller, role));
         if (id && sub === 'applications' && m === 'POST') return ok(this.createApplication(id, body, caller, role), 201);
         if (id && sub === 'mcc' && !subId && m === 'PUT') return ok(this.setMcc(id, body, caller, role));
@@ -208,6 +210,16 @@ export class MerchantServer {
       }
       if (resource === 'changes' && id && sub === 'decision' && m === 'POST') return ok(this.changeAction(caller, role, (ctx) => decideChange(ctx, id, body)));
       if (resource === 'changes' && id && sub === 'withdraw' && m === 'POST') return ok(this.changeAction(caller, role, (ctx) => withdrawChange(ctx, id)));
+      if (resource === 'sub-merchants' && id && m === 'POST') {
+        const actions: Record<string, (ctx: SubMerchantContext) => unknown> = {
+          submit: (ctx) => submitSubMerchant(ctx, id),
+          review: (ctx) => reviewSubMerchant(ctx, id, body),
+          checks: (ctx) => setSubMerchantCheck(ctx, id, body),
+          'go-live': (ctx) => goLiveSubMerchant(ctx, id),
+          lifecycle: (ctx) => subMerchantLifecycle(ctx, id, body),
+        };
+        if (sub && actions[sub]) return ok(this.subMerchantAction(caller, role, actions[sub]));
+      }
       if (resource === 'approvals' && !id && m === 'GET') return ok(approvalsFor(this.load(), role));
       if (resource === 'notifications') {
         if (!id && m === 'GET') return ok(this.load().notifications);
@@ -246,6 +258,7 @@ export class MerchantServer {
       mccChangeNeedsRisk: this.riskApproved(db, m.id),
       pendingChanges: (db.changeRequests ?? []).filter((r) => r.merchantId === m.id && r.status === 'pending').map(toChangeView),
       profileEvents: (db.profileEvents ?? []).filter((e) => e.merchantId === m.id),
+      subMerchants: subMerchantsOf(db, m.id, this.now()),
     };
   }
 
@@ -339,6 +352,29 @@ export class MerchantServer {
     if (contact.length) profileEvent(db, { at: now, merchantId: m.id, action: 'contact_updated', changes: contact, reason: null, by: caller.name, role, requestId: null, comment: null });
     this.save(db);
     return this.withStatus(db, m);
+  }
+
+  /** Runs a sub-merchant action and saves it with its history and notifications in one write. */
+  private subMerchantAction<T>(caller: Caller, role: StaffRole, run: (ctx: SubMerchantContext) => T): T {
+    if (this.upgradePending) fail(503, 'MIGRATION_PENDING', { message: 'Merchant data could not be upgraded yet. Nothing has changed; try again shortly.' });
+    const db = this.load();
+    const result = run({
+      db,
+      caller,
+      role,
+      now: this.now(),
+      strict: this.strict,
+      notify: (event, merchant, audience, title, body) => {
+        db.notifications.unshift({
+          id: `NT-${db.seq.notification++}`, at: this.now(), event, title, body, applicationId: '', merchantId: merchant.id, audience,
+          email: { to: audience.filter((a): a is Exclude<StaffRole, 'finops'> => a !== 'finops').map((a) => TEAM_MAILBOX[a]), subject: `[Mobi Global Platform] ${title}`, status: 'simulated' },
+          readBy: [],
+        });
+        db.notifications = db.notifications.slice(0, 300);
+      },
+    });
+    this.save(db);
+    return result;
   }
 
   /** Runs a change-request action and saves it with its history entries and notifications in one write. */

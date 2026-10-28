@@ -1,5 +1,5 @@
 import { FieldIssue, StaffRole } from './merchant-models';
-import { CountryOnboardingConfig, DocumentRule, FieldRule } from './onboarding-config';
+import { CountryOnboardingConfig, DocumentRule, FieldRule, SubMerchantRoutes, subMerchantRoutes } from './onboarding-config';
 
 // Country Configuration (MVP feature 5) contract and validation, shared by the portal and the
 // simulated backend. The server always re-runs the validation; the UI check is for convenience.
@@ -7,6 +7,7 @@ import { CountryOnboardingConfig, DocumentRule, FieldRule } from './onboarding-c
 /** What Sales / Operations can change. Name, code, currency and payment methods are read-only here. */
 export interface CountryConfigInput {
   onboardingEnabled: boolean;
+  subMerchantCreation: SubMerchantRoutes;
   businessTypes: string[];
   localRegistration: FieldRule;
   taxId: FieldRule;
@@ -49,6 +50,7 @@ export function toConfigInput(cfg: CountryOnboardingConfig): CountryConfigInput 
   const copy = JSON.parse(JSON.stringify(cfg)) as CountryOnboardingConfig;
   return {
     onboardingEnabled: copy.onboardingEnabled !== false,
+    subMerchantCreation: subMerchantRoutes(copy),
     businessTypes: copy.businessTypes,
     localRegistration: copy.localRegistration,
     taxId: copy.taxId,
@@ -136,7 +138,10 @@ export function readCountryConfigInput(current: CountryOnboardingConfig, raw: an
   else if (directors.required && minCount < 1) errors.push({ section: 'directors', field: 'directors.minCount', message: 'When directors are required, at least 1 must be listed.' });
   if (threshold !== null && !(threshold > 0 && threshold <= 100)) errors.push({ section: 'directors', field: 'directors.ownershipThresholdPct', message: 'Enter a percentage from 1 to 100, or leave it empty.' });
 
-  return { input: { onboardingEnabled: raw?.onboardingEnabled !== false, businessTypes, localRegistration, taxId, bankFields, directors, documents }, errors };
+  // Older clients may not send the routes: keep the current ones then.
+  const routes = raw?.subMerchantCreation;
+  const subMerchantCreation = routes && typeof routes === 'object' ? { opsInitiated: routes.opsInitiated === true, parentInitiated: routes.parentInitiated === true } : subMerchantRoutes(current);
+  return { input: { onboardingEnabled: raw?.onboardingEnabled !== false, subMerchantCreation, businessTypes, localRegistration, taxId, bankFields, directors, documents }, errors };
 }
 
 /** Human-readable summary of what an update changes, for the audit history. */
@@ -144,6 +149,11 @@ export function describeConfigChanges(before: CountryOnboardingConfig, after: Co
   const out: string[] = [];
   const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
   if ((before.onboardingEnabled !== false) !== after.onboardingEnabled) out.push(after.onboardingEnabled ? 'Onboarding resumed' : 'Onboarding paused');
+  const routes = subMerchantRoutes(before);
+  if (routes.opsInitiated !== after.subMerchantCreation.opsInitiated || routes.parentInitiated !== after.subMerchantCreation.parentInitiated) {
+    const on = [after.subMerchantCreation.opsInitiated && 'Sales / Operations', after.subMerchantCreation.parentInitiated && 'parent merchant'].filter(Boolean).join(' and ');
+    out.push(`Sub-merchant creation routes: ${on || 'none'}`);
+  }
   if (!same(before.businessTypes, after.businessTypes)) out.push('Business types updated');
   if (!same(before.localRegistration, after.localRegistration)) out.push(`${after.localRegistration.label} rule updated`);
   if (!same(before.taxId, after.taxId)) out.push(`${after.taxId.label} rule updated`);

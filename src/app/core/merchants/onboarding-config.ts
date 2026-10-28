@@ -44,6 +44,20 @@ export interface CountryOnboardingConfig {
   paymentMethods: PaymentMethodRule[];
   /** False pauses new country applications. Existing applications continue. Default: true. */
   onboardingEnabled?: boolean;
+  /** Permitted ways to create sub-merchants in this country. Absent: see subMerchantRoutes(). */
+  subMerchantCreation?: SubMerchantRoutes;
+}
+
+export interface SubMerchantRoutes {
+  /** Sales / Operations create sub-merchants in the portal. */
+  opsInitiated: boolean;
+  /** The parent merchant creates them (needs a merchant-facing portal, which doesn't exist yet). */
+  parentInitiated: boolean;
+}
+
+/** Routes in force for a country. Default: Ops-initiated only, because no merchant-facing portal exists. */
+export function subMerchantRoutes(cfg: Pick<CountryOnboardingConfig, 'subMerchantCreation'> | undefined): SubMerchantRoutes {
+  return { opsInitiated: cfg?.subMerchantCreation?.opsInitiated ?? true, parentInitiated: cfg?.subMerchantCreation?.parentInitiated ?? false };
 }
 
 const pm = (code: string, name: string, kind: PaymentMethodRule['kind'], defaultMdr: number, minMdr: number, maxMdr: number): PaymentMethodRule => ({

@@ -8,6 +8,7 @@ import { productPhase } from '../../core/merchants/products';
 import { IdentityValue, PROFILE_ACTION_LABEL } from '../../core/merchants/change-requests';
 import { FieldIssue } from '../../core/merchants/merchant-models';
 import { PendingChanges } from '../changes/pending-changes';
+import { SubMerchantsPanel } from '../sub-merchants/sub-merchants-panel';
 import { HistoryEvent, MerchantDetail, READINESS_STATUSES, STAFF_ROLE_LABEL } from '../../core/merchants/merchant-models';
 import { REGISTRATION_COUNTRIES, countryName } from '../../core/merchants/onboarding-config';
 import { StaffRoleService } from '../../core/merchants/staff-role.service';
@@ -29,7 +30,7 @@ const STAGES = ['draft', 'pending_risk_review', ...READINESS_STATUSES];
 @Component({
   selector: 'app-merchant-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Icon, StatusBadge, PendingChanges],
+  imports: [RouterLink, Icon, StatusBadge, PendingChanges, SubMerchantsPanel],
   templateUrl: './merchant-detail.html',
   styleUrl: './merchant-detail.scss',
 })

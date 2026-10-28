@@ -150,7 +150,7 @@ export function describeChange(section: ChangeSection, before: SectionValue, aft
 
 /** An item on the shared Approvals page. Decisions happen on the linked page. */
 export interface ApprovalItem {
-  kind: 'change' | 'mcc' | 'pricing';
+  kind: 'change' | 'mcc' | 'pricing' | 'sub_merchant';
   id: string;
   title: string;
   merchantId: string;

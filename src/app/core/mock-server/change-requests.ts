@@ -261,6 +261,15 @@ export function approvalsFor(db: MerchantDb, role: StaffRole): ApprovalsView {
       status: v.state === 'pending_approval' ? 'pending' : v.state === 'cancelled' ? 'withdrawn' : v.state, approverTeam: 'finops', decidedAt: v.decidedAt ?? v.cancelledAt, link: ['/applications', app.id, 'products'],
     });
   }
+  for (const e of db.entities ?? []) {
+    if (e.kind !== 'sub' || !e.submittedAt) continue;
+    items.push({
+      kind: 'sub_merchant', id: e.id, title: `New sub-merchant · ${countryName(e.country ?? '')}`, merchantId: e.gmid, merchantName: name(e.gmid), applicationId: null, country: e.country ?? null,
+      summary: `${e.displayName}${e.legalEntity ? ` (separate legal entity: ${e.legalEntity.legalName}, ${e.legalEntity.registrationNumber})` : ' (trades under the parent)'}`,
+      requestedBy: e.submittedBy ?? e.createdBy, requestedRole: 'sales', requestedAt: e.submittedAt, status: e.status === 'pending_risk_review' ? 'pending' : e.status === 'rejected' ? 'rejected' : 'approved',
+      approverTeam: 'risk', decidedAt: e.decidedAt ?? null, link: ['/merchants', e.gmid],
+    });
+  }
   const pendingOf = (keep: (i: ApprovalItem) => boolean) => items.filter((i) => i.status === 'pending' && keep(i)).sort((a, b) => a.requestedAt - b.requestedAt);
   const recentOf = (keep: (i: ApprovalItem) => boolean) => items.filter((i) => i.status !== 'pending' && keep(i)).sort((a, b) => (b.decidedAt ?? 0) - (a.decidedAt ?? 0)).slice(0, 20);
   if (role === 'risk' || role === 'finops') {

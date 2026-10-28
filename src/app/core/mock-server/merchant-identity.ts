@@ -1,4 +1,6 @@
 import type { MerchantMcc } from '../merchants/mcc';
+import type { SubMerchantEvent, SubMerchantStatus } from '../merchants/sub-merchants';
+import type { ChecklistItem, StaffRole } from '../merchants/merchant-models';
 import { CountryApplication, MerchantApiErrorCode, MerchantLifecycleStatus, RegionalMidView } from '../merchants/merchant-models';
 import type { MerchantRecord } from './merchant-server';
 
@@ -32,6 +34,18 @@ export interface MerchantEntity {
   lifecycleReason?: string | null;
   createdAt: number;
   createdBy: string;
+  // Sub-merchants only (see core/merchants/sub-merchants.ts).
+  country?: string;
+  status?: SubMerchantStatus;
+  createdVia?: 'ops' | 'parent';
+  goLiveChecks?: ChecklistItem[];
+  history?: SubMerchantEvent[];
+  submittedBy?: string | null;
+  submittedAt?: number | null;
+  decidedBy?: string | null;
+  decidedRole?: StaffRole | null;
+  decidedAt?: number | null;
+  decisionComment?: string | null;
 }
 
 export interface RegionalMid {

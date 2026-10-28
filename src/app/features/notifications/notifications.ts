@@ -22,6 +22,9 @@ const EVENT_LABEL: Record<NotificationEvent, string> = {
   pricing_decided: 'Pricing decided',
   change_requested: 'Change to review',
   change_decided: 'Change decided',
+  sub_merchant_submitted: 'Sub-merchant to review',
+  sub_merchant_decided: 'Sub-merchant decided',
+  sub_merchant_live: 'Sub-merchant live',
 };
 
 /** In-portal notification history, with the target (simulated) email for each event. */
