@@ -4,14 +4,17 @@
 
 import type { MccAuditEvent, MccChangeRequest, MccRef, MerchantMcc } from './mcc';
 import type { CountryOnboardingConfig } from './onboarding-config';
+import type { ProductGap } from './products';
 
 /** Prototype-only: the internal team the signed-in user is acting as. */
-export type StaffRole = 'sales' | 'risk' | 'cs';
+export type StaffRole = 'sales' | 'risk' | 'cs' | 'finops';
 
 export const STAFF_ROLE_LABEL: Record<StaffRole, string> = {
   sales: 'Sales / Operations',
   risk: 'Risk',
   cs: 'Customer Success',
+  /** Prototype only: approves or rejects pricing changes after onboarding, nothing else. */
+  finops: 'FinOps',
 };
 
 // ------------------------------------------------------------------ Global Merchant
@@ -90,7 +93,7 @@ export const APPLICATION_STATUS_LABEL: Record<ApplicationStatus, string> = {
   returned: 'Returned for correction',
   rejected: 'Rejected',
   risk_approved: 'Risk approved',
-  cs_configuration: 'CS configuration',
+  cs_configuration: 'Product & Payment Config',
   keys_generated: 'Production keys generated',
   integration: 'Merchant integration',
   go_live_verification: 'Go-live verification',
@@ -296,6 +299,8 @@ export interface ApplicationDetail {
   midIssue: string | null;
   /** True once the merchant has been approved by Risk: MCC changes then need Risk approval. */
   mccChangeNeedsRisk: boolean;
+  /** During Product & Payment Config: what still stops "Issue production keys". Null at other stages. */
+  productGaps: ProductGap[] | null;
 }
 
 export type ReviewDecision = 'approve' | 'return' | 'reject';
@@ -326,7 +331,9 @@ export type NotificationEvent =
   | 'configuration_ready'
   | 'go_live'
   | 'mcc_change_requested'
-  | 'mcc_change_decided';
+  | 'mcc_change_decided'
+  | 'pricing_approval_requested'
+  | 'pricing_decided';
 
 export interface PortalNotification {
   id: string;
@@ -340,8 +347,8 @@ export interface PortalNotification {
   /** Country of the application (absent on records created before this field existed). */
   country?: string;
   audience: StaffRole[];
-  /** Target behaviour: an automatic email. Not sent; recorded as simulated. */
-  email: { to: string[]; subject: string; status: 'simulated' };
+  /** Target behaviour: an automatic email. Not sent; recorded as simulated. Absent for in-app-only notifications. */
+  email?: { to: string[]; subject: string; status: 'simulated' };
   readBy: StaffRole[];
 }
 
@@ -366,6 +373,10 @@ export type MerchantApiErrorCode =
   | 'MCC_NOT_AVAILABLE'
   | 'MCC_CHANGE_PENDING'
   | 'MCC_CHANGE_REQUIRED'
+  | 'PRODUCT_CONFIG_INCOMPLETE'
+  | 'PRICING_WILL_BE_CANCELLED'
+  | 'PRODUCT_HAS_ACTIVE_PRICING'
+  | 'PRICING_PENDING'
   | 'NOT_FOUND';
 
 export interface MerchantApiError {

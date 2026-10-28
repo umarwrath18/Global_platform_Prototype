@@ -17,6 +17,7 @@ import {
   UpdateMerchantRequest,
 } from './merchant-models';
 import type { MccChangeRequest } from './mcc';
+import type { PricingVersion, ProductPricingView, SaveProductsRequest, SetPricingRequest } from './products';
 import { StaffRoleService } from './staff-role.service';
 
 export type MerchantClientError = MerchantApiError | { code: 'NETWORK_ERROR'; message?: string } | { code: 'UNKNOWN_ERROR'; message?: string };
@@ -28,6 +29,8 @@ export function toMerchantError(e: unknown): MerchantClientError {
   }
   return { code: 'UNKNOWN_ERROR', message: 'Something went wrong. Please try again.' };
 }
+
+type PricingResult = { version: PricingVersion; view: ProductPricingView };
 
 /** Client for the merchant onboarding API (currently answered by the simulated backend). */
 @Injectable({ providedIn: 'root' })
@@ -113,6 +116,30 @@ export class MerchantApi {
 
   readiness(id: string, action: ReadinessAction) {
     return this.run(this.http.post<CountryApplication>(`/api/applications/${encodeURIComponent(id)}/readiness`, action, { headers: this.headers }), true);
+  }
+
+  // ---------------------------------------------- Product & Payment Config
+
+  getProducts(applicationId: string) {
+    return this.run(this.http.get<ProductPricingView>(`/api/applications/${encodeURIComponent(applicationId)}/products`, { headers: this.headers }));
+  }
+
+  saveProducts(applicationId: string, req: SaveProductsRequest) {
+    return this.run(this.http.put<{ message: string; view: ProductPricingView }>(`/api/applications/${encodeURIComponent(applicationId)}/products`, req, { headers: this.headers }));
+  }
+
+  setPricing(applicationId: string, req: SetPricingRequest) {
+    return this.run(this.http.post<PricingResult>(`/api/applications/${encodeURIComponent(applicationId)}/pricing`, req, { headers: this.headers }), true);
+  }
+
+  cancelPricing(applicationId: string, versionId: string, reason = '') {
+    const url = `/api/applications/${encodeURIComponent(applicationId)}/pricing/${encodeURIComponent(versionId)}/cancel`;
+    return this.run(this.http.post<PricingResult>(url, { reason }, { headers: this.headers }));
+  }
+
+  decidePricing(applicationId: string, versionId: string, decision: 'approve' | 'reject', comment: string) {
+    const url = `/api/applications/${encodeURIComponent(applicationId)}/pricing/${encodeURIComponent(versionId)}/decision`;
+    return this.run(this.http.post<PricingResult>(url, { decision, comment }, { headers: this.headers }), true);
   }
 
   async refreshNotifications() {

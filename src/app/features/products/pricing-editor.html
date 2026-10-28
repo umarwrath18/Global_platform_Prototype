@@ -1,0 +1,83 @@
+@if (done(); as d) {
+  <div class="editor-done" role="status">
+    <app-icon name="check-circle" [size]="18" />
+    <div>
+      <strong>{{ d.state === 'pending_approval' ? 'Sent to FinOps for approval' : 'Pricing saved' }}</strong>
+      {{ method()?.name }} · {{ d.mdrPct }}% from {{ date() }}
+    </div>
+    <button type="button" class="btn sm" (click)="closed.emit()">Done</button>
+  </div>
+} @else {
+  <section class="editor" aria-labelledby="editor-title">
+    <header class="editor-head">
+      <h3 id="editor-title">{{ preset().methodCode ? 'Set pricing' : 'Add pricing' }}</h3>
+      <ol class="step-bar" aria-label="Pricing steps">
+        @for (s of steps; track s; let i = $index) {
+          <li [class.current]="i === step()" [class.done]="i < step()" [attr.aria-current]="i === step() ? 'step' : null"><span class="n">{{ i + 1 }}</span>{{ s }}</li>
+        }
+      </ol>
+      <button type="button" class="btn sm ghost" (click)="cancel()">Cancel</button>
+    </header>
+
+    <div class="editor-body">
+      @switch (step()) {
+        @case (0) {
+          <div class="f-row">
+            <div class="f-field">
+              <span class="f-label" id="flow-label">Flow</span>
+              <div class="seg" role="radiogroup" aria-labelledby="flow-label">
+                @for (f of flowOptions(); track f.flow) {
+                  <button type="button" role="radio" [attr.aria-checked]="flow() === f.flow" [class.on]="flow() === f.flow" [disabled]="!f.enabled" (click)="setFlow(f.flow)" [title]="f.enabled ? '' : 'No ' + flowLabel[f.flow] + ' products are switched on'">{{ flowLabel[f.flow] }}</button>
+                }
+              </div>
+            </div>
+            <div class="f-field">
+              <label for="pe-method">Payment method</label>
+              <select id="pe-method" class="f-input" (change)="methodCode.set($any($event.target).value)">
+                <option value="" [selected]="!methodCode()">Select a switched-on product</option>
+                @for (m of methodsInFlow(); track m.code) {<option [value]="m.code" [selected]="m.code === methodCode()">{{ m.name }}</option>}
+              </select>
+            </div>
+          </div>
+        }
+        @case (1) {
+          <div class="f-row">
+            <div class="f-field">
+              <label for="pe-mdr">MDR (%) for {{ method()?.name }}</label>
+              <input id="pe-mdr" class="f-input" type="number" inputmode="decimal" step="0.01" [min]="method()?.minMdr ?? 0" [max]="method()?.maxMdr ?? 100" [value]="mdr()" (input)="mdr.set($any($event.target).value)" [class.invalid]="mdr() !== '' && mdrError()" aria-describedby="pe-mdr-hint" />
+              <p class="f-hint" id="pe-mdr-hint">Allowed range {{ method()?.minMdr }}–{{ method()?.maxMdr }}%. MDR only; no fees or tiers.</p>
+              @if (mdr() !== '' && mdrError(); as e) {<p class="f-error" role="alert"><app-icon name="alert-circle" [size]="16" />{{ e }}</p>}
+            </div>
+          </div>
+        }
+        @case (2) {
+          <div class="f-row">
+            <div class="f-field">
+              <label for="pe-date">Effective from</label>
+              <input id="pe-date" class="f-input" type="date" [min]="today()" [value]="date()" (input)="date.set($any($event.target).value)" />
+              <p class="f-hint">Today means immediately{{ needsApproval() ? ' once FinOps approves' : '' }}.</p>
+            </div>
+            <dl class="editor-sum">
+              <div><dt>Product</dt><dd>{{ flowLabel[flow()] }} · {{ method()?.name }}</dd></div>
+              <div><dt>MDR</dt><dd>{{ mdrNumber() }}%</dd></div>
+              <div><dt>Settlement</dt><dd>{{ settlement() ?? 'Not set' }} <span class="muted">(set on the product)</span></dd></div>
+              <div><dt>Approval</dt><dd>{{ needsApproval() ? 'Needs FinOps approval' : 'Applies when saved (onboarding)' }}</dd></div>
+            </dl>
+          </div>
+        }
+      }
+      @if (error(); as e) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
+    </div>
+
+    <footer class="editor-foot">
+      @if (step() > 0) {<button type="button" class="btn sm" (click)="back()" [disabled]="saving()">Back</button>}
+      @if (step() < steps.length - 1) {
+        <button type="button" class="btn sm primary" (click)="next()" [disabled]="!canNext()">Next</button>
+      } @else {
+        <button type="button" class="btn sm primary" (click)="save()" [disabled]="saving() || !!mdrError()">
+          @if (saving()) {<span class="spinner" aria-hidden="true"></span>}{{ needsApproval() ? 'Send for approval' : 'Save pricing' }}
+        </button>
+      }
+    </footer>
+  </section>
+}

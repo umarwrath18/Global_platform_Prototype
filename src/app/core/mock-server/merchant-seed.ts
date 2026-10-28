@@ -19,7 +19,7 @@ import { simulateVerification } from './verification';
 // match those accounts' country access (active / pending / failed).
 
 const DAY = 24 * 60 * 60_000;
-const STAFF: Record<StaffRole, string> = { sales: 'Hafiz Ismail', risk: 'Daniel Tan', cs: 'Mei Ling Wong' };
+const STAFF: Record<Exclude<StaffRole, 'finops'>, string> = { sales: 'Hafiz Ismail', risk: 'Daniel Tan', cs: 'Mei Ling Wong' };
 
 const SAMPLE_BUSINESS: Record<string, { reg: string; tax: string; bank: (holder: string) => Record<string, string> }> = {
   MY: { reg: '', tax: '', bank: (h) => ({ bankName: 'Maybank', accountName: h, accountNumber: '514012345678', swiftCode: 'MBBEMYKL' }) },
@@ -37,7 +37,7 @@ const ADDRESSES: Record<string, string> = {
   PH: '6750 Ayala Avenue, Makati City 1226',
 };
 
-type Step = [daysAgo: number, action: string, to: ApplicationStatus | null, role: StaffRole | 'system', comment?: string, sections?: SectionKey[]];
+type Step = [daysAgo: number, action: string, to: ApplicationStatus | null, role: Exclude<StaffRole, 'finops'> | 'system', comment?: string, sections?: SectionKey[]];
 
 interface AppSeed {
   id: string;

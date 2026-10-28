@@ -19,6 +19,9 @@ const QUEUES: { key: QueueKey; label: string; statuses: ApplicationStatus[] | nu
   { key: 'all', label: 'All', statuses: null, empty: 'No applications yet.' },
 ];
 
+/** FinOps has no application queue (it only approves pricing changes), so it sees all applications. */
+const queueFor = (role: StaffRole): QueueKey => (role === 'finops' ? 'all' : role);
+
 /** Work queues for each team; opens on the queue for the acting role. */
 @Component({
   selector: 'app-application-list',
@@ -50,7 +53,7 @@ export class ApplicationList {
   protected readonly apps = signal<ApplicationSummary[]>([]);
   protected readonly loading = signal(true);
   protected readonly error = signal<MerchantClientError | null>(null);
-  protected readonly queue = signal<QueueKey>((this.route.snapshot.queryParamMap.get('queue') as QueueKey) || this.roles.role());
+  protected readonly queue = signal<QueueKey>((this.route.snapshot.queryParamMap.get('queue') as QueueKey) || queueFor(this.roles.role()));
   protected readonly q = signal('');
 
   protected readonly queues = QUEUES;
@@ -81,7 +84,7 @@ export class ApplicationList {
         first = false;
         return;
       }
-      this.select(role);
+      this.select(queueFor(role));
     });
   }
 

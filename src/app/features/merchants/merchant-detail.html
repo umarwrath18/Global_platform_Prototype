@@ -229,7 +229,10 @@
                   @for (a of d.applications; track a.id) {
                     <tr>
                       <td><a class="row-link" [routerLink]="['/applications', a.id]">{{ countryName(a.country) }}</a> <span class="cur">{{ a.currency }}</span></td>
-                      <td class="mono muted">{{ a.id }}</td>
+                      <td class="mono muted">
+                        {{ a.id }}
+                        @if (handedOff(a.status)) {<a class="mini-link" [routerLink]="['/applications', a.id, 'products']">Products &amp; pricing</a>}
+                      </td>
                       <td><app-status [status]="a.status" /></td>
                       <td>
                         @if (midFor(a.id); as mid) {

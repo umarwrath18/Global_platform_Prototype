@@ -65,6 +65,12 @@ export const routes: Routes = [
         loadComponent: () => import('./features/applications/application-page').then((m) => m.ApplicationPage),
       },
       {
+        path: 'applications/:id/products',
+        title: 'Products & pricing · Mobi Global Platform',
+        canDeactivate: [unsavedChangesGuard],
+        loadComponent: () => import('./features/products/products-page').then((m) => m.ProductsPage),
+      },
+      {
         path: 'configuration/countries',
         title: 'Country configuration · Mobi Global Platform',
         loadComponent: () => import('./features/configuration/country-config-list').then((m) => m.CountryConfigList),

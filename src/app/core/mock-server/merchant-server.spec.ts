@@ -5,6 +5,7 @@ import { ONBOARDING_COUNTRIES } from '../merchants/onboarding-config';
 import { AuthServer } from './auth-server';
 import { MerchantServer } from './merchant-server';
 import { DEMO_PASSWORD } from './seed';
+import { completeProductConfig } from './testing/merchant-test-data';
 
 class MemoryStorage {
   private data = new Map<string, string>();
@@ -160,8 +161,11 @@ describe('MerchantServer', () => {
     // CS steps must happen in order.
     expect((await call('POST', `/api/applications/${id}/readiness`, { action: 'generate_keys' }, 'cs')).status).toBe(409);
     await call('POST', `/api/applications/${id}/readiness`, { action: 'start_configuration' }, 'cs');
+    // Product & Payment Config must be complete first (settlement isn't set yet), then the checklist.
+    expect((await call('POST', `/api/applications/${id}/readiness`, { action: 'generate_keys' }, 'cs')).body.code).toBe('PRODUCT_CONFIG_INCOMPLETE');
+    await completeProductConfig(call, id);
     expect((await call('POST', `/api/applications/${id}/readiness`, { action: 'generate_keys' }, 'cs')).body.code).toBe('CHECKLIST_INCOMPLETE');
-    for (const key of ['settlement_account', 'payment_methods', 'pricing_loaded', 'merchant_portal']) {
+    for (const key of ['settlement_account', 'merchant_portal']) {
       await call('POST', `/api/applications/${id}/readiness`, { action: 'set_item', stage: 'configuration', key, done: true }, 'cs');
     }
     const keyed = (await call<CountryApplication>('POST', `/api/applications/${id}/readiness`, { action: 'generate_keys' }, 'cs')).body;
@@ -187,7 +191,8 @@ describe('MerchantServer', () => {
     const countries = async () => ((await auth.handle('GET', '/api/auth/session', null, token)).body as any).countries.map((c: any) => `${c.code}:${c.status}`);
     expect(await countries()).toContain('TH:pending');
     const id = 'APP-2026-0010';
-    for (const key of ['pricing_loaded', 'merchant_portal']) await call('POST', `/api/applications/${id}/readiness`, { action: 'set_item', stage: 'configuration', key, done: true }, 'cs');
+    await completeProductConfig(call, id);
+    for (const key of ['merchant_portal']) await call('POST', `/api/applications/${id}/readiness`, { action: 'set_item', stage: 'configuration', key, done: true }, 'cs');
     await call('POST', `/api/applications/${id}/readiness`, { action: 'generate_keys' }, 'cs');
     await call('POST', `/api/applications/${id}/readiness`, { action: 'start_integration' }, 'cs');
     expect(await countries()).toContain('TH:pending');
@@ -250,6 +255,9 @@ describe('MerchantServer', () => {
     await g('POST', `/api/applications/${id}/submit`, {});
     await g('POST', `/api/applications/${id}/review`, { decision: 'approve' }, 'risk');
     await g('POST', `/api/applications/${id}/readiness`, { action: 'start_configuration' }, 'cs');
+    // Product & Payment Config is a configuration rule, not data entry: it applies in guided mode too.
+    expect((await g('POST', `/api/applications/${id}/readiness`, { action: 'generate_keys' }, 'cs')).body.code).toBe('PRODUCT_CONFIG_INCOMPLETE');
+    await completeProductConfig(g, id);
     const keyed = (await g<CountryApplication>('POST', `/api/applications/${id}/readiness`, { action: 'generate_keys' }, 'cs')).body;
     expect(keyed.status).toBe('keys_generated');
     expect(keyed.readiness.configuration.every((i) => i.done)).toBe(true);
@@ -307,7 +315,8 @@ describe('MerchantServer', () => {
       const tick = async (stage: string, keys: string[]) => {
         for (const key of keys) expect((await ready({ action: 'set_item', stage, key, done: true })).status).toBe(200);
       };
-      await tick('configuration', ['settlement_account', 'payment_methods', 'pricing_loaded', 'merchant_portal']);
+      await completeProductConfig(call, 'APP-2026-0010');
+      await tick('configuration', ['settlement_account', 'merchant_portal']);
       expect((await ready({ action: 'generate_keys' })).body.status).toBe('keys_generated');
       expect((await ready({ action: 'start_integration' })).body.status).toBe('integration');
       await tick('integration', ['docs_shared', 'sandbox_tests', 'webhook_verified']);

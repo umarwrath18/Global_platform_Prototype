@@ -1,0 +1,23 @@
+@if (view(); as v) {
+  <div class="ppc">
+    <div class="ppc-notice" role="note">
+      <app-icon name="info" [size]="16" />
+      <div>
+        Switch on the products this MID will offer, then set pricing for each one.
+        @if (v.readOnlyReason) {<span class="muted"> {{ v.readOnlyReason }}</span>}
+        @if (v.inferred && v.phase !== 'proposal') {<span class="muted"> Shown from the approved application until products are saved.</span>}
+      </div>
+    </div>
+
+    <app-products-card [view]="v" [locked]="editorOpen()" (saved)="onChanged($event)" (dirtyChange)="productsDirty.set($event)" />
+    <app-pricing-panel [view]="v" [productsDirty]="productsDirty()" (changed)="onChanged($event)" (editing)="editorOpen.set($event)" />
+
+    @if (toast(); as t) {
+      <div class="p-toast" role="status"><app-icon name="check-circle" [size]="18" />{{ t }}</div>
+    }
+  </div>
+} @else if (error(); as e) {
+  <div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e.message ?? "We couldn't load products and pricing." }} <button type="button" class="btn sm" (click)="load()">Try again</button></div></div>
+} @else {
+  <div class="skeleton-rows" aria-busy="true" aria-label="Loading products and pricing"><span></span><span></span></div>
+}

@@ -135,7 +135,16 @@
             <app-review-panel [application]="a" (decided)="onDecided($event)" />
           }
           @if (inReadiness()) {
-            <app-readiness-panel [application]="a" [canAct]="role() === 'cs'" [suspended]="suspended()" (changed)="onReadiness($event)" />
+            <app-readiness-panel [application]="a" [canAct]="role() === 'cs'" [suspended]="suspended()" [productGaps]="d.productGaps" (changed)="onReadiness($event)" />
+          }
+          @if (showProducts()) {
+            <section class="ppc-section" aria-label="Product & Payment Config">
+              <div class="ppc-title">
+                <h2>Product &amp; Payment Config</h2>
+                @if (a.status !== 'cs_configuration') {<a [routerLink]="['/applications', a.id, 'products']">Open on its own page</a>}
+              </div>
+              <app-product-payment-config [applicationId]="a.id" (changed)="onProductsChanged()" />
+            </section>
           }
           @if (['draft', 'returned'].includes(a.status) && role() !== 'sales') {
             <p class="hint-line"><app-icon name="lock" [size]="14" />View only. Sales / Operations can edit draft and returned applications.</p>

@@ -12,8 +12,6 @@ import {
   GlobalMerchant,
   GlobalMerchantStatus,
   HistoryEvent,
-  MerchantApiError,
-  MerchantApiErrorCode,
   MerchantDetail,
   MerchantLifecycleEvent,
   MerchantLifecycleStatus,
@@ -29,12 +27,15 @@ import {
   StaffRole,
 } from '../merchants/merchant-models';
 import { ONBOARDING_COUNTRIES, READINESS_CHECKLISTS, REGISTRATION_COUNTRIES } from '../merchants/onboarding-config';
+import { PricingVersion, ProductConfig, productPhase } from '../merchants/products';
 import { EMPTY_MCC_CATALOGUE, MccAuditEvent, MccCatalogue, MccCatalogueEntry, MccChangeRequest, mccCountryCheck, mccIssue, MccRef } from '../merchants/mcc';
 import { regionForCountry } from '../merchants/regions';
 import { randomToken } from './crypto';
 import { entityOfApplication, GoLiveIntent, goLiveBlocker, isRuleError, issueMid, MerchantEntity, parentEntityOf, RegionalMid, toMidView } from './merchant-identity';
 import { MigrationFlag, migrationFlags, MigrationLogEntry, normaliseMerchantDb, SCHEMA_REVISION } from './merchant-migrations';
 import { buildMerchantSeed } from './merchant-seed';
+import { cancelPricing, decidePricing, DERIVED_CHECKLIST, onboardingGaps, ProductContext, productView, saveProducts, setPricing, syncDerivedChecklist } from './product-pricing';
+import { ApiError, fail } from './server-errors';
 import { simulateVerification } from './verification';
 
 // Simulated Merchant Management & Onboarding backend (Batch 2). Like the auth server it
@@ -50,7 +51,7 @@ export interface MerchantDb {
   version: number;
   /** Highest data upgrade applied (absent = before entities and MIDs). See merchant-migrations.ts. */
   schemaRevision?: number;
-  seq: { merchant: number; application: number; notification: number; entity?: number; mid?: number; mccRequest?: number };
+  seq: { merchant: number; application: number; notification: number; entity?: number; mid?: number; mccRequest?: number; pricing?: number };
   merchants: MerchantRecord[];
   applications: CountryApplication[];
   notifications: PortalNotification[];
@@ -61,6 +62,9 @@ export interface MerchantDb {
   migrationLog?: MigrationLogEntry[];
   mccRequests?: MccChangeRequest[];
   mccEvents?: MccAuditEvent[];
+  /** Product & Payment Config per application; absent until products are first saved. */
+  productConfigs?: ProductConfig[];
+  pricingVersions?: PricingVersion[];
 }
 
 export interface MerchantDataReport {
@@ -108,22 +112,11 @@ export interface MerchantServerOptions {
   mcc?: { catalogue(): MccCatalogue };
 }
 
-class ApiError {
-  constructor(
-    readonly status: number,
-    readonly body: MerchantApiError,
-  ) {}
-}
-
-const fail = (status: number, code: MerchantApiErrorCode, extra: Omit<MerchantApiError, 'code'> = {}): never => {
-  throw new ApiError(status, { code, ...extra });
-};
-
-const STAFF_ROLES: StaffRole[] = ['sales', 'risk', 'cs'];
+const STAFF_ROLES: StaffRole[] = ['sales', 'risk', 'cs', 'finops'];
 const EDITABLE: ApplicationStatus[] = ['draft', 'returned'];
 
-/** Team mailboxes that receive workflow emails. */
-export const TEAM_MAILBOX: Record<StaffRole, string> = {
+/** Team mailboxes that receive workflow emails. FinOps has none: its notifications are in-app only. */
+export const TEAM_MAILBOX: Record<Exclude<StaffRole, 'finops'>, string> = {
   sales: 'sales-ops@mobi.xyz',
   risk: 'risk-review@mobi.xyz',
   cs: 'cs-onboarding@mobi.xyz',
@@ -200,6 +193,11 @@ export class MerchantServer {
         if (id && sub === 'submit' && m === 'POST') return ok(this.submit(id, body, caller, role));
         if (id && sub === 'review' && m === 'POST') return ok(this.review(id, body, caller, role));
         if (id && sub === 'readiness' && m === 'POST') return ok(await this.readiness(id, body, caller, role));
+        if (id && sub === 'products' && m === 'GET') return ok(this.products(id, role));
+        if (id && sub === 'products' && m === 'PUT') return ok(this.productAction(id, caller, role, (ctx) => ({ message: saveProducts(ctx, body) })));
+        if (id && sub === 'pricing' && !subId && m === 'POST') return ok(this.productAction(id, caller, role, (ctx) => ({ version: setPricing(ctx, body) })), 201);
+        if (id && sub === 'pricing' && subId && action === 'cancel' && m === 'POST') return ok(this.productAction(id, caller, role, (ctx) => ({ version: cancelPricing(ctx, subId, body) })));
+        if (id && sub === 'pricing' && subId && action === 'decision' && m === 'POST') return ok(this.productAction(id, caller, role, (ctx) => ({ version: decidePricing(ctx, subId, body) })));
       }
       if (resource === 'notifications') {
         if (!id && m === 'GET') return ok(this.load().notifications);
@@ -364,6 +362,7 @@ export class MerchantServer {
       mid: mid ? toMidView(mid) : null,
       midIssue: application.status === 'operational' && !mid ? (issue?.detail ?? 'No live MID has been assigned.') : null,
       mccChangeNeedsRisk: this.riskApproved(db, application.merchantId),
+      productGaps: productPhase(application.status) === 'onboarding' ? onboardingGaps(db, application, this.now()) : null,
     };
   }
 
@@ -588,11 +587,14 @@ export class MerchantServer {
 
     switch (body?.action) {
       case 'start_configuration':
-        move('risk_approved', 'cs_configuration', 'CS configuration started');
+        move('risk_approved', 'cs_configuration', 'Product & Payment Config started');
         break;
       case 'set_item': {
         const stageStatus: Record<ReadinessStage, ApplicationStatus> = { configuration: 'cs_configuration', integration: 'integration', go_live: 'go_live_verification' };
         if (!(body.stage in stageStatus) || app.status !== stageStatus[body.stage]) fail(409, 'INVALID_TRANSITION', { message: 'This checklist is not open at the current stage.' });
+        if (body.stage === 'configuration' && DERIVED_CHECKLIST.includes(body.key)) {
+          fail(409, 'INVALID_TRANSITION', { message: 'This item is set automatically from Product & Payment Config.' });
+        }
         const item = r[body.stage].find((i) => i.key === body.key);
         if (!item) fail(404, 'NOT_FOUND');
         item!.done = body.done === true;
@@ -601,16 +603,28 @@ export class MerchantServer {
         this.event(app, caller, role, `${item!.done ? 'Completed' : 'Reopened'}: ${item!.label}`, null, null);
         break;
       }
-      case 'generate_keys':
+      case 'generate_keys': {
+        // The onboarding handoff: products, pricing and settlement must be complete, in guided mode too.
+        if (app.status === 'cs_configuration') {
+          const gaps = onboardingGaps(db, app, now);
+          if (gaps.length) {
+            fail(409, 'PRODUCT_CONFIG_INCOMPLETE', {
+              message: `Finish Product & Payment Config first: ${gaps.map((g) => g.message).join(' ')}`,
+              errors: gaps.map((g) => ({ section: 'pricing', field: `products.${g.methodCode ?? 'any'}`, message: g.message })),
+            });
+          }
+          syncDerivedChecklist(this.productContext(db, app, caller, role));
+        }
         requireDone('configuration');
         move('cs_configuration', 'keys_generated', 'Production keys generated');
         r.keySet = { reference: `KS-${randomToken(3).toUpperCase()}`, generatedAt: now, environment: 'production', simulated: true };
         this.notify(db, 'configuration_ready', app, merchant, ['cs', 'sales'], {
           title: `Configuration ready: ${merchant.legalName} · ${cname}`,
-          body: `CS configuration is complete and production keys are generated for ${app.id}. Merchant integration can start.`,
+          body: `Product & Payment Config is complete and production keys are generated for ${app.id}. Merchant integration can start.`,
           to: [merchant.primaryContact.email, TEAM_MAILBOX.cs],
         });
         break;
+      }
       case 'start_integration':
         move('keys_generated', 'integration', 'Merchant integration started');
         break;
@@ -883,6 +897,39 @@ export class MerchantServer {
       readBy: [],
     });
     db.notifications = db.notifications.slice(0, 300);
+  }
+
+  // ------------------------------------------------- Product & Payment Config
+
+  private products(id: string, role: StaffRole) {
+    const db = this.load();
+    return productView(db, this.findApplication(db, id), role, this.now());
+  }
+
+  /** Runs a product, settlement or pricing change and saves it with its history entries in one write. */
+  private productAction<T extends object>(id: string, caller: Caller, role: StaffRole, run: (ctx: ProductContext) => T) {
+    const db = this.load();
+    const app = this.findApplication(db, id);
+    const result = run(this.productContext(db, app, caller, role));
+    app.updatedAt = this.now();
+    this.save(db);
+    return { ...result, view: productView(db, app, role, this.now()) };
+  }
+
+  private productContext(db: MerchantDb, app: CountryApplication, caller: Caller, role: StaffRole): ProductContext {
+    const merchant = this.findMerchant(db, app.merchantId);
+    return {
+      db,
+      app,
+      caller,
+      role,
+      now: this.now(),
+      record: (text, opts) => this.event(app, opts?.system ? null : caller, opts?.system ? 'system' : role, text, null, null, opts?.comment),
+      notify: (event, audience, title, body) => {
+        db.notifications.unshift({ id: `NT-${db.seq.notification++}`, at: this.now(), event, title, body, applicationId: app.id, merchantId: merchant.id, country: app.country, audience, readBy: [] });
+        db.notifications = db.notifications.slice(0, 300);
+      },
+    };
   }
 
   /** A notification about the merchant as a whole (no application); it links to the merchant. */

@@ -11,6 +11,7 @@ import {
 } from '../../core/merchants/merchant-models';
 import { REGISTRATION_COUNTRIES, countryName } from '../../core/merchants/onboarding-config';
 import { StaffRoleService } from '../../core/merchants/staff-role.service';
+import { productPhase } from '../../core/merchants/products';
 import { GlobalFilters } from '../../core/merchants/global-filters.service';
 import { Icon } from '../../shared/icon';
 import { StatusBadge, fmtDate, fmtRelative } from '../../shared/merchant-ui';
@@ -45,6 +46,13 @@ export class MerchantList {
   protected readonly statusOptions = Object.entries(APPLICATION_STATUS_LABEL) as [ApplicationStatus, string][];
   protected readonly globalOptions = Object.entries(GLOBAL_STATUS_LABEL) as [GlobalMerchantStatus, string][];
   protected readonly countryName = countryName;
+
+  /** After onboarding handoff: one country opens its products page; several open the merchant page. */
+  protected productsLink(m: MerchantSummary): string[] | null {
+    const handedOff = m.applications.filter((a) => productPhase(a.status) === 'post_handoff');
+    if (!handedOff.length) return null;
+    return handedOff.length === 1 ? ['/applications', handedOff[0].id, 'products'] : ['/merchants', m.id];
+  }
   protected readonly date = fmtDate;
   protected readonly rel = fmtRelative;
 

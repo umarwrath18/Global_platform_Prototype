@@ -3,6 +3,10 @@ import { AuthService } from '../../core/auth/auth.service';
 import { MerchantApi, toMerchantError } from '../../core/merchants/merchant-api.service';
 import { ApplicationStatus, ChecklistItem, CountryApplication, ReadinessAction, ReadinessStage } from '../../core/merchants/merchant-models';
 import { rulesFor } from '../../core/merchants/onboarding-config';
+import { ProductGap } from '../../core/merchants/products';
+
+/** Configuration items set automatically from Product & Payment Config (not ticked by hand). */
+const DERIVED_KEYS = new Set(['payment_methods', 'pricing_loaded']);
 import { Icon } from '../../shared/icon';
 import { isStrictValidation } from '../../core/merchants/validation-mode';
 import { fmtDateTime } from '../../shared/merchant-ui';
@@ -33,6 +37,9 @@ export class ReadinessPanel {
   readonly canAct = input(false);
   /** A suspended merchant can be prepared but can't go live until Risk reactivates it. */
   readonly suspended = input(false);
+  /** During Product & Payment Config: what still stops "Issue production keys". */
+  readonly productGaps = input<ProductGap[] | null>(null);
+  protected readonly derived = DERIVED_KEYS;
   readonly changed = output<{ application: CountryApplication; message?: string }>();
 
   protected readonly busy = signal<string | null>(null);
@@ -40,17 +47,13 @@ export class ReadinessPanel {
   protected readonly dateTime = fmtDateTime;
 
   protected readonly cfg = computed(() => rulesFor(this.application()));
-  protected readonly pricing = computed(() =>
-    this.cfg()
-      .paymentMethods.map((m) => ({ m, line: this.application().data.pricing.find((p) => p.code === m.code) }))
-      .filter((x) => x.line?.enabled),
-  );
+
 
   protected readonly stages = computed<StageView[]>(() => {
     const i = ORDER.indexOf(this.application().status);
     const state = (start: number, end: number): StageView['state'] => (i >= end ? 'done' : i >= start ? 'current' : 'upcoming');
     return [
-      { key: 'configuration', title: 'CS configuration', description: 'Set up settlement, payment methods and pricing for the country.', state: state(0, 2), checklist: 'configuration' },
+      { key: 'configuration', title: 'Product & Payment Config', description: 'Switch on products, then set settlement and pricing for the country.', state: state(0, 2), checklist: 'configuration' },
       { key: 'keys', title: 'Production keys', description: 'Issued once setup is complete.', state: i >= 2 ? 'done' : 'upcoming', checklist: null },
       { key: 'integration', title: 'Merchant integration', description: 'The merchant connects to Mobi with their production keys.', state: state(2, 4), checklist: 'integration' },
       { key: 'go_live', title: 'Go-live verification', description: 'Final checks before the country goes live.', state: state(4, 5), checklist: 'go_live' },

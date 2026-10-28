@@ -29,7 +29,9 @@
           <div class="stage-head">
             <span class="dot" aria-hidden="true">@if (s.state === 'done') {<app-icon name="check" [size]="13" />}</span>
             <div>
-              <h3>{{ s.title }} <span class="sr-only">({{ s.state }})</span></h3>
+              <h3>{{ s.title }} <span class="sr-only">({{ s.state }})</span>
+                @if (s.key === 'configuration' && a.status === 'cs_configuration' && productGaps()?.length) {<span class="gap-count" [attr.aria-label]="productGaps()!.length + ' open items'">{{ productGaps()!.length }}</span>}
+              </h3>
               <p>{{ s.description }}</p>
             </div>
           </div>
@@ -38,9 +40,7 @@
             <div class="config-summary">
               <span><strong>Country</strong> {{ cfg().name }}</span>
               <span><strong>Currency</strong> {{ a.currency }}</span>
-              <span><strong>Methods</strong>
-                @for (x of pricing(); track x.m.code; let last = $last) {<span>{{ x.m.name }} {{ x.line!.mdr }}%{{ last ? '' : ', ' }}</span>}
-              </span>
+              <span>Products, settlement and pricing are set in Product &amp; Payment Config below.</span>
             </div>
           }
 
@@ -50,8 +50,9 @@
                 @for (item of items(stage); track item.key) {
                   <li>
                     <label [class.done]="item.done">
-                      <input type="checkbox" [checked]="item.done" [disabled]="!checklistOpen(stage) || !!busy()" (change)="toggle(stage, item, $any($event.target).checked)" />
+                      <input type="checkbox" [checked]="item.done" [disabled]="!checklistOpen(stage) || !!busy() || (stage === 'configuration' && derived.has(item.key))" (change)="toggle(stage, item, $any($event.target).checked)" />
                       <span>{{ item.label }}
+                        @if (stage === 'configuration' && derived.has(item.key)) {<span class="who">Set automatically from Product &amp; Payment Config</span>}
                         @if (item.done && item.doneBy) {<span class="who">{{ item.doneBy }} · {{ dateTime(item.doneAt!) }}</span>}
                       </span>
                     </label>
@@ -76,10 +77,15 @@
           @if (canAct()) {
             @if (s.key === 'configuration' && a.status === 'cs_configuration') {
               <div class="stage-actions">
-                <button type="button" class="btn primary" [disabled]="!canAdvance('configuration') || !!busy()" (click)="run({ action: 'generate_keys' }, 'generate_keys', 'Production keys issued')">
+                <button type="button" class="btn primary" [disabled]="!canAdvance('configuration') || !!productGaps()?.length || !!busy()" (click)="run({ action: 'generate_keys' }, 'generate_keys', 'Production keys issued')">
                   @if (busy() === 'generate_keys') {<span class="spinner" aria-hidden="true"></span>} @else {<app-icon name="key" [size]="16" />}Issue production keys
                 </button>
-                @if (!allDone('configuration')) {<span class="hint">{{ strict ? 'Complete every item first.' : 'Open items will be marked complete.' }}</span>}
+                @if (productGaps()?.length) {
+                  <div class="gap-list" role="status">
+                    <strong>Finish Product &amp; Payment Config first:</strong>
+                    <ul>@for (g of productGaps(); track $index) {<li>{{ g.message }}</li>}</ul>
+                  </div>
+                } @else if (!allDone('configuration')) {<span class="hint">{{ strict ? 'Complete every item first.' : 'Open items will be marked complete.' }}</span>}
               </div>
             }
             @if (s.key === 'integration' && a.status === 'keys_generated') {

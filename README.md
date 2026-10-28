@@ -106,6 +106,29 @@ outcome (merchant page → MCC history). Suspended merchants can still request M
 To try it, load the clearly labelled test fixture: `mobiDemo.loadMccTestFixture()`, then reload.
 Its entries are test data, not approved Mobi, scheme or regulatory rules.
 
+**Product & Payment Config.** The onboarding stage after Risk approval (formerly "CS configuration")
+sets up what each country MID offers, in two steps:
+1. **Products:** switch PayIn products on or off (the country's configured payment methods) and set
+   a settlement cycle (T+0 to T+5) for each saved PayIn product. **No PayOut methods have been
+   approved, so PayOut shows "No payout methods configured" and stays disabled.** Settlement is a
+   product setting: saving it never creates or changes a pricing version and needs no approval.
+2. **Pricing:** MDR % only (no fees, tiers or techniques), in versions with effective dates and
+   statuses (pending approval, scheduled, active, superseded, rejected, cancelled). Unpriced
+   switched-on products appear as "Not priced" rows with "Set pricing". The editor opens inline.
+
+"Issue production keys" is the onboarding handoff. It stays blocked, in guided and strict mode,
+until at least one product is on, every switched-on product has pricing in effect and every PayIn
+product has a settlement cycle; the missing items are listed. During onboarding Customer Success
+changes everything and it applies when saved. After the handoff, Sales / Operations change products
+and settlement, and pricing changes wait for **FinOps** (a prototype-only "View as" option, not a
+login), who approves or rejects them; a late approval takes effect when approved. A product with
+active pricing can't be switched off after onboarding; switching off cancels pending or scheduled
+pricing (during onboarding, after a confirmation, any pricing). Every save is recorded in the
+application history. Until products are first saved, they are shown from the Risk-approved
+application: its MDRs become legacy pricing only where the history records the approval and the
+MDR is in range; no settlement cycle is assumed. There is no standalone pricing page or popup.
+After onboarding, open Merchants → the card icon on a row, or a country's "Products & pricing" link.
+
 **Data upgrade.** The first request with this build upgrades existing merchant data in place
 (schema revision 3, still `version: 2`): it copies the original to `mobi.gp.merchantdb.backup.r2`
 first, adds entities, regions and MIDs, and changes nothing else. Operational countries get an MID

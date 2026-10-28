@@ -4,7 +4,7 @@ import { AuthServer } from './auth-server';
 import { MerchantEntity } from './merchant-identity';
 import { MerchantDb, MerchantServer } from './merchant-server';
 import { DEMO_PASSWORD } from './seed';
-import { FlakyStorage } from './testing/merchant-test-data';
+import { completeProductConfig, FlakyStorage } from './testing/merchant-test-data';
 
 const KEY = 'mobi.gp.merchantdb';
 const AUTH_KEY = 'mobi.gp.mockdb';
@@ -24,9 +24,10 @@ describe('go-live and live MIDs', () => {
   const tick = async (id: string, stage: string, keys: string[]) => {
     for (const key of keys) expect((await ready(id, { action: 'set_item', stage, key, done: true })).status).toBe(200);
   };
-  /** Takes APP-2026-0010 (GM-100101, Thailand) from CS configuration to go-live verification. */
+  /** Takes APP-2026-0010 (GM-100101, Thailand) from Product & Payment Config to go-live verification. */
   const prepareThailand = async () => {
-    await tick('APP-2026-0010', 'configuration', ['settlement_account', 'payment_methods', 'pricing_loaded', 'merchant_portal']);
+    await completeProductConfig(call, 'APP-2026-0010');
+    await tick('APP-2026-0010', 'configuration', ['settlement_account', 'merchant_portal']);
     await ready('APP-2026-0010', { action: 'generate_keys' });
     await ready('APP-2026-0010', { action: 'start_integration' });
     await tick('APP-2026-0010', 'integration', ['docs_shared', 'sandbox_tests', 'webhook_verified']);

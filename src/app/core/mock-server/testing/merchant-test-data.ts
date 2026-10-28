@@ -1,5 +1,6 @@
 import { emptyApplicationData } from '../../merchants/application-rules';
-import { ApplicationData, CountryApplication } from '../../merchants/merchant-models';
+import { ApplicationData, CountryApplication, StaffRole } from '../../merchants/merchant-models';
+import { ProductPricingView } from '../../merchants/products';
 import { ONBOARDING_COUNTRIES } from '../../merchants/onboarding-config';
 import { buildMerchantSeed } from '../merchant-seed';
 import type { MerchantDb, MerchantRecord } from '../merchant-server';
@@ -107,4 +108,26 @@ export function completeApplicationData(country: string, legalName: string): App
   d.documents = cfg.documents.filter((x) => x.required).map((x, i) => ({ id: `d${i}`, type: x.type, fileName: 'a.pdf', sizeKb: 10, uploadedAt: 0, sample: true }));
   d.pricing = cfg.paymentMethods.map((m, i) => ({ code: m.code, enabled: i === 0, mdr: m.defaultMdr }));
   return d;
+}
+
+type Call = (method: string, path: string, body?: unknown, role?: StaffRole) => Promise<{ status: number; body: any }>;
+
+/**
+ * Completes Product & Payment Config as Customer Success (test only): keeps the switched-on
+ * products (or switches on the first one), gives each PayIn product a T+1 settlement cycle and
+ * prices any unpriced product at the method's lowest allowed MDR.
+ */
+export async function completeProductConfig(call: Call, applicationId: string) {
+  const view = (await call('GET', `/api/applications/${applicationId}/products`, null, 'cs')).body as ProductPricingView;
+  const anyOn = view.config.products.some((p) => p.enabled);
+  const products = view.config.products.map((p, i) => ({ methodCode: p.methodCode, enabled: anyOn ? p.enabled : i === 0 }));
+  const settlement = Object.fromEntries(products.filter((p) => p.enabled).map((p) => [p.methodCode, view.config.settlement[p.methodCode] ?? 'T+1']));
+  const saved = await call('PUT', `/api/applications/${applicationId}/products`, { products, settlement, revision: view.config.revision }, 'cs');
+  if (saved.status !== 200 && saved.body?.message !== 'There are no changes to save.') throw new Error(`Saving products failed: ${JSON.stringify(saved.body)}`);
+  const after = (await call('GET', `/api/applications/${applicationId}/products`, null, 'cs')).body as ProductPricingView;
+  for (const gap of after.gaps.filter((g) => g.issue === 'pricing')) {
+    const method = after.methods.find((m) => m.code === gap.methodCode)!;
+    const priced = await call('POST', `/api/applications/${applicationId}/pricing`, { methodCode: method.code, mdrPct: method.minMdr }, 'cs');
+    if (priced.status !== 201) throw new Error(`Pricing failed: ${JSON.stringify(priced.body)}`);
+  }
 }

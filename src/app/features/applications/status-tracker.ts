@@ -8,7 +8,7 @@ interface Step {
 }
 
 const READINESS: { status: ApplicationStatus; label: string }[] = [
-  { status: 'cs_configuration', label: 'CS configuration' },
+  { status: 'cs_configuration', label: 'Product & Payment Config' },
   { status: 'keys_generated', label: 'Production keys' },
   { status: 'integration', label: 'Merchant integration' },
   { status: 'go_live_verification', label: 'Go-live verification' },

@@ -98,7 +98,7 @@ export class PortalShell {
 
   protected readonly roleOptions = Object.entries(STAFF_ROLE_LABEL) as [StaffRole, string][];
   protected readonly roleLabel = STAFF_ROLE_LABEL;
-  protected readonly shortRole: Record<StaffRole, string> = { sales: 'Sales / Ops', risk: 'Risk', cs: 'Customer Success' };
+  protected readonly shortRole: Record<StaffRole, string> = { sales: 'Sales / Ops', risk: 'Risk', cs: 'Customer Success', finops: 'FinOps' };
   protected readonly countries = Object.values(ONBOARDING_COUNTRIES);
   protected readonly currencies = [...new Set(Object.values(ONBOARDING_COUNTRIES).map((c) => c.currency))];
   protected readonly ranges = Object.entries(DATE_RANGE_LABEL) as [DateRange, string][];

@@ -17,6 +17,8 @@ import { Icon } from '../../shared/icon';
 import { StatusBadge, fmtDate, fmtDateTime } from '../../shared/merchant-ui';
 import { ApplicationForm } from './application-form';
 import { ApplicationSummaryView } from './application-summary';
+import { ProductPaymentConfig } from '../products/product-payment-config';
+import { productPhase } from '../../core/merchants/products';
 import { ReadinessPanel } from './readiness-panel';
 import { ReviewPanel } from './review-panel';
 import { StatusTracker } from './status-tracker';
@@ -37,7 +39,7 @@ const NEXT_OWNER: Partial<Record<ApplicationStatus, { role: StaffRole; text: str
 @Component({
   selector: 'app-application-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Icon, StatusBadge, StatusTracker, ApplicationForm, ApplicationSummaryView, ReviewPanel, ReadinessPanel],
+  imports: [RouterLink, Icon, StatusBadge, StatusTracker, ApplicationForm, ApplicationSummaryView, ReviewPanel, ReadinessPanel, ProductPaymentConfig],
   templateUrl: './application-page.html',
   styleUrl: './application-page.scss',
 })
@@ -50,6 +52,7 @@ export class ApplicationPage implements HasUnsavedChanges {
   readonly id = input.required<string>();
 
   private readonly form = viewChild(ApplicationForm);
+  private readonly products = viewChild(ProductPaymentConfig);
 
   protected readonly detail = signal<ApplicationDetail | null>(null);
   protected readonly loading = signal(true);
@@ -81,7 +84,7 @@ export class ApplicationPage implements HasUnsavedChanges {
   }
 
   hasUnsavedChanges() {
-    return this.form()?.hasUnsavedChanges() ?? false;
+    return (this.form()?.hasUnsavedChanges() ?? false) || (this.products()?.hasUnsavedChanges() ?? false);
   }
 
   protected async load(id = this.id()) {
@@ -108,6 +111,14 @@ export class ApplicationPage implements HasUnsavedChanges {
   protected onDecided(app: CountryApplication) {
     this.replace(app);
     this.flash(app.status === 'risk_approved' ? 'Approved. Customer Success has been notified.' : app.status === 'returned' ? 'Returned to Sales / Operations' : 'Application rejected');
+  }
+
+  /** Product & Payment Config is shown from setup onwards (CS during onboarding, then Sales / Operations and FinOps). */
+  protected readonly showProducts = computed(() => !!this.app() && productPhase(this.app()!.status) !== 'proposal');
+
+  /** Product changes can complete the onboarding gate and its automatic checklist items. */
+  protected onProductsChanged() {
+    void this.load();
   }
 
   protected onReadiness(e: { application: CountryApplication; message?: string }) {

@@ -4,6 +4,7 @@ import { isEmail, isPhone, validateRegistrationNumber } from '../../core/merchan
 import { MerchantApi, MerchantClientError, toMerchantError } from '../../core/merchants/merchant-api.service';
 import { MCC_OUTCOME_LABEL, mccCountryCheck, mccLabel } from '../../core/merchants/mcc';
 import { MccService } from '../../core/merchants/mcc.service';
+import { productPhase } from '../../core/merchants/products';
 import { HistoryEvent, MerchantDetail, READINESS_STATUSES, STAFF_ROLE_LABEL } from '../../core/merchants/merchant-models';
 import { REGISTRATION_COUNTRIES, countryName } from '../../core/merchants/onboarding-config';
 import { StaffRoleService } from '../../core/merchants/staff-role.service';
@@ -60,6 +61,7 @@ export class MerchantDetailPage {
   }
   protected readonly roleLabel = { ...STAFF_ROLE_LABEL, system: 'System' } as Record<HistoryEvent['role'], string>;
   protected readonly mccLabel = mccLabel;
+  protected readonly handedOff = (status: Parameters<typeof productPhase>[0]) => productPhase(status) === 'post_handoff';
   protected readonly mccOutcomeLabel = MCC_OUTCOME_LABEL;
   protected readonly teamLabel = (role: string | null) => (role ? (STAFF_ROLE_LABEL as Record<string, string>)[role] ?? role : '');
 

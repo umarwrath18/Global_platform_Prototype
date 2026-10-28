@@ -32,7 +32,7 @@
           <p class="body">{{ n.body }}</p>
           <div class="channels">
             <span><app-icon name="users" [size]="14" />{{ audience(n.audience) }}</span>
-            <span><app-icon name="mail" [size]="14" />Emailed to {{ n.email.to.join(', ') }}</span>
+            @if (n.email; as e) {<span><app-icon name="mail" [size]="14" />Emailed to {{ e.to.join(', ') }}</span>} @else {<span><app-icon name="bell" [size]="14" />In-app only</span>}
             @if (n.applicationId) {
               <a [routerLink]="['/applications', n.applicationId]" (click)="open(n)">View application</a>
             } @else {

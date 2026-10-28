@@ -1,0 +1,101 @@
+@let v = view();
+@let canEdit = v.can.editPricing;
+<section class="panel-card step-card" aria-labelledby="pricing-title">
+  <header class="step-head">
+    <span class="step-num" aria-hidden="true">2</span>
+    <h2 id="pricing-title">Pricing · {{ v.countryName }}</h2>
+    <div class="step-tools">
+      <label class="toggle-line">
+        <input type="checkbox" role="switch" [checked]="history()" (change)="history.set($any($event.target).checked)" />
+        Show version history
+      </label>
+      @if (canEdit) {
+        <button type="button" class="btn sm" [disabled]="open() || !anyEnabled() || productsDirty()" (click)="openEditor({ flow: 'payin', methodCode: null })" [title]="productsDirty() ? 'Save or discard product changes first' : !anyEnabled() ? 'Switch on and save a product first' : ''">
+          <app-icon name="plus" [size]="14" />Add pricing
+        </button>
+      }
+    </div>
+  </header>
+
+  @if (productsDirty() && canEdit) {
+    <p class="step-note"><app-icon name="info" [size]="14" />Save or discard your product changes before changing pricing.</p>
+  }
+
+  <div class="table-wrap">
+    <table class="data-table pricing-table">
+      <thead>
+        <tr>
+          <th scope="col">Payment method</th>
+          <th scope="col">Flow</th>
+          <th scope="col">Pricing</th>
+          <th scope="col">Effective dates</th>
+          <th scope="col">Status</th>
+          <th scope="col"><span class="sr-only">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (u of unpriced(); track u.code) {
+          <tr class="unpriced" [class.active-row]="editor()?.methodCode === u.code">
+            <td>{{ u.name }}</td>
+            <td>{{ flowLabel[u.flow] }}</td>
+            <td class="muted">No pricing yet</td>
+            <td class="muted">–</td>
+            <td><span class="status warning">Not priced</span></td>
+            <td class="row-actions">
+              @if (canEdit && !u.pending) {
+                <button type="button" class="btn sm" [disabled]="open() || productsDirty()" (click)="openEditor({ flow: u.flow, methodCode: u.code })">Set pricing</button>
+              } @else if (u.pending) {
+                <span class="muted small">Waiting for FinOps</span>
+              }
+            </td>
+          </tr>
+        }
+        @for (x of rows(); track x.id) {
+          <tr [class.active-row]="editor()?.methodCode === x.methodCode && x.status === 'active'" [class.faded]="x.status === 'superseded' || x.status === 'cancelled' || x.status === 'rejected'">
+            <td>
+              {{ x.method?.name ?? x.methodCode }}
+              @if (x.source === 'legacy_application') {<span class="tag" title="Risk-approved MDR from the country application">From application</span>}
+            </td>
+            <td>{{ flowLabel[x.flow] }}</td>
+            <td class="mono">{{ x.mdrPct }}% MDR</td>
+            <td>{{ range(x) }}</td>
+            <td><span class="status" [class]="'status ' + tone[x.status]">{{ statusLabel[x.status] }}</span></td>
+            <td class="row-actions">
+              @if (x.status === 'active' && canEdit) {
+                <button type="button" class="btn sm ghost" [disabled]="open() || productsDirty() || !!busy()" (click)="openEditor({ flow: x.flow, methodCode: x.methodCode, mdrPct: x.mdrPct })">Edit</button>
+              }
+              @if ((x.status === 'pending_approval' || x.status === 'scheduled') && canEdit) {
+                <button type="button" class="btn sm ghost" [disabled]="open() || !!busy()" (click)="cancelVersion(x)">Cancel</button>
+              }
+              @if (x.status === 'pending_approval' && v.can.decidePricing) {
+                <button type="button" class="btn sm" [disabled]="!!busy()" (click)="rejecting.set(rejecting() === x.id ? null : x.id)">Reject</button>
+                <button type="button" class="btn sm primary" [disabled]="!!busy()" (click)="decide(x, 'approve')">@if (busy() === x.id) {<span class="spinner" aria-hidden="true"></span>}Approve</button>
+              }
+            </td>
+          </tr>
+          @if (rejecting() === x.id) {
+            <tr class="decision-row">
+              <td colspan="6">
+                <div class="decision">
+                  <label for="reject-{{ x.id }}">Reason for rejecting <span class="req">*</span></label>
+                  <input id="reject-{{ x.id }}" class="f-input" maxlength="1000" [value]="comment()" (input)="comment.set($any($event.target).value)" />
+                  <button type="button" class="btn sm danger-outline" [disabled]="!!busy()" (click)="decide(x, 'reject')">Reject pricing</button>
+                </div>
+              </td>
+            </tr>
+          }
+        } @empty {
+          @if (!unpriced().length) {
+            <tr><td colspan="6" class="muted empty-row">{{ anyEnabled() ? 'No pricing to show.' : 'Switch on and save a product to set its pricing.' }}</td></tr>
+          }
+        }
+      </tbody>
+    </table>
+  </div>
+
+  @if (error(); as e) {<div class="alert danger compact panel-alert" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
+
+  @if (editor(); as p) {
+    <app-pricing-editor [view]="v" [preset]="p" (saved)="onSaved($event)" (closed)="closeEditor()" />
+  }
+</section>

@@ -4,7 +4,7 @@ import { StaffRole } from './merchant-models';
 const ROLE_KEY = 'mobi.gp.demoActingRole';
 
 /**
- * PROTOTYPE ONLY. Lets a tester act as Sales/Ops, Risk or CS without separate logins.
+ * PROTOTYPE ONLY. Lets a tester act as Sales/Ops, Risk, CS or FinOps without separate logins.
  * The role is sent to the simulated backend, which enforces it. In production the role
  * comes from the signed-in user's permissions and this control is removed.
  */
@@ -25,7 +25,7 @@ export class StaffRoleService {
   private read(): StaffRole {
     try {
       const v = localStorage.getItem(ROLE_KEY);
-      return v === 'risk' || v === 'cs' ? v : 'sales';
+      return v === 'risk' || v === 'cs' || v === 'finops' ? v : 'sales';
     } catch {
       return 'sales';
     }
