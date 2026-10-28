@@ -50,6 +50,11 @@ export class MerchantDetailPage {
   protected readonly countryName = countryName;
   protected readonly date = fmtDate;
   protected readonly dateTime = fmtDateTime;
+  /** Live MIDs by application ID. */
+  private readonly mids = computed(() => new Map((this.detail()?.mids ?? []).map((m) => [m.applicationId, m])));
+  protected midFor(applicationId: string) {
+    return this.mids().get(applicationId) ?? null;
+  }
   protected readonly roleLabel = { ...STAFF_ROLE_LABEL, system: 'System' } as Record<HistoryEvent['role'], string>;
 
   protected readonly canSuspend = computed(() => (this.roles.role() === 'sales' || this.roles.role() === 'risk') && this.detail()?.merchant.globalStatus === 'active' && this.detail()?.merchant.lifecycleStatus !== 'suspended');

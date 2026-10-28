@@ -29,6 +29,16 @@
   font-variant-numeric: tabular-nums;
 }
 
+.mid-note {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+
+  &.warn {
+    color: var(--warning);
+  }
+}
+
 .edit-actions {
   justify-content: flex-end;
   margin-top: 16px;

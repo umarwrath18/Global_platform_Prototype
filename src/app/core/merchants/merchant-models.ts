@@ -212,7 +212,11 @@ export interface HistoryEvent {
 export interface CountryApplication {
   id: string;
   merchantId: string;
+  /** Internal merchant entity (ME) the application is for. Absent on older records: the merchant's parent entity. Never shown. */
+  entityId?: string;
   country: string;
+  /** Region for the live MID, stored when the application is created. Never derived from an MID string. */
+  regionCode?: string;
   currency: string;
   status: ApplicationStatus;
   data: ApplicationData;
@@ -243,6 +247,8 @@ export interface ApplicationSummary {
   submissionCount: number;
   createdAt: number;
   updatedAt: number;
+  /** Live MID issued for this application, if any. */
+  liveMid: Pick<RegionalMidView, 'mid' | 'source'> | null;
 }
 
 export interface MerchantSummary extends GlobalMerchant {
@@ -250,15 +256,35 @@ export interface MerchantSummary extends GlobalMerchant {
   lastUpdatedAt: number;
 }
 
+/** A live regional MID as staff see it. Region and country come from the record, never from the MID string. */
+export interface RegionalMidView {
+  mid: string;
+  regionCode: string;
+  country: string;
+  environment: 'live';
+  /** `migrated`: assigned by the data upgrade from recorded go-live evidence, not at go-live itself. */
+  source: 'go_live' | 'migrated';
+  issuedAt: number;
+  /** For migrated MIDs: when the recorded go-live happened. */
+  goLiveEvidenceAt: number | null;
+  applicationId: string | null;
+}
+
 export interface MerchantDetail {
   merchant: GlobalMerchant;
   applications: CountryApplication[];
   lifecycleEvents: MerchantLifecycleEvent[];
+  /** Live regional MIDs of the merchant's entities. */
+  mids: RegionalMidView[];
 }
 
 export interface ApplicationDetail {
   application: CountryApplication;
   merchant: GlobalMerchant;
+  /** The live MID issued when this application went live, if any. */
+  mid: RegionalMidView | null;
+  /** Set when the application is operational but no MID could be assigned safely. */
+  midIssue: string | null;
 }
 
 export type ReviewDecision = 'approve' | 'return' | 'reject';
@@ -318,6 +344,11 @@ export type MerchantApiErrorCode =
   | 'MERCHANT_SUSPENDED'
   | 'PERMISSION_REQUIRED'
   | 'CONFIG_CONFLICT'
+  | 'MID_CONFLICT'
+  | 'PARENT_NOT_OPERATIONAL'
+  | 'MIGRATION_PENDING'
+  | 'DATA_UNREADABLE'
+  | 'DATA_VERSION_UNSUPPORTED'
   | 'NOT_FOUND';
 
 export interface MerchantApiError {

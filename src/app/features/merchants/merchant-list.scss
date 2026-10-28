@@ -132,6 +132,17 @@
   }
 }
 
+.chip-mid {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+
+  &.warn {
+    color: var(--warning);
+  }
+}
+
 .cc {
   display: inline-grid;
   place-items: center;

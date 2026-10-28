@@ -32,7 +32,10 @@ export const AUTH_POLICY = {
 
 const DB_VERSION = 4;
 
-interface AccountRec extends SeedAccount {}
+interface AccountRec extends SeedAccount {
+  /** GMID that created this account at go-live. Only on accounts created after this field existed. */
+  merchantId?: string;
+}
 interface UserRec extends Omit<SeedUser, 'status'> {
   status: UserStatus;
   passwordHash: string;
@@ -501,17 +504,28 @@ export class AuthServer {
    * Activates a country on a merchant's Global Account after go-live, creating the account
    * (with no users) if the merchant doesn't have one yet. Returns the Global Account ID.
    */
-  async activateCountry(accountId: string | null, accountName: string, countryCode: string): Promise<string> {
+  /**
+   * Safe to repeat for the same go-live: `merchantId` finds an account an earlier attempt created
+   * before its merchant record was saved, and a country that is already active is left as it is
+   * (no second audit event). A new account's ID is unique among existing accounts and never one of
+   * `reservedIds`, so it can't collide with an ID merchant data still refers to.
+   */
+  async activateCountry(accountId: string | null, accountName: string, countryCode: string, opts: { merchantId?: string; reservedIds?: string[] } = {}): Promise<string> {
     await this.ensureSeeded();
     const db = this.load();
+    const { merchantId } = opts;
     let account = accountId ? db.accounts.find((a) => a.id === accountId) : undefined;
+    if (!account && merchantId) account = db.accounts.find((a) => a.merchantId === merchantId);
     if (!account) {
-      const next = Math.max(5000, ...db.accounts.map((a) => Number(a.id.replace(/\D/g, '')) || 0)) + 1;
-      account = { id: `GA-${next}`, name: accountName, status: 'active', countries: [] };
+      const taken = new Set([...db.accounts.map((a) => a.id), ...(opts.reservedIds ?? [])]);
+      let next = Math.max(5000, ...[...taken].map((id) => Number(id.replace(/\D/g, '')) || 0)) + 1;
+      while (taken.has(`GA-${next}`)) next++;
+      account = { id: `GA-${next}`, name: accountName, status: 'active', countries: [], ...(merchantId ? { merchantId } : {}) };
       db.accounts.push(account);
       this.audit(db, 'ACCOUNT_CREATED', { accountId: account.id, detail: 'merchant_go_live' });
     }
     const existing = account.countries.find((c) => c.code === countryCode);
+    if (existing?.status === 'active') return account.id;
     if (existing) existing.status = 'active';
     else account.countries.push({ code: countryCode, status: 'active' });
     this.audit(db, 'ACCOUNT_COUNTRY_ACTIVATED', { accountId: account.id, detail: countryCode });

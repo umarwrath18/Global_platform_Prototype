@@ -39,6 +39,9 @@ export class MockBackend {
         await this.countryConfig.resetAll();
       },
       resetMerchants: () => this.merchants.resetAll(),
+      // Merchant data upgrade (schema revision 3): status, flagged records, and a manual restore.
+      merchantDataReport: () => this.merchants.dataReport(),
+      restoreMerchantBackup: () => this.merchants.restoreBackup(),
       resetCountryConfig: () => this.countryConfig.resetAll(),
       strictValidation: (on: boolean) => setStrictValidation(on),
     };

@@ -84,6 +84,22 @@ Every change needs a reason and is recorded in the change history with the perso
 Like the other team checks, this relies on the prototype's role switcher, not real permissions.
 Data is stored separately under `mobi.gp.countryconfig`.
 
+**Merchant identity and live MIDs.** A GMID (`GM-…`) is the merchant shared by a parent and its
+sub-merchants; the Global Account (`GA-…`) is the separate portal login; internal merchant entities
+(`ME-…`) are never shown. Each region (for now one per country) gets at most one live MID per
+entity, issued only when CS confirms go-live. MIDs are opaque (`MID-000000001`): region and country
+are stored on the record, never read from the string. Go-live is safe to retry: repeating a
+completed go-live returns the same result, and a go-live interrupted after the Global Account was
+activated finishes on retry without a second account or MID. Sub-merchants exist only in the data
+model and its rules so far; there is no screen to create them yet.
+
+**Data upgrade.** The first request with this build upgrades existing merchant data in place
+(schema revision 3, still `version: 2`): it copies the original to `mobi.gp.merchantdb.backup.r2`
+first, adds entities, regions and MIDs, and changes nothing else. Operational countries get an MID
+only if their history records the go-live; the MID shows "Assigned during data upgrade". Records
+that can't be upgraded safely are flagged, not changed. Auth and session data are never touched.
+Data that can't be read, or that has another version, is left as it is and is no longer reseeded.
+
 **What isn't real in this build.** Everything runs in the browser, with no external services:
 - Verification results are generated from the application data.
 - Production key-set references are generated locally; no credentials are created.
@@ -104,6 +120,8 @@ mobiDemo.audit()                     // print audit events
 mobiDemo.reset()                     // restore all demo data (auth, merchants, country configuration)
 mobiDemo.resetMerchants()            // restore only the merchant data
 mobiDemo.resetCountryConfig()        // restore the default country configuration
+mobiDemo.merchantDataReport()        // upgrade status, backup, and records flagged for review
+mobiDemo.restoreMerchantBackup()     // put back the pre-upgrade copy (keeps a copy of current data)
 mobiDemo.strictValidation(true)      // full production validation (reload after)
 ```
 

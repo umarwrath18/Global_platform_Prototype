@@ -101,9 +101,15 @@
                   <ul class="apps">
                     @for (a of m.applications; track a.id) {
                       <li>
-                        <a [routerLink]="['/applications', a.id]" class="app-chip" [title]="countryName(a.country) + ' · ' + a.id">
+                        <a [routerLink]="['/applications', a.id]" class="app-chip" [title]="countryName(a.country) + ' · ' + a.id + (a.liveMid ? ' · Live MID ' + a.liveMid.mid + (a.liveMid.source === 'migrated' ? ' (assigned during data upgrade)' : '') : '')">
                           <span class="cc">{{ a.country }}</span>
                           <app-status [status]="a.status" />
+                          @if (a.liveMid; as mid) {
+                            <span class="chip-mid">{{ mid.mid }}</span>
+                            @if (mid.source === 'migrated') {<span class="tag" title="Assigned during data upgrade"><span class="sr-only">MID assigned during </span>Data upgrade</span>}
+                          } @else if (a.status === 'operational') {
+                            <span class="chip-mid warn">No MID – flagged for review</span>
+                          }
                         </a>
                       </li>
                     } @empty {

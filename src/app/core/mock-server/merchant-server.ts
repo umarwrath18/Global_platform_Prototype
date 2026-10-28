@@ -29,7 +29,10 @@ import {
   StaffRole,
 } from '../merchants/merchant-models';
 import { ONBOARDING_COUNTRIES, READINESS_CHECKLISTS, REGISTRATION_COUNTRIES } from '../merchants/onboarding-config';
+import { regionForCountry } from '../merchants/regions';
 import { randomToken } from './crypto';
+import { entityOfApplication, GoLiveIntent, goLiveBlocker, isRuleError, issueMid, MerchantEntity, parentEntityOf, RegionalMid, toMidView } from './merchant-identity';
+import { MigrationFlag, migrationFlags, MigrationLogEntry, normaliseMerchantDb, SCHEMA_REVISION } from './merchant-migrations';
 import { buildMerchantSeed } from './merchant-seed';
 import { simulateVerification } from './verification';
 
@@ -42,12 +45,29 @@ const DB_VERSION = 2;
 export type MerchantRecord = Omit<GlobalMerchant, 'globalStatus' | 'lifecycleStatus'> & Partial<Pick<GlobalMerchant, 'lifecycleStatus' | 'lifecycleReason' | 'lifecycleUpdatedAt' | 'lifecycleUpdatedBy'>>;
 
 export interface MerchantDb {
+  /** Stays 2: newer fields are optional, so older builds keep loading (and never reseed) this data. */
   version: number;
-  seq: { merchant: number; application: number; notification: number };
+  /** Highest data upgrade applied (absent = before entities and MIDs). See merchant-migrations.ts. */
+  schemaRevision?: number;
+  seq: { merchant: number; application: number; notification: number; entity?: number; mid?: number };
   merchants: MerchantRecord[];
   applications: CountryApplication[];
   notifications: PortalNotification[];
   lifecycleEvents?: MerchantLifecycleEvent[];
+  entities?: MerchantEntity[];
+  mids?: RegionalMid[];
+  goLiveIntents?: GoLiveIntent[];
+  migrationLog?: MigrationLogEntry[];
+}
+
+export interface MerchantDataReport {
+  schemaRevision: number | null;
+  backupKey: string;
+  backupPresent: boolean;
+  /** True when the last upgrade attempt could not be saved; go-live waits until it succeeds. */
+  upgradePending: boolean;
+  log: MigrationLogEntry[];
+  flags: MigrationFlag[];
 }
 
 export interface Caller {
@@ -64,8 +84,12 @@ export interface ServerReply {
 export interface AuthBridge {
   /** Validates the bearer token with the same rules as the auth APIs. */
   authenticate(token: string | null): Promise<{ ok: true; caller: Caller } | { ok: false; response: ServerReply }>;
-  /** Marks the country active on the merchant's Global Account, creating the account if needed. Returns its ID. */
-  activateCountry(accountId: string | null, accountName: string, country: string): Promise<string>;
+  /**
+   * Marks the country active on the merchant's Global Account, creating the account if needed, and
+   * returns its ID. Safe to repeat: `merchantId` finds an account created by an earlier attempt.
+   * A new account never takes an ID in `reservedIds` (IDs merchant data already refers to).
+   */
+  activateCountry(accountId: string | null, accountName: string, country: string, opts?: { merchantId?: string; reservedIds?: string[] }): Promise<string>;
 }
 
 export interface MerchantServerOptions {
@@ -123,6 +147,8 @@ export function newReadiness(): Readiness {
 export class MerchantServer {
   private readonly storageKey: string;
   private readonly now: () => number;
+  /** Set when the data upgrade could not be saved; cleared when it succeeds. */
+  private upgradePending = false;
 
   constructor(private readonly opts: MerchantServerOptions) {
     this.storageKey = opts.storageKey ?? 'mobi.gp.merchantdb';
@@ -142,9 +168,9 @@ export class MerchantServer {
     if (!auth.ok) return auth.response;
     const caller = auth.caller;
     const role = STAFF_ROLES.includes(roleHeader as StaffRole) ? (roleHeader as StaffRole) : 'sales';
-    this.ensureSeeded();
     this.opts.countryConfig?.sync();
     try {
+      this.ensureSeeded();
       const [rawPath, rawQuery] = path.split('?');
       const query = new URLSearchParams(rawQuery ?? '');
       const seg = rawPath.split('/').filter(Boolean).slice(1); // drop "api"
@@ -184,7 +210,7 @@ export class MerchantServer {
     const db = this.load();
     return db.merchants
       .map((m) => {
-        const apps = db.applications.filter((a) => a.merchantId === m.id).map((a) => this.summary(a, m));
+        const apps = db.applications.filter((a) => a.merchantId === m.id).map((a) => this.summary(db, a, m));
         const lastUpdatedAt = Math.max(m.updatedAt, ...apps.map((a) => a.updatedAt));
         return { ...this.withStatus(db, m), applications: apps, lastUpdatedAt };
       })
@@ -194,7 +220,12 @@ export class MerchantServer {
   private merchantDetail(id: string): MerchantDetail {
     const db = this.load();
     const m = this.findMerchant(db, id);
-    return { merchant: this.withStatus(db, m), applications: db.applications.filter((a) => a.merchantId === m.id).sort((a, b) => a.createdAt - b.createdAt), lifecycleEvents: (db.lifecycleEvents ?? []).filter((e) => e.merchantId === id).sort((a, b) => b.at - a.at) };
+    return {
+      merchant: this.withStatus(db, m),
+      applications: db.applications.filter((a) => a.merchantId === m.id).sort((a, b) => a.createdAt - b.createdAt),
+      lifecycleEvents: (db.lifecycleEvents ?? []).filter((e) => e.merchantId === id).sort((a, b) => b.at - a.at),
+      mids: (db.mids ?? []).filter((x) => x.gmid === m.id).map(toMidView),
+    };
   }
 
   private createMerchant(body: any, caller: Caller, role: StaffRole): GlobalMerchant {
@@ -307,14 +338,21 @@ export class MerchantServer {
     const statuses = query.get('status')?.split(',').filter(Boolean) ?? [];
     return db.applications
       .filter((a) => !statuses.length || statuses.includes(a.status))
-      .map((a) => this.summary(a, this.findMerchant(db, a.merchantId)))
+      .map((a) => this.summary(db, a, this.findMerchant(db, a.merchantId)))
       .sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
   private applicationDetail(id: string): ApplicationDetail {
     const db = this.load();
     const application = this.findApplication(db, id);
-    return { application, merchant: this.withStatus(db, this.findMerchant(db, application.merchantId)) };
+    const mid = (db.mids ?? []).find((x) => x.applicationId === application.id);
+    const issue = mid ? undefined : migrationFlags(db).find((f) => f.recordId === application.id && f.reason !== 'NO_REGION' && f.reason !== 'ORPHAN_APPLICATION');
+    return {
+      application,
+      merchant: this.withStatus(db, this.findMerchant(db, application.merchantId)),
+      mid: mid ? toMidView(mid) : null,
+      midIssue: application.status === 'operational' && !mid ? (issue?.detail ?? 'No live MID has been assigned.') : null,
+    };
   }
 
   private createApplication(merchantId: string, body: any, caller: Caller, role: StaffRole): CountryApplication {
@@ -339,7 +377,9 @@ export class MerchantServer {
     const app: CountryApplication = {
       id: `APP-${new Date(now).getUTCFullYear()}-${String(db.seq.application++).padStart(4, '0')}`,
       merchantId,
+      entityId: parentEntityOf(db.entities ?? [], merchantId)?.id,
       country,
+      regionCode: regionForCountry(country) ?? undefined,
       currency: cfg.currency,
       status: 'draft',
       data,
@@ -507,6 +547,7 @@ export class MerchantServer {
 
   private async readiness(id: string, body: ReadinessAction, caller: Caller, role: StaffRole): Promise<CountryApplication> {
     this.requireRole(role, 'cs');
+    if (body?.action === 'confirm_go_live') return this.confirmGoLive(id, caller, role);
     const db = this.load();
     const app = this.findApplication(db, id);
     const merchant = this.findMerchant(db, app.merchantId);
@@ -560,29 +601,93 @@ export class MerchantServer {
         requireDone('integration');
         move('integration', 'go_live_verification', 'Integration complete; go-live verification started');
         break;
-      case 'confirm_go_live': {
-        requireDone('go_live');
-        if (app.status !== 'go_live_verification') fail(409, 'INVALID_TRANSITION', { message: 'Go-live can only be confirmed after verification.' });
-        this.requireNotSuspended(merchant, 'go live');
-        const accountId = await this.opts.auth.activateCountry(merchant.linkedAccountId, merchant.legalName, app.country);
-        const created = merchant.linkedAccountId === null;
-        merchant.linkedAccountId = accountId;
-        merchant.updatedAt = now;
-        move('go_live_verification', 'operational', 'Go-live verified; country is operational');
-        this.event(app, null, 'system', `${cname} activated on Global Account ${accountId}${created ? ' (account created)' : ''}`, null, null);
-        this.notify(db, 'go_live', app, merchant, ['sales', 'cs', 'risk'], {
-          title: `Live: ${merchant.legalName} · ${cname}`,
-          body: `${app.id} passed go-live verification. ${cname} is now operational for ${merchant.id}.`,
-          to: [merchant.primaryContact.email, TEAM_MAILBOX.sales, TEAM_MAILBOX.cs],
-        });
-        break;
-      }
       default:
         fail(400, 'VALIDATION_FAILED', { message: 'Unknown readiness action.' });
     }
     app.updatedAt = now;
     this.save(db);
     return app;
+  }
+
+  /**
+   * Go-live, safe to retry. All checks run before anything is written. The go-live is then recorded
+   * as started, the Global Account is activated (idempotent: found again by GMID if an earlier
+   * attempt created it), and one save marks the application operational, issues the live MID and
+   * clears the record. If that save fails, a retry finishes the same go-live with no second account
+   * or MID. Repeating a completed go-live returns the existing result and writes nothing.
+   */
+  private async confirmGoLive(id: string, caller: Caller, role: StaffRole): Promise<CountryApplication> {
+    let db = this.load();
+    let app = this.findApplication(db, id);
+    if (app.status === 'operational') return app;
+    if (app.status !== 'go_live_verification') fail(409, 'INVALID_TRANSITION', { message: 'Go-live can only be confirmed after verification.' });
+    const merchant = this.findMerchant(db, app.merchantId);
+    this.requireNotSuspended(merchant, 'go live');
+    if (this.upgradePending || (db.schemaRevision ?? 0) < SCHEMA_REVISION) {
+      fail(503, 'MIGRATION_PENDING', { message: 'Merchant data could not be upgraded yet, so go-live is paused. Nothing has changed; try again shortly.' });
+    }
+    const entityId = this.goLiveChecks(db, app).entityId;
+    const open = app.readiness.go_live.filter((i) => !i.done);
+    if (open.length && this.strict) fail(409, 'CHECKLIST_INCOMPLETE', { message: `Complete: ${open.map((i) => i.label).join('; ')}.` });
+
+    const now = this.now();
+    // Guided mode: going live completes whatever is still open, and the history says so.
+    for (const item of open) {
+      Object.assign(item, { done: true, doneAt: now, doneBy: caller.name });
+      this.event(app, caller, role, `Completed: ${item.label}`, null, null);
+    }
+    db.goLiveIntents ??= [];
+    if (!db.goLiveIntents.some((i) => i.applicationId === app.id)) db.goLiveIntents.push({ applicationId: app.id, startedAt: now, by: caller.name });
+    app.updatedAt = now;
+    this.save(db);
+
+    // Every Global Account ID the merchant data refers to, so a new account can't reuse one even if
+    // the auth data no longer has it (e.g. the two stores were reset separately).
+    const reservedIds = db.merchants.map((x) => x.linkedAccountId).filter((x): x is string => !!x);
+    const accountId = await this.opts.auth.activateCountry(merchant.linkedAccountId, merchant.legalName, app.country, { merchantId: merchant.id, reservedIds });
+
+    // Re-read: another request may have changed or completed this go-live in the meantime.
+    db = this.load();
+    app = this.findApplication(db, id);
+    if (app.status === 'operational') return app;
+    if (app.status !== 'go_live_verification') fail(409, 'INVALID_TRANSITION', { message: 'Go-live can only be confirmed after verification.' });
+    const m = this.findMerchant(db, app.merchantId);
+    this.requireNotSuspended(m, 'go live');
+    const regionCode = this.goLiveChecks(db, app).regionCode;
+    const cname = ONBOARDING_COUNTRIES[app.country].name;
+    const issued = issueMid(db, { entityId, gmid: m.id, regionCode, country: app.country, source: 'go_live', issuedAt: now, issuedBy: caller.name, applicationId: app.id, demo: app.demo });
+    if (isRuleError(issued)) fail(409, issued.code, { message: issued.message });
+    const mid = issued as RegionalMid;
+
+    // A new account was created if the link changes: none before, or one the auth data no longer has.
+    const created = m.linkedAccountId !== accountId;
+    m.linkedAccountId = accountId;
+    m.updatedAt = now;
+    app.status = 'operational';
+    this.event(app, caller, role, 'Go-live verified; country is operational', 'go_live_verification', 'operational');
+    this.event(app, null, 'system', `${cname} activated on Global Account ${accountId}${created ? ' (account created)' : ''}`, null, null);
+    this.event(app, null, 'system', `Live MID ${mid.mid} issued for ${cname}`, null, null);
+    this.notify(db, 'go_live', app, m, ['sales', 'cs', 'risk'], {
+      title: `Live: ${m.legalName} · ${cname}`,
+      body: `${app.id} passed go-live verification. ${cname} is now operational for ${m.id} with live MID ${mid.mid}.`,
+      to: [m.primaryContact.email, TEAM_MAILBOX.sales, TEAM_MAILBOX.cs],
+    });
+    db.goLiveIntents = (db.goLiveIntents ?? []).filter((i) => i.applicationId !== app.id);
+    app.updatedAt = now;
+    this.save(db);
+    return app;
+  }
+
+  /** Entity, parent/suspension gate, region and one-MID-per-region checks for a go-live. Writes nothing. */
+  private goLiveChecks(db: MerchantDb, app: CountryApplication): { entityId: string; regionCode: string } {
+    const entities = db.entities ?? [];
+    const entity = entityOfApplication(entities, app) ?? fail(409, 'INVALID_TRANSITION', { message: 'This application has no merchant entity, so it cannot go live. It has been flagged for review.' });
+    const blocked = goLiveBlocker({ merchants: db.merchants, entities, applications: db.applications }, entity.id, app.country);
+    if (blocked) fail(409, blocked.code, { message: blocked.message });
+    const regionCode = app.regionCode ?? regionForCountry(app.country) ?? fail(422, 'COUNTRY_NOT_SUPPORTED', { message: 'No region is configured for this country, so no live MID can be issued.' });
+    const held = (db.mids ?? []).find((x) => x.entityId === entity.id && x.regionCode === regionCode);
+    if (held) fail(409, 'MID_CONFLICT', { message: `This merchant entity already has live MID ${held.mid} in this region.` });
+    return { entityId: entity.id, regionCode };
   }
 
   // ---------------------------------------------------------- notifications
@@ -652,8 +757,9 @@ export class MerchantServer {
     return { ...m, lifecycleStatus: m.lifecycleStatus ?? 'active', lifecycleReason: m.lifecycleReason ?? null, lifecycleUpdatedAt: m.lifecycleUpdatedAt ?? null, lifecycleUpdatedBy: m.lifecycleUpdatedBy ?? null, globalStatus: deriveGlobalStatus(db.applications.filter((a) => a.merchantId === m.id)) };
   }
 
-  private summary(a: CountryApplication, m: MerchantRecord): ApplicationSummary {
-    return { id: a.id, merchantId: a.merchantId, merchantName: m.legalName, country: a.country, currency: a.currency, status: a.status, submissionCount: a.submissionCount, createdAt: a.createdAt, updatedAt: a.updatedAt };
+  private summary(db: MerchantDb, a: CountryApplication, m: MerchantRecord): ApplicationSummary {
+    const mid = (db.mids ?? []).find((x) => x.applicationId === a.id);
+    return { id: a.id, merchantId: a.merchantId, merchantName: m.legalName, country: a.country, currency: a.currency, status: a.status, submissionCount: a.submissionCount, createdAt: a.createdAt, updatedAt: a.updatedAt, liveMid: mid ? { mid: mid.mid, source: mid.source } : null };
   }
 
   private event(app: CountryApplication, caller: Caller | null, role: StaffRole | 'system', action: string, from: ApplicationStatus | null, to: ApplicationStatus | null, comment?: string, sections?: SectionKey[]) {
@@ -705,23 +811,105 @@ export class MerchantServer {
 
   // ---------------------------------------------------------------- storage
 
+  /** Explicit demo reset only (mobiDemo.reset / resetMerchants). Never called automatically. */
   async resetAll() {
     this.opts.storage.removeItem(this.storageKey);
     this.ensureSeeded();
   }
 
-  private ensureSeeded() {
-    const raw = this.opts.storage.getItem(this.storageKey);
-    if (raw && JSON.parse(raw).version === DB_VERSION) return;
-    this.save(buildMerchantSeed(this.now(), DB_VERSION));
+  /** Copy of the data as it was before the first upgrade to schema revision 3. Written once, never overwritten. */
+  get backupKey() {
+    return `${this.storageKey}.backup.r2`;
   }
 
-  // Re-read on every request so changes made in another tab apply immediately.
+  /** Prototype/QA: upgrade status, history and records that couldn't be upgraded safely. Writes nothing beyond a normal load. */
+  dataReport(): MerchantDataReport {
+    this.ensureSeeded();
+    const db = this.load();
+    return {
+      schemaRevision: db.schemaRevision ?? null,
+      backupKey: this.backupKey,
+      backupPresent: this.opts.storage.getItem(this.backupKey) !== null,
+      upgradePending: this.upgradePending,
+      log: db.migrationLog ?? [],
+      flags: migrationFlags(db),
+    };
+  }
+
+  /** Prototype/QA, run by hand only: puts the pre-upgrade backup back, keeping a copy of the data it replaces. */
+  restoreBackup(): string {
+    const backup = this.opts.storage.getItem(this.backupKey);
+    if (backup === null) return 'There is no pre-upgrade backup to restore.';
+    const current = this.opts.storage.getItem(this.storageKey);
+    const copyKey = `${this.storageKey}.backup.pre-restore.${this.now()}`;
+    if (current !== null) this.opts.storage.setItem(copyKey, current);
+    this.opts.storage.setItem(this.storageKey, backup);
+    return `Restored the pre-upgrade backup. The data it replaced is kept under ${copyKey}. This build upgrades it again on the next request; an older build uses it as it is.`;
+  }
+
+  /**
+   * Seeds only a browser that has no merchant data. Existing data is never reseeded: unreadable
+   * data or data from another version is left in place (and backed up) and requests fail clearly.
+   */
+  private ensureSeeded() {
+    const raw = this.opts.storage.getItem(this.storageKey);
+    if (raw === null) {
+      const now = this.now();
+      this.save(normaliseMerchantDb(buildMerchantSeed(now, DB_VERSION), now).db);
+      return;
+    }
+    let version: unknown;
+    try {
+      version = JSON.parse(raw)?.version;
+    } catch {
+      fail(500, 'DATA_UNREADABLE', { message: 'Stored merchant data could not be read. It has been left unchanged.' });
+    }
+    if (version !== DB_VERSION) {
+      const key = `${this.storageKey}.backup.v${String(version)}`;
+      try {
+        if (this.opts.storage.getItem(key) === null) this.opts.storage.setItem(key, raw);
+      } catch {
+        // Backing up is best effort here; the data itself is not touched either way.
+      }
+      fail(503, 'DATA_VERSION_UNSUPPORTED', {
+        message: `Stored merchant data is from an unsupported version (${String(version)}). It has been kept unchanged. Run mobiDemo.resetMerchants() to start again with demo data.`,
+      });
+    }
+  }
+
+  // Re-read on every request so changes made in another tab apply immediately. Each read also
+  // applies the data upgrade (merchant-migrations.ts); it is saved only after a backup exists.
   private load(): MerchantDb {
-    const db = JSON.parse(this.opts.storage.getItem(this.storageKey)!) as MerchantDb;
-    db.lifecycleEvents ??= [];
-    for (const merchant of db.merchants) merchant.lifecycleStatus ??= 'active';
-    return db;
+    const raw = this.opts.storage.getItem(this.storageKey)!;
+    const stored = JSON.parse(raw) as MerchantDb;
+    const { db, changed } = normaliseMerchantDb(stored, this.now());
+    let current = db;
+    if (!changed) this.upgradePending = false;
+    else if (!this.persistUpgrade(stored, raw, db)) current = stored;
+    current.lifecycleEvents ??= [];
+    for (const merchant of current.merchants) merchant.lifecycleStatus ??= 'active';
+    return current;
+  }
+
+  /**
+   * Saves upgraded data in one write, after backing up the original the first time. If the backup
+   * or the write fails, nothing is changed: the data is served as it was and the upgrade is
+   * retried on the next request (go-live waits for it).
+   */
+  private persistUpgrade(stored: MerchantDb, raw: string, db: MerchantDb): boolean {
+    try {
+      if ((stored.schemaRevision ?? 2) < SCHEMA_REVISION && this.opts.storage.getItem(this.backupKey) === null) {
+        this.opts.storage.setItem(this.backupKey, raw);
+      }
+      // Another tab may have written in the meantime; its data is upgraded on the next read instead.
+      if (this.opts.storage.getItem(this.storageKey) !== raw) throw new Error('changed');
+      this.opts.storage.setItem(this.storageKey, JSON.stringify(db));
+      this.upgradePending = false;
+      return true;
+    } catch {
+      this.upgradePending = true;
+      return false;
+    }
   }
 
   private save(db: MerchantDb) {

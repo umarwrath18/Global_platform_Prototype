@@ -28,6 +28,10 @@
         <p class="sub meta">
           <app-status [status]="a.status" />
           <span class="id">{{ a.id }}</span>
+          @if (d.mid; as mid) {
+            <span class="dot" aria-hidden="true"></span>
+            <span>Live MID <span class="id">{{ mid.mid }}</span>@if (mid.source === 'migrated') { <span class="mid-note">(assigned during data upgrade)</span>}</span>
+          }
           <span class="dot" aria-hidden="true"></span>
           <a [routerLink]="['/merchants', m.id]">{{ m.legalName }}</a>
           <span class="dot" aria-hidden="true"></span>
@@ -56,6 +60,13 @@
       <div class="alert compact" role="note">
         <app-icon name="info" />
         <div>This is a new attempt. The earlier {{ cfg()!.name }} application, <a [routerLink]="['/applications', a.previousApplicationId]">{{ a.previousApplicationId }}</a>, was rejected and is kept for reference.</div>
+      </div>
+    }
+
+    @if (d.midIssue; as issue) {
+      <div class="alert warning compact" role="status">
+        <app-icon name="alert-circle" />
+        <div><strong>No live MID</strong>{{ issue }}</div>
       </div>
     }
 
