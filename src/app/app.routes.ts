@@ -65,6 +65,17 @@ export const routes: Routes = [
         loadComponent: () => import('./features/applications/application-page').then((m) => m.ApplicationPage),
       },
       {
+        path: 'configuration/countries',
+        title: 'Country configuration · Mobi Global Platform',
+        loadComponent: () => import('./features/configuration/country-config-list').then((m) => m.CountryConfigList),
+      },
+      {
+        path: 'configuration/countries/:code',
+        title: 'Country configuration · Mobi Global Platform',
+        canDeactivate: [unsavedChangesGuard],
+        loadComponent: () => import('./features/configuration/country-config-detail').then((m) => m.CountryConfigDetailPage),
+      },
+      {
         path: 'notifications',
         title: 'Notifications · Mobi Global Platform',
         loadComponent: () => import('./features/notifications/notifications').then((m) => m.Notifications),

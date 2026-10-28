@@ -41,7 +41,7 @@
 
     <section class="panel-card tracker">
       <app-status-tracker [status]="a.status" />
-      @if (next(); as n) {
+      @if (!goLiveOnHold() && next(); as n) {
         <div class="next" [class.mine]="n.role === role()">
           <app-icon [name]="n.role === role() ? 'arrow-right' : 'clock'" [size]="16" />
           <span><strong>{{ n.role === role() ? "You're up." : 'Next:' }}</strong> {{ n.text }}</span>
@@ -56,6 +56,16 @@
       <div class="alert compact" role="note">
         <app-icon name="info" />
         <div>This is a new attempt. The earlier {{ cfg()!.name }} application, <a [routerLink]="['/applications', a.previousApplicationId]">{{ a.previousApplicationId }}</a>, was rejected and is kept for reference.</div>
+      </div>
+    }
+
+    @if (suspended()) {
+      <div class="alert danger" role="status">
+        <app-icon name="alert-circle" />
+        <div>
+          <strong>{{ m.legalName }} is suspended</strong>Go-live and new country applications are on hold until Risk reactivates the merchant. This application can still be edited, submitted, reviewed by Risk and prepared by Customer Success.
+          <a [routerLink]="['/merchants', m.id]">View the merchant</a>
+        </div>
       </div>
     }
 
@@ -79,7 +89,7 @@
           <div>
             <strong>Risk rejected this application</strong>
             {{ rejectionReason() }}
-            @if (role() === 'sales') {
+            @if (role() === 'sales' && !suspended()) {
               <div class="alert-actions">
                 <button type="button" class="btn sm" (click)="startNewApplication()" [disabled]="retrying()">
                   @if (retrying()) {<span class="spinner" aria-hidden="true"></span>}Start a new {{ cfg()!.name }} application
@@ -114,7 +124,7 @@
             <app-review-panel [application]="a" (decided)="onDecided($event)" />
           }
           @if (inReadiness()) {
-            <app-readiness-panel [application]="a" [canAct]="role() === 'cs'" (changed)="onReadiness($event)" />
+            <app-readiness-panel [application]="a" [canAct]="role() === 'cs'" [suspended]="suspended()" (changed)="onReadiness($event)" />
           }
           @if (['draft', 'returned'].includes(a.status) && role() !== 'sales') {
             <p class="hint-line"><app-icon name="lock" [size]="14" />View only. Sales / Operations can edit draft and returned applications.</p>

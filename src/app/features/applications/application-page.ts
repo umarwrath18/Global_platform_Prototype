@@ -66,6 +66,9 @@ export class ApplicationPage implements HasUnsavedChanges {
   protected readonly app = computed(() => this.detail()?.application ?? null);
   protected readonly cfg = computed(() => (this.app() ? ONBOARDING_COUNTRIES[this.app()!.country] : null));
   protected readonly role = this.roles.role;
+  protected readonly suspended = computed(() => this.detail()?.merchant.lifecycleStatus === 'suspended');
+  /** The only onboarding step a suspension stops for an existing application. */
+  protected readonly goLiveOnHold = computed(() => this.suspended() && this.app()?.status === 'go_live_verification');
   protected readonly editable = computed(() => this.role() === 'sales' && ['draft', 'returned'].includes(this.app()?.status ?? ''));
   protected readonly reviewing = computed(() => this.role() === 'risk' && this.app()?.status === 'pending_risk_review');
   protected readonly inReadiness = computed(() => READINESS_STATUSES.includes(this.app()?.status as ApplicationStatus));

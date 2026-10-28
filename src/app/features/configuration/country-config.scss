@@ -1,0 +1,150 @@
+// Shared by the Country configuration list and detail pages.
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  align-items: start;
+}
+
+.col-main .panel-card + .panel-card,
+.col-main .panel-card + form,
+.col-main form + .panel-card {
+  margin-top: 16px;
+}
+
+.alert {
+  margin-bottom: 16px;
+}
+
+.rule-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.req-tag {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.opt-tag {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.config-form fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.config-form legend {
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.check {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.row-card {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+}
+
+.row-title {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.edit-actions {
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.timeline {
+  max-height: 640px;
+  margin: 0;
+  padding: 8px 20px 16px;
+  overflow-y: auto;
+  list-style: none;
+
+  li {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 0 10px 18px;
+    border-left: 2px solid var(--surface-muted);
+
+    &::before {
+      content: '';
+      position: absolute;
+      left: -6px;
+      top: 15px;
+      width: 10px;
+      height: 10px;
+      border: 2px solid var(--surface);
+      border-radius: 50%;
+      background: var(--mobi-blue);
+    }
+  }
+
+  .t-empty {
+    border: 0;
+    padding-left: 0;
+    color: var(--text-muted);
+
+    &::before {
+      display: none;
+    }
+  }
+}
+
+.t-action {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.t-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.t-comment {
+  margin: 2px 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+@media (max-width: 1000px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

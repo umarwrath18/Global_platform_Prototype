@@ -117,8 +117,6 @@
 
 
 .header-actions { align-items: center; flex-wrap: wrap; }
-.lifecycle-pill { display: inline-flex; align-items: center; padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
-.lifecycle-pill.suspended { color: var(--danger-text, #a3212b); background: var(--danger-soft, #fff0f0); border: 1px solid var(--danger-border, #f2c3c6); }
 .danger-outline { color: var(--danger-text, #a3212b); border-color: var(--danger-border, #e7a8ad); }
 .modal-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 20px; background: rgb(15 23 42 / 48%); }
 .lifecycle-modal { width: min(100%, 520px); max-height: min(90vh, 760px); overflow-y: auto; box-shadow: 0 20px 60px rgb(15 23 42 / 20%); }

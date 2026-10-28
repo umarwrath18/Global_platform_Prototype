@@ -266,4 +266,79 @@ describe('MerchantServer', () => {
     expect(after.filter((n) => n.audience.includes('risk') && !n.readBy.includes('risk'))).toHaveLength(0);
     expect(after.some((n) => n.audience.includes('sales') && !n.readBy.includes('sales'))).toBe(true);
   });
+
+  describe('merchant lifecycle', () => {
+    const lifecycle = (id: string, action: string, role: StaffRole, reason = 'Chargeback ratio above threshold') =>
+      call<GlobalMerchant>('POST', `/api/merchants/${id}/lifecycle`, { action, reason }, role);
+
+    it('lets Sales/Ops or Risk suspend and only Risk reactivate, with a recorded reason', async () => {
+      expect((await lifecycle('GM-100101', 'suspend', 'cs')).status).toBe(403);
+      expect((await lifecycle('GM-100101', 'suspend', 'sales', 'no')).status).toBe(400);
+      // A merchant with no operational country cannot be suspended.
+      expect((await lifecycle('GM-100103', 'suspend', 'risk')).body).toMatchObject({ code: 'INVALID_TRANSITION' });
+
+      const suspended = await lifecycle('GM-100101', 'suspend', 'sales');
+      expect(suspended.body).toMatchObject({ lifecycleStatus: 'suspended', lifecycleReason: 'Chargeback ratio above threshold', globalStatus: 'active' });
+      expect((await lifecycle('GM-100101', 'suspend', 'risk')).status).toBe(409);
+      expect((await lifecycle('GM-100101', 'reactivate', 'sales')).status).toBe(403);
+      expect((await lifecycle('GM-100101', 'reactivate', 'risk', 'Reviewed and cleared')).body).toMatchObject({ lifecycleStatus: 'active', lifecycleReason: null });
+
+      const events = (await call<MerchantDetail>('GET', '/api/merchants/GM-100101')).body.lifecycleEvents;
+      expect(events.map((e) => `${e.action}:${e.role}`)).toEqual(['reactivated:risk', 'suspended:sales']);
+    });
+
+    it('blocks new countries and go-live while suspended, but lets existing applications continue review', async () => {
+      const ph = (await call<CountryApplication>('POST', '/api/merchants/GM-100101/applications', { country: 'PH' })).body.id;
+      const data = completeData('PH', 'Tanjung Global Trading Sdn Bhd');
+      data.business.localRegistrationNumber = 'CS201912345';
+      data.business.taxId = '123456789';
+      await lifecycle('GM-100101', 'suspend', 'risk');
+
+      // New merchant-level activity is refused.
+      expect((await call('POST', '/api/merchants/GM-100101/applications', { country: 'TH' })).body).toMatchObject({ code: 'MERCHANT_SUSPENDED' });
+
+      // The existing PH application can be edited, submitted and approved by Risk.
+      expect((await call('PUT', `/api/applications/${ph}`, { data })).status).toBe(200);
+      expect((await call<CountryApplication>('POST', `/api/applications/${ph}/submit`, {})).body.status).toBe('pending_risk_review');
+      expect((await call<CountryApplication>('POST', `/api/applications/${ph}/review`, { decision: 'approve', evidenceReviewed: true }, 'risk')).body.status).toBe('risk_approved');
+
+      // CS can work through readiness for APP-2026-0010, up to go-live.
+      const ready = (action: object) => call<CountryApplication>('POST', '/api/applications/APP-2026-0010/readiness', action, 'cs');
+      const tick = async (stage: string, keys: string[]) => {
+        for (const key of keys) expect((await ready({ action: 'set_item', stage, key, done: true })).status).toBe(200);
+      };
+      await tick('configuration', ['settlement_account', 'payment_methods', 'pricing_loaded', 'merchant_portal']);
+      expect((await ready({ action: 'generate_keys' })).body.status).toBe('keys_generated');
+      expect((await ready({ action: 'start_integration' })).body.status).toBe('integration');
+      await tick('integration', ['docs_shared', 'sandbox_tests', 'webhook_verified']);
+      expect((await ready({ action: 'request_go_live' })).body.status).toBe('go_live_verification');
+      await tick('go_live', ['live_transaction', 'settlement_test', 'merchant_signoff']);
+
+      // Go-live itself is refused and changes nothing.
+      expect(await ready({ action: 'confirm_go_live' })).toMatchObject({ status: 409, body: { code: 'MERCHANT_SUSPENDED' } });
+      const held = (await call<any>('GET', '/api/applications/APP-2026-0010')).body.application as CountryApplication;
+      expect(held.status).toBe('go_live_verification');
+      expect(held.history.some((h) => /activated on Global Account/.test(h.action))).toBe(false);
+
+      await lifecycle('GM-100101', 'reactivate', 'risk', 'Reviewed and cleared');
+      expect((await ready({ action: 'confirm_go_live' })).body.status).toBe('operational');
+      expect((await call<MerchantDetail>('GET', '/api/merchants/GM-100101')).body.merchant.lifecycleStatus).toBe('active');
+    });
+
+    it('lets Risk return or reject applications of a suspended merchant', async () => {
+      const id = (await call<CountryApplication>('POST', '/api/merchants/GM-100101/applications', { country: 'PH' })).body.id;
+      const data = completeData('PH', 'Tanjung Global Trading Sdn Bhd');
+      data.business.localRegistrationNumber = 'CS201912345';
+      data.business.taxId = '123456789';
+      await call('POST', `/api/applications/${id}/submit`, { data });
+      await lifecycle('GM-100101', 'suspend', 'sales');
+      const returned = await call<CountryApplication>('POST', `/api/applications/${id}/review`, { decision: 'return', comment: 'Hold until the suspension review ends.', sections: ['documents'], evidenceReviewed: true }, 'risk');
+      expect(returned.body.status).toBe('returned');
+      expect((await call<CountryApplication>('POST', `/api/applications/${id}/submit`, {})).body.status).toBe('pending_risk_review');
+      const rejected = await call<CountryApplication>('POST', `/api/applications/${id}/review`, { decision: 'reject', comment: 'Merchant exited during suspension review.', evidenceReviewed: true }, 'risk');
+      expect(rejected.body.status).toBe('rejected');
+      // Starting a replacement application is new activity, so it waits for reactivation.
+      expect((await call('POST', '/api/merchants/GM-100101/applications', { country: 'PH' })).body).toMatchObject({ code: 'MERCHANT_SUSPENDED' });
+    });
+  });
 });

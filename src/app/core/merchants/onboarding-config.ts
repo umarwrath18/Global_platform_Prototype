@@ -2,9 +2,9 @@ import { COUNTRY_CATALOGUE } from '../mock-server/seed';
 import { ReadinessStage } from './merchant-models';
 
 // Per-country onboarding rules. NOTE: these values are illustrative and have NOT been
-// approved by Mobi Risk, Legal or Product. They stand in for the Country, Currency,
-// Payment Method and Pricing configuration modules (out of scope for Batch 2); replace
-// this file with the real configuration service when it exists.
+// approved by Mobi Risk, Legal or Product. They are the defaults for Country Configuration:
+// at runtime `ONBOARDING_COUNTRIES` holds the live configuration (see applyCountryConfigs).
+// Currency, Payment Method and Pricing configuration are still fixed here.
 
 export interface FieldRule {
   key: string;
@@ -42,6 +42,8 @@ export interface CountryOnboardingConfig {
   directors: { required: boolean; minCount: number; ownershipThresholdPct: number | null; note: string };
   documents: DocumentRule[];
   paymentMethods: PaymentMethodRule[];
+  /** False pauses new country applications. Existing applications continue. Default: true. */
+  onboardingEnabled?: boolean;
 }
 
 const pm = (code: string, name: string, kind: PaymentMethodRule['kind'], defaultMdr: number, minMdr: number, maxMdr: number): PaymentMethodRule => ({
@@ -179,6 +181,38 @@ export const ONBOARDING_COUNTRIES: Record<string, CountryOnboardingConfig> = {
     ],
   },
 };
+
+const DEFAULT_COUNTRIES: Record<string, CountryOnboardingConfig> = JSON.parse(JSON.stringify(ONBOARDING_COUNTRIES));
+
+/** The shipped defaults, before any Country Configuration changes. Returns a copy. */
+export function defaultCountryConfig(code: string): CountryOnboardingConfig | undefined {
+  const cfg = DEFAULT_COUNTRIES[code];
+  return cfg ? JSON.parse(JSON.stringify(cfg)) : undefined;
+}
+
+/**
+ * Replaces the live rules with configuration loaded from the (simulated) backend. Entries are
+ * updated in place so existing imports of ONBOARDING_COUNTRIES see the change.
+ */
+export function applyCountryConfigs(configs: CountryOnboardingConfig[]) {
+  for (const cfg of configs) {
+    if (!ONBOARDING_COUNTRIES[cfg.code]) continue; // Adding countries is not supported yet.
+    const target = ONBOARDING_COUNTRIES[cfg.code];
+    for (const key of Object.keys(target)) delete (target as any)[key];
+    Object.assign(target, JSON.parse(JSON.stringify(cfg)));
+  }
+}
+
+/** Rules an application is shown against: its submission snapshot once submitted, otherwise the live configuration. */
+export function rulesFor(app: { country: string; status: string; rulesSnapshot?: CountryOnboardingConfig }): CountryOnboardingConfig {
+  const editable = app.status === 'draft' || app.status === 'returned';
+  return (!editable && app.rulesSnapshot) || ONBOARDING_COUNTRIES[app.country];
+}
+
+/** Restores the shipped defaults (used by tests and demo resets). */
+export function resetCountryConfigs() {
+  applyCountryConfigs(Object.keys(DEFAULT_COUNTRIES).map((code) => defaultCountryConfig(code)!));
+}
 
 /** Registration countries a Global Merchant may be incorporated in (onboarding is limited to the list above). */
 export const REGISTRATION_COUNTRIES: { code: string; name: string }[] = [

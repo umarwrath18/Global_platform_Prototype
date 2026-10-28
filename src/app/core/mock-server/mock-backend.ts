@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { from, mergeMap, Observable, timer } from 'rxjs';
 import { DemoInboxService } from '../../shared/demo-inbox.service';
 import { AuthServer } from './auth-server';
+import { CountryConfigServer } from './country-config-server';
 import { MerchantServer } from './merchant-server';
 import { isStrictValidation, setStrictValidation } from '../merchants/validation-mode';
 
@@ -19,7 +20,9 @@ export class MockBackend {
     sendEmail: (email) => this.inbox.deliver(email),
   });
 
-  readonly merchants = new MerchantServer({ storage: localStorage, auth: this.server, strictValidation: isStrictValidation });
+  readonly countryConfig = new CountryConfigServer({ storage: localStorage, auth: this.server });
+
+  readonly merchants = new MerchantServer({ storage: localStorage, auth: this.server, strictValidation: isStrictValidation, countryConfig: this.countryConfig });
 
   constructor() {
     (window as any).mobiDemo = {
@@ -29,12 +32,14 @@ export class MockBackend {
       enableUser: (loginId: string) => this.server.setUserStatus(loginId, 'active'),
       expireSessions: () => this.server.expireSessions(),
       audit: async () => console.table((await this.server.auditLog()).map((e) => ({ ...e, at: new Date(e.at).toISOString() }))),
-      // Restores both the auth and the merchant demo data (they are linked through Global Accounts).
+      // Restores the auth, merchant and country configuration demo data.
       reset: async () => {
         await this.server.resetAll();
         await this.merchants.resetAll();
+        await this.countryConfig.resetAll();
       },
       resetMerchants: () => this.merchants.resetAll(),
+      resetCountryConfig: () => this.countryConfig.resetAll(),
       strictValidation: (on: boolean) => setStrictValidation(on),
     };
   }
@@ -54,7 +59,9 @@ export const mockBackendInterceptor: HttpInterceptorFn = (req, next) => {
     const token = req.headers.get('Authorization')?.replace(/^Bearer /, '') ?? null;
     const handle = MerchantServer.handles(req.url)
       ? () => backend.merchants.handle(req.method, req.urlWithParams, req.body, token, req.headers.get('X-Demo-Role'))
-      : () => backend.server.handle(req.method, req.urlWithParams, req.body, token);
+      : CountryConfigServer.handles(req.url)
+        ? () => backend.countryConfig.handle(req.method, req.urlWithParams, req.body, token, req.headers.get('X-Demo-Role'))
+        : () => backend.server.handle(req.method, req.urlWithParams, req.body, token);
     const sub = timer(LATENCY_MS)
       .pipe(mergeMap(() => from(handle())))
       .subscribe({

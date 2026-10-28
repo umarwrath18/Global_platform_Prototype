@@ -37,13 +37,17 @@ const GLOBAL_TONE: Record<GlobalMerchantStatus, Tone> = {
 export class StatusBadge {
   readonly status = input<ApplicationStatus | null>(null);
   readonly globalStatus = input<GlobalMerchantStatus | null>(null);
+  /** A suspended merchant shows as Suspended instead of its derived Global status. */
+  readonly suspended = input(false);
   readonly prefix = input<string>('');
 
   protected readonly label = computed(() => {
+    if (this.suspended()) return 'Suspended';
     const g = this.globalStatus();
     return g ? GLOBAL_STATUS_LABEL[g] : APPLICATION_STATUS_LABEL[this.status() ?? 'draft'];
   });
   protected readonly tone = computed(() => {
+    if (this.suspended()) return 'status danger';
     const g = this.globalStatus();
     return 'status ' + (g ? GLOBAL_TONE[g] : APPLICATION_TONE[this.status() ?? 'draft']);
   });

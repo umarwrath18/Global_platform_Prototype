@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, output, si
 import { AuthService } from '../../core/auth/auth.service';
 import { MerchantApi, toMerchantError } from '../../core/merchants/merchant-api.service';
 import { ApplicationStatus, ChecklistItem, CountryApplication, ReadinessAction, ReadinessStage } from '../../core/merchants/merchant-models';
-import { ONBOARDING_COUNTRIES } from '../../core/merchants/onboarding-config';
+import { rulesFor } from '../../core/merchants/onboarding-config';
 import { Icon } from '../../shared/icon';
 import { isStrictValidation } from '../../core/merchants/validation-mode';
 import { fmtDateTime } from '../../shared/merchant-ui';
@@ -31,13 +31,15 @@ export class ReadinessPanel {
 
   readonly application = input.required<CountryApplication>();
   readonly canAct = input(false);
+  /** A suspended merchant can be prepared but can't go live until Risk reactivates it. */
+  readonly suspended = input(false);
   readonly changed = output<{ application: CountryApplication; message?: string }>();
 
   protected readonly busy = signal<string | null>(null);
   protected readonly error = signal<string | null>(null);
   protected readonly dateTime = fmtDateTime;
 
-  protected readonly cfg = computed(() => ONBOARDING_COUNTRIES[this.application().country]);
+  protected readonly cfg = computed(() => rulesFor(this.application()));
   protected readonly pricing = computed(() =>
     this.cfg()
       .paymentMethods.map((m) => ({ m, line: this.application().data.pricing.find((p) => p.code === m.code) }))

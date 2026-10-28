@@ -1,0 +1,62 @@
+<main class="page">
+  <ol class="crumbs">
+    <li>Global configuration</li>
+    <li aria-current="page">Countries</li>
+  </ol>
+
+  <div class="portal-head">
+    <div>
+      <h1>Country configuration</h1>
+      <p class="sub">Onboarding rules for each country. New and draft applications follow these rules. Submitted applications keep the rules they were submitted under.</p>
+    </div>
+  </div>
+
+  @if (!service.canEdit()) {
+    <div class="alert compact" role="note">
+      <app-icon name="lock" />
+      <div>View only. Only Sales / Operations can change country configuration.</div>
+    </div>
+  }
+
+  <section class="panel-card">
+    @if (loading() && !countries().length) {
+      <div class="skeleton-rows" aria-busy="true" aria-label="Loading countries"><span></span><span></span><span></span></div>
+    } @else if (error()) {
+      <div class="empty-state" role="alert">
+        <div class="icon-tile"><app-icon name="alert-circle" /></div>
+        <h3>We couldn't load country configuration</h3>
+        <p>Check your connection and try again.</p>
+        <button type="button" class="btn" (click)="load()">Try again</button>
+      </div>
+    } @else {
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Country</th>
+              <th scope="col">Currency</th>
+              <th scope="col">New applications</th>
+              <th scope="col">Required documents</th>
+              <th scope="col">Required bank fields</th>
+              <th scope="col">Directors / owners</th>
+              <th scope="col">Last change</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (c of countries(); track c.config.code) {
+              <tr>
+                <td><a class="row-link" [routerLink]="['/configuration/countries', c.config.code]">{{ c.config.name }}</a> <span class="tag">{{ c.config.code }}</span></td>
+                <td>{{ c.config.currency }}</td>
+                <td><span class="status" [class.success]="c.onboardingEnabled" [class.warning]="!c.onboardingEnabled">{{ c.onboardingEnabled ? 'Open' : 'Paused' }}</span></td>
+                <td>{{ requiredDocs(c) }} of {{ c.config.documents.length }}</td>
+                <td>{{ requiredBank(c) }} of {{ c.config.bankFields.length }}</td>
+                <td>{{ c.config.directors.required ? 'At least ' + c.config.directors.minCount : 'Not required' }}</td>
+                <td class="muted">{{ c.updatedAt ? date(c.updatedAt) + ' · ' + c.updatedBy : 'Default rules' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+</main>

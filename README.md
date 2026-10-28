@@ -68,6 +68,22 @@ production rules. Run `mobiDemo.strictValidation(false)` to go back to guided mo
 Use guided mode for demos and walkthroughs. Use strict mode for formal acceptance testing
 against the original brief (acceptance criterion 7).
 
+**Merchant suspension.** Sales / Ops or Risk can suspend a merchant that has at least one
+operational country; only Risk can reactivate it. While a merchant is suspended, the simulated
+backend refuses new country applications and go-live (`MERCHANT_SUSPENDED`). Existing applications
+continue their controlled review: Sales / Ops can edit and submit them, Risk can approve, return or
+reject, and CS can work through readiness up to the go-live step. Suspension does not change the
+linked Global Account or its portal logins.
+
+**Country configuration (MVP feature 5).** Open **Countries** in the sidebar to see each country's
+onboarding rules: availability, business types, registration and tax ID rules, bank fields,
+documents and director/owner rules, with a change history. New and draft applications follow the
+live rules; a submitted application keeps a snapshot of the rules it was submitted under.
+Only **Sales / Operations** (chosen in "View as") can edit; Risk and CS see the page as view only.
+Every change needs a reason and is recorded in the change history with the person and team.
+Like the other team checks, this relies on the prototype's role switcher, not real permissions.
+Data is stored separately under `mobi.gp.countryconfig`.
+
 **What isn't real in this build.** Everything runs in the browser, with no external services:
 - Verification results are generated from the application data.
 - Production key-set references are generated locally; no credentials are created.
@@ -85,8 +101,9 @@ mobiDemo.disableUser('123')          // revokes only that user's sessions
 mobiDemo.enableUser('123')
 mobiDemo.expireSessions()            // simulate 30-minute idle timeout
 mobiDemo.audit()                     // print audit events
-mobiDemo.reset()                     // restore all demo data (auth + merchants)
+mobiDemo.reset()                     // restore all demo data (auth, merchants, country configuration)
 mobiDemo.resetMerchants()            // restore only the merchant data
+mobiDemo.resetCountryConfig()        // restore the default country configuration
 mobiDemo.strictValidation(true)      // full production validation (reload after)
 ```
 

@@ -39,7 +39,7 @@
           <p>{{ d.merchant.id }} · Registered in {{ countryName(d.merchant.registrationCountry) }} · {{ d.merchant.registrationNumber }}</p>
         </div>
         <div class="actions">
-          <app-status [globalStatus]="d.merchant.globalStatus" />
+          <app-status [globalStatus]="d.merchant.globalStatus" [suspended]="d.merchant.lifecycleStatus === 'suspended'" />
           <button type="button" class="btn sm" (click)="change()">Change</button>
         </div>
       </div>
@@ -75,6 +75,15 @@
       </div>
     </section>
 
+    @if (d.merchant.lifecycleStatus === 'suspended') {
+      <div class="alert danger" role="alert">
+        <app-icon name="alert-circle" />
+        <div>
+          <strong>This merchant is suspended</strong>A new country can't be added until Risk reactivates {{ d.merchant.legalName }}.
+          <a [routerLink]="['/merchants', d.merchant.id]">View the merchant</a>
+        </div>
+      </div>
+    } @else {
     <section class="panel-card">
       <div class="panel-head">
         <div>
@@ -86,6 +95,7 @@
         <app-country-picker [merchant]="d.merchant" [applications]="d.applications" (opened)="opened($event)" />
       </div>
     </section>
+    }
   } @else {
     <section class="panel-card">
       <div class="panel-body">

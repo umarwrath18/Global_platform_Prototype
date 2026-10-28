@@ -174,3 +174,5 @@ Automated: `npm test` runs 14 merchant-server unit tests (plus the 30 Batch 1 au
 8. Should editing the Global profile after submission notify Risk or require re-review?
 9. Merchant users on the linked Global Account: invitation and activation flow (out of scope here).
 10. Self-onboarding (future): the application API is role-checked per action, so a merchant-facing role can later be allowed to edit drafts and submit without changing the review flow.
+11. Country configuration is edited by Sales / Operations (decided). Every change needs a reason and is recorded with the person and team. In production this must come from real staff permissions, not the prototype's role switcher.
+12. Merchant suspension blocks new country applications and go-live. Existing applications continue: edit and submit, Risk approve/return/reject, CS readiness up to go-live (decided). Open: whether suspension should also suspend the linked Global Account and its portal logins.

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { registeredInCountry } from '../../core/merchants/application-rules';
 import { ApplicationData, CountryApplication, GlobalMerchant, SECTION_LABEL, SectionKey } from '../../core/merchants/merchant-models';
-import { ONBOARDING_COUNTRIES, countryName } from '../../core/merchants/onboarding-config';
+import { countryName, rulesFor } from '../../core/merchants/onboarding-config';
 import { Icon } from '../../shared/icon';
 import { fmtDate } from '../../shared/merchant-ui';
 
@@ -24,7 +24,7 @@ export class ApplicationSummaryView {
   readonly edit = output<SectionKey>();
 
   protected readonly d = computed(() => this.data() ?? this.application().data);
-  protected readonly cfg = computed(() => ONBOARDING_COUNTRIES[this.application().country]);
+  protected readonly cfg = computed(() => rulesFor(this.application()));
   protected readonly profile = computed(() => this.application().submittedProfile ?? this.merchant());
   protected readonly sameCountry = computed(() => registeredInCountry(this.profile(), this.application().country));
   protected readonly flagged = computed(() => new Set(this.application().status === 'returned' ? this.application().corrections?.sections ?? [] : []));

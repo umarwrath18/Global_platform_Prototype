@@ -111,12 +111,14 @@
                     }
                   </ul>
                 </td>
-                <td><app-status [globalStatus]="m.globalStatus" /></td>
+                <td><app-status [globalStatus]="m.globalStatus" [suspended]="m.lifecycleStatus === 'suspended'" /></td>
                 <td class="muted">{{ date(m.createdAt) }}</td>
                 <td class="muted" [title]="date(m.lastUpdatedAt)">{{ rel(m.lastUpdatedAt) }}</td>
                 @if (roles.role() === 'sales') {
                   <td class="row-actions">
-                    <a class="icon-action" routerLink="/merchants/expand" [queryParams]="{ merchant: m.id }" [attr.aria-label]="'Add a country for ' + m.legalName" title="Add country"><app-icon name="plus" [size]="16" /></a>
+                    @if (m.lifecycleStatus !== 'suspended') {
+                      <a class="icon-action" routerLink="/merchants/expand" [queryParams]="{ merchant: m.id }" [attr.aria-label]="'Add a country for ' + m.legalName" title="Add country"><app-icon name="plus" [size]="16" /></a>
+                    }
                   </td>
                 }
               </tr>

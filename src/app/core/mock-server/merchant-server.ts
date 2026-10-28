@@ -75,6 +75,8 @@ export interface MerchantServerOptions {
   auth: AuthBridge;
   /** When false (guided mode), missing input is recorded but never blocks a step. Default: strict. */
   strictValidation?: () => boolean;
+  /** Country Configuration; when present its stored rules are loaded before every request. */
+  countryConfig?: { sync(): void };
 }
 
 class ApiError {
@@ -141,6 +143,7 @@ export class MerchantServer {
     const caller = auth.caller;
     const role = STAFF_ROLES.includes(roleHeader as StaffRole) ? (roleHeader as StaffRole) : 'sales';
     this.ensureSeeded();
+    this.opts.countryConfig?.sync();
     try {
       const [rawPath, rawQuery] = path.split('?');
       const query = new URLSearchParams(rawQuery ?? '');
@@ -318,9 +321,11 @@ export class MerchantServer {
     this.requireRole(role, 'sales');
     const db = this.load();
     const merchant = this.findMerchant(db, merchantId);
+    this.requireNotSuspended(merchant, 'start a new country application');
     const country = str(body?.country, 2).toUpperCase();
     const cfg = ONBOARDING_COUNTRIES[country];
     if (!cfg) fail(422, 'COUNTRY_NOT_SUPPORTED', { message: 'Onboarding is not available for this country.' });
+    if (cfg.onboardingEnabled === false) fail(422, 'COUNTRY_NOT_SUPPORTED', { message: `New applications for ${cfg.name} are paused in Country configuration.` });
 
     const existing = db.applications.filter((a) => a.merchantId === merchantId && a.country === country);
     const open = existing.find((a) => a.status !== 'rejected');
@@ -424,6 +429,7 @@ export class MerchantServer {
     app.submissionCount += 1;
     app.submittedProfile = { legalName: merchant.legalName, registrationCountry: merchant.registrationCountry, registrationNumber: merchant.registrationNumber };
     app.verification = simulateVerification(merchant, app.data, now);
+    app.rulesSnapshot = JSON.parse(JSON.stringify(ONBOARDING_COUNTRIES[app.country]));
     app.corrections = null;
     app.updatedAt = now;
     const note = [str(body?.comment, 1000).trim(), errors.length ? `Submitted with ${errors.length} incomplete item${errors.length === 1 ? '' : 's'}.` : ''].filter(Boolean).join(' ') || undefined;
@@ -557,6 +563,7 @@ export class MerchantServer {
       case 'confirm_go_live': {
         requireDone('go_live');
         if (app.status !== 'go_live_verification') fail(409, 'INVALID_TRANSITION', { message: 'Go-live can only be confirmed after verification.' });
+        this.requireNotSuspended(merchant, 'go live');
         const accountId = await this.opts.auth.activateCountry(merchant.linkedAccountId, merchant.legalName, app.country);
         const created = merchant.linkedAccountId === null;
         merchant.linkedAccountId = accountId;
@@ -622,6 +629,15 @@ export class MerchantServer {
 
   private requireRole(role: StaffRole, needed: StaffRole) {
     if (role !== needed) fail(403, 'ROLE_NOT_PERMITTED', { message: `Only ${needed === 'sales' ? 'Sales / Operations' : needed === 'risk' ? 'Risk' : 'Customer Success'} can do this.` });
+  }
+
+  /**
+   * Suspension blocks new merchant-level activity (new country applications) and go-live until Risk
+   * reactivates the merchant. Existing applications continue their controlled review: drafts can be
+   * edited and submitted, Risk can approve, return or reject, and CS can work through readiness.
+   */
+  private requireNotSuspended(merchant: MerchantRecord, action: string) {
+    if (merchant.lifecycleStatus === 'suspended') fail(409, 'MERCHANT_SUSPENDED', { message: `${merchant.legalName} is suspended, so it can't ${action}. Risk must reactivate the merchant first.` });
   }
 
   private findMerchant(db: MerchantDb, id: string): MerchantRecord {

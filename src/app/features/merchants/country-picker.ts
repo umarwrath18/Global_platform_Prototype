@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { CountryConfigService } from '../../core/merchants/country-config.service';
 import { MerchantApi, MerchantClientError, toMerchantError } from '../../core/merchants/merchant-api.service';
 import { ApplicationStatus, GlobalMerchant } from '../../core/merchants/merchant-models';
 import { ONBOARDING_COUNTRIES } from '../../core/merchants/onboarding-config';
@@ -14,6 +15,7 @@ interface CountryOption {
   documents: number;
   methods: number;
   directors: boolean;
+  paused: boolean;
   open: { id: string; status: ApplicationStatus } | null;
   rejected: string | null;
 }
@@ -27,8 +29,8 @@ interface CountryOption {
     <fieldset class="countries">
       <legend class="sr-only">Onboarding country</legend>
       @for (c of options(); track c.code) {
-        <label class="c-card" [class.disabled]="!!c.open" [class.selected]="selected() === c.code">
-          <input type="radio" name="country" [value]="c.code" [disabled]="!!c.open" [checked]="selected() === c.code" (change)="selected.set(c.code)" />
+        <label class="c-card" [class.disabled]="!!c.open || c.paused" [class.selected]="selected() === c.code">
+          <input type="radio" name="country" [value]="c.code" [disabled]="!!c.open || c.paused" [checked]="selected() === c.code" (change)="selected.set(c.code)" />
           <span class="c-top">
             <span class="cc">{{ c.code }}</span>
             <span class="c-name">{{ c.name }}</span>
@@ -37,6 +39,8 @@ interface CountryOption {
           @if (c.open; as o) {
             <span class="c-note">Open application <a [routerLink]="['/applications', o.id]">{{ o.id }}</a></span>
             <app-status [status]="o.status" />
+          } @else if (c.paused) {
+            <span class="c-note warn">New applications are paused in Country configuration.</span>
           } @else {
             <span class="c-note">{{ c.documents }} documents · {{ c.methods }} payment methods{{ c.directors ? ' · directors' : '' }}</span>
             @if (c.rejected) {
@@ -139,6 +143,7 @@ interface CountryOption {
 })
 export class CountryPicker {
   private readonly api = inject(MerchantApi);
+  private readonly countryConfig = inject(CountryConfigService);
   protected readonly roles = inject(StaffRoleService);
 
   readonly merchant = input.required<GlobalMerchant>();
@@ -149,8 +154,9 @@ export class CountryPicker {
   protected readonly busy = signal(false);
   protected readonly error = signal<MerchantClientError | null>(null);
 
-  protected readonly options = computed<CountryOption[]>(() =>
-    Object.values(ONBOARDING_COUNTRIES).map((c) => {
+  protected readonly options = computed<CountryOption[]>(() => {
+    this.countryConfig.revision();
+    return Object.values(ONBOARDING_COUNTRIES).map((c) => {
       const apps = this.applications().filter((a) => a.country === c.code);
       const open = apps.find((a) => a.status !== 'rejected');
       const rejected = apps.filter((a) => a.status === 'rejected').sort((a, b) => b.createdAt - a.createdAt)[0];
@@ -161,11 +167,12 @@ export class CountryPicker {
         documents: c.documents.filter((d) => d.required).length,
         methods: c.paymentMethods.length,
         directors: c.directors.required,
+        paused: c.onboardingEnabled === false,
         open: open ? { id: open.id, status: open.status } : null,
         rejected: rejected?.id ?? null,
       };
-    }),
-  );
+    });
+  });
 
   protected readonly selectedName = computed(() => ONBOARDING_COUNTRIES[this.selected()]?.name ?? 'country');
 

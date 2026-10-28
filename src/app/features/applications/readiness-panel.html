@@ -99,10 +99,11 @@
             }
             @if (s.key === 'go_live' && a.status === 'go_live_verification') {
               <div class="stage-actions">
-                <button type="button" class="btn primary" [disabled]="!canAdvance('go_live') || !!busy()" (click)="run({ action: 'confirm_go_live' }, 'confirm_go_live', cfg().name + ' is live')">
+                <button type="button" class="btn primary" [disabled]="suspended() || !canAdvance('go_live') || !!busy()" (click)="run({ action: 'confirm_go_live' }, 'confirm_go_live', cfg().name + ' is live')">
                   @if (busy() === 'confirm_go_live') {<span class="spinner" aria-hidden="true"></span>}Go live
                 </button>
-                @if (!allDone('go_live')) {<span class="hint">{{ strict ? 'Every check must pass first.' : 'Open checks will be marked complete.' }}</span>}
+                @if (suspended()) {<span class="hint">Go-live is on hold while the merchant is suspended.</span>}
+                @else if (!allDone('go_live')) {<span class="hint">{{ strict ? 'Every check must pass first.' : 'Open checks will be marked complete.' }}</span>}
               </div>
             }
           }

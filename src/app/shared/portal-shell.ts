@@ -5,6 +5,7 @@ import { filter, map } from 'rxjs';
 import { AuthService } from '../core/auth/auth.service';
 import { DATE_RANGE_LABEL, DateRange, GlobalFilters } from '../core/merchants/global-filters.service';
 import { MerchantApi } from '../core/merchants/merchant-api.service';
+import { CountryConfigService } from '../core/merchants/country-config.service';
 import { MerchantSummary, PortalNotification, STAFF_ROLE_LABEL, StaffRole } from '../core/merchants/merchant-models';
 import { ONBOARDING_COUNTRIES } from '../core/merchants/onboarding-config';
 import { StaffRoleService } from '../core/merchants/staff-role.service';
@@ -27,6 +28,7 @@ const NAV: NavItem[] = [
   { label: 'Merchants', icon: 'store', link: '/merchants' },
   { label: 'Applications', icon: 'file', link: '/applications' },
   { label: 'Notifications', icon: 'bell', link: '/notifications' },
+  { label: 'Countries', icon: 'globe', link: '/configuration/countries' },
 ];
 
 /** Approved MVP modules not built yet: shown disabled so the roadmap is visible, never clickable. */
@@ -70,6 +72,7 @@ export class PortalShell {
   protected readonly api = inject(MerchantApi);
   protected readonly roles = inject(StaffRoleService);
   protected readonly filters = inject(GlobalFilters);
+  private readonly countryConfig = inject(CountryConfigService);
 
   private readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
 
@@ -128,6 +131,8 @@ export class PortalShell {
   });
 
   constructor() {
+    // Load the live country rules once per sign-in; the shipped defaults apply until then.
+    this.countryConfig.load().catch(() => undefined);
     effect(() => {
       this.roles.role();
       void this.api.refreshNotifications();

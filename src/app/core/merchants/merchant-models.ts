@@ -2,6 +2,8 @@
 // The UI depends only on these shapes; the simulated backend can be replaced by Mobi's
 // real merchant services without changing the screens.
 
+import type { CountryOnboardingConfig } from './onboarding-config';
+
 /** Prototype-only: the internal team the signed-in user is acting as. */
 export type StaffRole = 'sales' | 'risk' | 'cs';
 
@@ -220,6 +222,8 @@ export interface CountryApplication {
   corrections: Corrections | null;
   verification: VerificationEvidence | null;
   readiness: Readiness;
+  /** Country rules in force at the last submission. Drafts and returned applications follow the live configuration. */
+  rulesSnapshot?: CountryOnboardingConfig;
   previousApplicationId: string | null;
   submissionCount: number;
   createdAt: number;
@@ -311,6 +315,9 @@ export type MerchantApiErrorCode =
   | 'INVALID_TRANSITION'
   | 'APPLICATION_INCOMPLETE'
   | 'CHECKLIST_INCOMPLETE'
+  | 'MERCHANT_SUSPENDED'
+  | 'PERMISSION_REQUIRED'
+  | 'CONFIG_CONFLICT'
   | 'NOT_FOUND';
 
 export interface MerchantApiError {
