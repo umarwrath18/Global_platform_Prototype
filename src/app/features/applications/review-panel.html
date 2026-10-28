@@ -20,6 +20,13 @@
       </div>
     }
 
+    @if (restrictedMcc(); as m) {
+      <div class="alert warning compact" role="note">
+        <app-icon name="alert-circle" />
+        <div><strong>Restricted MCC</strong>MCC {{ m.code }} ({{ m.description }}) is restricted in {{ m.country }}. It can be approved, but needs your review.</div>
+      </div>
+    }
+
     @if (evidence(); as ev) {
       <div class="evidence">
         <div class="ev-head">

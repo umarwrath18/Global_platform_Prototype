@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, input, si
 import { RouterLink } from '@angular/router';
 import { isEmail, isPhone, validateRegistrationNumber } from '../../core/merchants/application-rules';
 import { MerchantApi, MerchantClientError, toMerchantError } from '../../core/merchants/merchant-api.service';
+import { MCC_OUTCOME_LABEL, mccCountryCheck, mccLabel } from '../../core/merchants/mcc';
+import { MccService } from '../../core/merchants/mcc.service';
 import { HistoryEvent, MerchantDetail, READINESS_STATUSES, STAFF_ROLE_LABEL } from '../../core/merchants/merchant-models';
 import { REGISTRATION_COUNTRIES, countryName } from '../../core/merchants/onboarding-config';
 import { StaffRoleService } from '../../core/merchants/staff-role.service';
@@ -30,6 +32,7 @@ const STAGES = ['draft', 'pending_risk_review', ...READINESS_STATUSES];
 export class MerchantDetailPage {
   private readonly api = inject(MerchantApi);
   protected readonly roles = inject(StaffRoleService);
+  protected readonly mccService = inject(MccService);
 
   /** Bound from the `:id` route parameter. */
   readonly id = input.required<string>();
@@ -56,6 +59,28 @@ export class MerchantDetailPage {
     return this.mids().get(applicationId) ?? null;
   }
   protected readonly roleLabel = { ...STAFF_ROLE_LABEL, system: 'System' } as Record<HistoryEvent['role'], string>;
+  protected readonly mccLabel = mccLabel;
+  protected readonly mccOutcomeLabel = MCC_OUTCOME_LABEL;
+  protected readonly teamLabel = (role: string | null) => (role ? (STAFF_ROLE_LABEL as Record<string, string>)[role] ?? role : '');
+
+  // MCC: Sales / Operations request a change once Risk has approved the merchant; Risk decides.
+  protected readonly mccForm = signal(false);
+  protected readonly mccCode = signal('');
+  protected readonly mccReason = signal('');
+  protected readonly mccComment = signal('');
+  protected readonly mccBusy = signal<string | null>(null);
+  protected readonly mccError = signal<string | null>(null);
+  /** Countries the MCC must work in: every application that isn't rejected. */
+  private readonly mccCountries = computed(() => (this.detail()?.applications ?? []).filter((a) => a.status !== 'rejected').map((a) => a.country));
+  /** Catalogue codes available in all of the merchant's countries (restricted ones included, marked). */
+  protected readonly mccCandidates = computed(() =>
+    this.mccService
+      .catalogue()
+      .entries.map((e) => ({ ...e, check: mccCountryCheck(this.mccService.catalogue(), e.code, this.mccCountries()) }))
+      .filter((e) => !e.check.unavailable.length && e.code !== this.detail()?.merchant.mcc?.code)
+      .sort((a, b) => a.code.localeCompare(b.code)),
+  );
+  protected readonly canRequestMcc = computed(() => this.roles.role() === 'sales' && !!this.detail()?.mccChangeNeedsRisk && !this.detail()?.mccRequest && this.mccService.catalogue().entries.length > 0);
 
   protected readonly canSuspend = computed(() => (this.roles.role() === 'sales' || this.roles.role() === 'risk') && this.detail()?.merchant.globalStatus === 'active' && this.detail()?.merchant.lifecycleStatus !== 'suspended');
   protected readonly canReactivate = computed(() => this.roles.role() === 'risk' && this.detail()?.merchant.lifecycleStatus === 'suspended');
@@ -123,6 +148,53 @@ export class MerchantDetailPage {
       const err = toMerchantError(e);
       this.lifecycleError.set(err.message || "We couldn't update the merchant status.");
     } finally { this.lifecycleSaving.set(false); }
+  }
+
+  protected openMccForm() {
+    this.mccForm.set(true);
+    this.mccCode.set('');
+    this.mccReason.set('');
+    this.mccError.set(null);
+  }
+
+  protected async requestMcc() {
+    if (!this.mccCode() || this.mccReason().trim().length < 10) {
+      this.mccError.set('Choose the new MCC and explain why it should change (at least 10 characters).');
+      return;
+    }
+    this.mccBusy.set('request');
+    this.mccError.set(null);
+    try {
+      await this.api.requestMccChange(this.id(), this.mccCode(), this.mccReason().trim());
+      this.mccForm.set(false);
+      await this.load();
+      this.flash('MCC change sent to Risk');
+    } catch (e) {
+      this.mccError.set(toMerchantError(e).message ?? "We couldn't send the MCC change request.");
+    } finally {
+      this.mccBusy.set(null);
+    }
+  }
+
+  protected async decideMcc(decision: 'approve' | 'reject') {
+    const request = this.detail()?.mccRequest;
+    if (!request) return;
+    if (decision === 'reject' && this.mccComment().trim().length < 10) {
+      this.mccError.set('Give the reason for rejecting (at least 10 characters).');
+      return;
+    }
+    this.mccBusy.set(decision);
+    this.mccError.set(null);
+    try {
+      await this.api.decideMccChange(this.id(), request.id, decision, this.mccComment().trim());
+      this.mccComment.set('');
+      await this.load();
+      this.flash(decision === 'approve' ? 'MCC change approved' : 'MCC change rejected');
+    } catch (e) {
+      this.mccError.set(toMerchantError(e).message ?? "We couldn't record the decision.");
+    } finally {
+      this.mccBusy.set(null);
+    }
   }
 
   protected startEdit() {

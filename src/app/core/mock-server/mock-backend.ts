@@ -4,6 +4,7 @@ import { from, mergeMap, Observable, timer } from 'rxjs';
 import { DemoInboxService } from '../../shared/demo-inbox.service';
 import { AuthServer } from './auth-server';
 import { CountryConfigServer } from './country-config-server';
+import { MccCatalogueServer } from './mcc-catalogue-server';
 import { MerchantServer } from './merchant-server';
 import { isStrictValidation, setStrictValidation } from '../merchants/validation-mode';
 
@@ -22,7 +23,9 @@ export class MockBackend {
 
   readonly countryConfig = new CountryConfigServer({ storage: localStorage, auth: this.server });
 
-  readonly merchants = new MerchantServer({ storage: localStorage, auth: this.server, strictValidation: isStrictValidation, countryConfig: this.countryConfig });
+  readonly mcc = new MccCatalogueServer({ storage: localStorage, auth: this.server });
+
+  readonly merchants = new MerchantServer({ storage: localStorage, auth: this.server, strictValidation: isStrictValidation, countryConfig: this.countryConfig, mcc: this.mcc });
 
   constructor() {
     (window as any).mobiDemo = {
@@ -43,6 +46,10 @@ export class MockBackend {
       merchantDataReport: () => this.merchants.dataReport(),
       restoreMerchantBackup: () => this.merchants.restoreBackup(),
       resetCountryConfig: () => this.countryConfig.resetAll(),
+      // MCC catalogue: empty until loaded on purpose. The test fixture is labelled and is not approved data.
+      loadMccTestFixture: () => this.mcc.loadTestFixture(),
+      loadMccCatalogue: (entries: unknown, source: { name: string; version: string }) => this.mcc.load(entries, { kind: 'approved', ...source }),
+      clearMccCatalogue: () => this.mcc.clear(),
       strictValidation: (on: boolean) => setStrictValidation(on),
     };
   }
@@ -62,7 +69,9 @@ export const mockBackendInterceptor: HttpInterceptorFn = (req, next) => {
     const token = req.headers.get('Authorization')?.replace(/^Bearer /, '') ?? null;
     const handle = MerchantServer.handles(req.url)
       ? () => backend.merchants.handle(req.method, req.urlWithParams, req.body, token, req.headers.get('X-Demo-Role'))
-      : CountryConfigServer.handles(req.url)
+      : MccCatalogueServer.handles(req.url)
+        ? () => backend.mcc.handle(req.method, req.urlWithParams, req.body, token)
+        : CountryConfigServer.handles(req.url)
         ? () => backend.countryConfig.handle(req.method, req.urlWithParams, req.body, token, req.headers.get('X-Demo-Role'))
         : () => backend.server.handle(req.method, req.urlWithParams, req.body, token);
     const sub = timer(LATENCY_MS)

@@ -44,6 +44,17 @@
           </li>
         }
       </ul>
+      <p class="nav-group">Configuration</p>
+      <ul>
+        @for (item of configuration; track item.label) {
+          <li>
+            <a [routerLink]="item.link" routerLinkActive="active" [title]="item.label" (click)="navigated()">
+              <app-icon [name]="item.icon" [size]="18" />
+              <span class="nav-label">{{ item.label }}</span>
+            </a>
+          </li>
+        }
+      </ul>
       <p class="nav-group">Coming soon</p>
       <ul>
         @for (item of later; track item.label) {

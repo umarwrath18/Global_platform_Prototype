@@ -33,7 +33,11 @@
           <div class="channels">
             <span><app-icon name="users" [size]="14" />{{ audience(n.audience) }}</span>
             <span><app-icon name="mail" [size]="14" />Emailed to {{ n.email.to.join(', ') }}</span>
-            <a [routerLink]="['/applications', n.applicationId]" (click)="open(n)">View application</a>
+            @if (n.applicationId) {
+              <a [routerLink]="['/applications', n.applicationId]" (click)="open(n)">View application</a>
+            } @else {
+              <a [routerLink]="['/merchants', n.merchantId]" (click)="open(n)">View merchant</a>
+            }
           </div>
         </li>
       } @empty {

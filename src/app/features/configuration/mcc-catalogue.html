@@ -1,0 +1,75 @@
+@let cat = catalogue();
+<main class="page">
+  <ol class="crumbs">
+    <li>Global configuration</li>
+    <li aria-current="page">MCC catalogue</li>
+  </ol>
+
+  <div class="portal-head">
+    <div>
+      <h1>MCC catalogue</h1>
+      <p class="sub">Merchant category codes and where each one can be used. A merchant's MCC is set on the parent merchant and shared by its sub-merchants.</p>
+    </div>
+  </div>
+
+  @if (cat.source?.kind === 'test_fixture') {
+    <div class="alert warning" role="note">
+      <app-icon name="alert-circle" />
+      <div><strong>Test fixture – not an approved catalogue</strong>These entries and their country availability are test data for checking the workflow. They are not approved Mobi, scheme or regulatory rules.</div>
+    </div>
+  }
+
+  <section class="panel-card">
+    @if (loading() && !cat.entries.length) {
+      <div class="skeleton-rows" aria-busy="true" aria-label="Loading MCC catalogue"><span></span><span></span><span></span></div>
+    } @else if (error()) {
+      <div class="empty-state" role="alert">
+        <div class="icon-tile"><app-icon name="alert-circle" /></div>
+        <h3>We couldn't load the MCC catalogue</h3>
+        <p>Check your connection and try again.</p>
+        <button type="button" class="btn" (click)="load()">Try again</button>
+      </div>
+    } @else if (!cat.entries.length) {
+      <div class="empty-state">
+        <div class="icon-tile"><app-icon name="list" /></div>
+        <h3>No approved MCC catalogue yet</h3>
+        <p>Until an approved catalogue is loaded, MCC isn't required for any merchant or country.</p>
+      </div>
+    } @else {
+      <div class="panel-head">
+        <div>
+          <h2>{{ cat.source!.name }}</h2>
+          <p>Version {{ cat.source!.version }} · loaded {{ dateTime(cat.source!.loadedAt) }} · {{ cat.entries.length }} codes. Restricted codes can be selected but are flagged for Risk review.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">MCC</th>
+              <th scope="col">Description</th>
+              @for (c of countries; track c.code) {<th scope="col"><abbr [title]="c.name">{{ c.code }}</abbr></th>}
+            </tr>
+          </thead>
+          <tbody>
+            @for (e of entries(); track e.code) {
+              <tr>
+                <td class="mono">{{ e.code }}</td>
+                <td>{{ e.description }}</td>
+                @for (c of countries; track c.code) {
+                  <td>
+                    @switch (e.countries[c.code]) {
+                      @case ('available') {<span class="status success">Available</span>}
+                      @case ('restricted') {<span class="status warning">Restricted</span>}
+                      @default {<span class="muted" [attr.aria-label]="'Not available in ' + c.name">–</span>}
+                    }
+                  </td>
+                }
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+</main>

@@ -76,6 +76,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/configuration/country-config-detail').then((m) => m.CountryConfigDetailPage),
       },
       {
+        path: 'configuration/mcc',
+        title: 'MCC catalogue · Mobi Global Platform',
+        loadComponent: () => import('./features/configuration/mcc-catalogue').then((m) => m.MccCataloguePage),
+      },
+      {
         path: 'notifications',
         title: 'Notifications · Mobi Global Platform',
         loadComponent: () => import('./features/notifications/notifications').then((m) => m.Notifications),

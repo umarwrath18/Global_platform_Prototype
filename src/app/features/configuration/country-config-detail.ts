@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, input, si
 import { RouterLink } from '@angular/router';
 import { CountryConfigDetail, CountryConfigInput, readCountryConfigInput, toConfigInput } from '../../core/merchants/country-config';
 import { CountryConfigService } from '../../core/merchants/country-config.service';
+import { MccService } from '../../core/merchants/mcc.service';
 import { MerchantClientError, toMerchantError } from '../../core/merchants/merchant-api.service';
 import { FieldIssue, STAFF_ROLE_LABEL } from '../../core/merchants/merchant-models';
 import { DocumentRule, FieldRule } from '../../core/merchants/onboarding-config';
@@ -21,6 +22,7 @@ import { fmtDateTime } from '../../shared/merchant-ui';
 export class CountryConfigDetailPage implements HasUnsavedChanges {
   private readonly service = inject(CountryConfigService);
   private readonly roles = inject(StaffRoleService);
+  protected readonly mcc = inject(MccService);
 
   /** Bound from the `:code` route parameter. */
   readonly code = input.required<string>();
@@ -43,6 +45,7 @@ export class CountryConfigDetailPage implements HasUnsavedChanges {
   /** The server decides; this only hides controls that would be refused. */
   protected readonly canEdit = computed(() => !!this.detail()?.canEdit);
   protected readonly cfg = computed(() => this.detail()?.config ?? null);
+  protected readonly mccOptions = computed(() => this.mcc.optionsFor(this.code().toUpperCase()));
   protected readonly errorFor = computed(() => Object.fromEntries(this.issues().map((i) => [i.field, i.message])) as Record<string, string>);
   /** Problems that aren't tied to a single input (e.g. "can't remove"), shown in the summary only. */
   protected readonly generalIssues = computed(() => this.issues().filter((i) => !/\.\d+\.|\.(label|pattern|minCount|ownershipThresholdPct)$/.test(i.field) && i.field !== 'reason'));

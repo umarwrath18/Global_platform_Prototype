@@ -101,6 +101,27 @@
               @if (err('business.industry'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
             </div>
             <div class="f-field">
+              <label for="mcc">Merchant category code (MCC) @if (mccRequired()) {<span class="req">*</span>}</label>
+              @if (!mccRequired()) {
+                <p class="f-static">{{ currentMcc() ? currentMcc()!.code + ' – ' + currentMcc()!.description : 'Not required' }}</p>
+                <p class="f-hint">No approved MCC catalogue covers {{ cfg().name }} yet, so an MCC isn't required here.</p>
+              } @else if (mccLocked()) {
+                <p class="f-static">{{ currentMcc() ? currentMcc()!.code + ' – ' + currentMcc()!.description : 'Not captured' }}</p>
+                <p class="f-hint">Risk has approved this merchant, so the MCC can only change through a Risk-approved request. <a [routerLink]="['/merchants', merchant().id]">Request a change</a></p>
+              } @else {
+                <select id="mcc" class="f-input" [class.invalid]="err('business.mcc') || mccError()" [disabled]="mccSaving()" (change)="setMcc($any($event.target).value)" aria-describedby="mcc-hint">
+                  <option value="" [selected]="!currentMcc()">Select MCC</option>
+                  @for (o of mccOptions(); track o.code) {
+                    <option [value]="o.code" [selected]="o.code === currentMcc()?.code">{{ o.code }} – {{ o.description }}{{ o.availability === 'restricted' ? ' (restricted)' : '' }}</option>
+                  }
+                </select>
+                <p class="f-hint" id="mcc-hint">Set once for the merchant and shared by all its countries and sub-merchants. Only MCCs available in {{ cfg().name }} are listed.@if (mcc.isTestFixture()) {{{ ' ' }}<strong>Test fixture – not an approved catalogue.</strong>}</p>
+              }
+              @if (mccRestricted()) {<p class="f-hint warn"><app-icon name="alert-circle" [size]="14" />Restricted in {{ cfg().name }}: it will be flagged for Risk review.</p>}
+              @if (mccError(); as m) {<p class="f-error" role="alert"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
+              @else if (err('business.mcc'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
+            </div>
+            <div class="f-field">
               <label for="website">Website
                 @if (prefilled().get('business.website'); as src) {<span class="tag prefill">{{ src }}</span>}
               </label>

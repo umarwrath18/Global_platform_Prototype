@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, OnInit, ou
 import { RouterLink } from '@angular/router';
 import { documentFileError, registeredInCountry, SECTION_ORDER, validateApplication } from '../../core/merchants/application-rules';
 import { MerchantApi, toMerchantError } from '../../core/merchants/merchant-api.service';
+import { mccIssue, MerchantMcc } from '../../core/merchants/mcc';
+import { MccService } from '../../core/merchants/mcc.service';
 import { ApplicationData, CountryApplication, Director, GlobalMerchant, SECTION_LABEL, SectionKey } from '../../core/merchants/merchant-models';
 import { INDUSTRIES, ONBOARDING_COUNTRIES, countryName } from '../../core/merchants/onboarding-config';
 import { Icon } from '../../shared/icon';
@@ -24,9 +26,12 @@ const newId = () => `n${Date.now().toString(36)}${uid++}`;
 })
 export class ApplicationForm implements OnInit {
   private readonly api = inject(MerchantApi);
+  protected readonly mcc = inject(MccService);
 
   readonly application = input.required<CountryApplication>();
   readonly merchant = input.required<GlobalMerchant>();
+  /** True once Risk has approved the merchant: the MCC then changes only through a Risk-approved request. */
+  readonly mccLocked = input(false);
   /** Emits the updated application after a save or submission. */
   readonly saved = output<{ application: CountryApplication; submitted: boolean }>();
 
@@ -52,7 +57,22 @@ export class ApplicationForm implements OnInit {
 
   protected readonly cfg = computed(() => ONBOARDING_COUNTRIES[this.application().country]);
   protected readonly sameCountry = computed(() => registeredInCountry(this.merchant(), this.application().country));
-  protected readonly issues = computed(() => validateApplication(this.application().country, this.data(), this.merchant()));
+  /** The merchant's MCC, including a change made in this form (it is saved to the merchant straight away). */
+  private readonly mccSaved = signal<MerchantMcc | null | undefined>(undefined);
+  protected readonly currentMcc = computed(() => (this.mccSaved() !== undefined ? this.mccSaved()! : (this.merchant().mcc ?? null)));
+  protected readonly mccOptions = computed(() => this.mcc.optionsFor(this.application().country));
+  protected readonly mccRequired = computed(() => this.mcc.covers(this.application().country));
+  protected readonly mccRestricted = computed(() => {
+    const m = this.currentMcc();
+    return !!m && this.mcc.availability(m.code, this.application().country) === 'restricted';
+  });
+  protected readonly mccSaving = signal(false);
+  protected readonly mccError = signal<string | null>(null);
+  protected readonly issues = computed(() => {
+    const out = validateApplication(this.application().country, this.data(), this.merchant());
+    const mccProblem = mccIssue(this.mcc.catalogue(), this.application().country, this.currentMcc());
+    return mccProblem ? [...out, mccProblem] : out;
+  });
   protected readonly dirty = computed(() => JSON.stringify(this.data()) !== this.savedJson());
   protected readonly corrections = computed(() => (this.application().status === 'returned' ? this.application().corrections : null));
   protected readonly prefilled = computed(() => {
@@ -133,6 +153,22 @@ export class ApplicationForm implements OnInit {
       if (key === 'expectedMonthlyVolume') d.business.expectedMonthlyVolume = value === '' ? null : Number(value);
       else (d.business[key] as string) = value;
     });
+  }
+
+  /** The MCC belongs to the parent merchant, so it is saved to the merchant at once (not with the draft). */
+  protected async setMcc(code: string) {
+    this.touch('business.mcc');
+    if (!code) return;
+    this.mccSaving.set(true);
+    this.mccError.set(null);
+    try {
+      const m = await this.api.setMcc(this.merchant().id, code);
+      this.mccSaved.set(m.mcc ?? null);
+    } catch (e) {
+      this.mccError.set(toMerchantError(e).message ?? "We couldn't save the MCC. Please try again.");
+    } finally {
+      this.mccSaving.set(false);
+    }
   }
 
   protected setContact(key: keyof ApplicationData['contact'], value: string) {

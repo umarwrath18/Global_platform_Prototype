@@ -296,6 +296,24 @@
               </table>
             </div>
           </section>
+
+          <section class="panel-card">
+            <div class="panel-head"><div><h2>MCC availability</h2><p>From the MCC catalogue, read only. Restricted codes can be selected but are flagged for Risk review.@if (mcc.isTestFixture()) {{{ ' ' }}<strong>Test fixture – not an approved catalogue.</strong>}</p></div></div>
+            @if (mccOptions().length) {
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead><tr><th scope="col">MCC</th><th scope="col">Description</th><th scope="col">Availability</th></tr></thead>
+                  <tbody>
+                    @for (o of mccOptions(); track o.code) {
+                      <tr><td class="mono">{{ o.code }}</td><td>{{ o.description }}</td><td><span class="status" [class.success]="o.availability === 'available'" [class.warning]="o.availability === 'restricted'">{{ o.availability === 'available' ? 'Available' : 'Restricted' }}</span></td></tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            } @else {
+              <div class="panel-body"><p class="muted">No MCC catalogue covers {{ d.config.name }} yet, so an MCC isn't required for applications here.</p></div>
+            }
+          </section>
         }
       </div>
 

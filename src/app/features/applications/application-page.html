@@ -129,7 +129,7 @@
     <div class="layout">
       <div class="col-main">
         @if (editable()) {
-          <app-application-form [application]="a" [merchant]="m" (saved)="onSaved($event)" />
+          <app-application-form [application]="a" [merchant]="m" [mccLocked]="d.mccChangeNeedsRisk" (saved)="onSaved($event)" />
         } @else {
           @if (reviewing()) {
             <app-review-panel [application]="a" (decided)="onDecided($event)" />

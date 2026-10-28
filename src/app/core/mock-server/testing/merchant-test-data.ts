@@ -1,4 +1,6 @@
-import { CountryApplication } from '../../merchants/merchant-models';
+import { emptyApplicationData } from '../../merchants/application-rules';
+import { ApplicationData, CountryApplication } from '../../merchants/merchant-models';
+import { ONBOARDING_COUNTRIES } from '../../merchants/onboarding-config';
 import { buildMerchantSeed } from '../merchant-seed';
 import type { MerchantDb, MerchantRecord } from '../merchant-server';
 
@@ -91,4 +93,18 @@ export function v2Fixture(): MerchantDb {
   Object.assign(trading, { lifecycleStatus: 'suspended', lifecycleReason: 'Chargeback ratio above threshold', lifecycleUpdatedAt: ago(2), lifecycleUpdatedBy: 'Daniel Tan' });
   db.lifecycleEvents = [{ at: ago(2), action: 'suspended', by: 'Daniel Tan', role: 'risk', reason: 'Chargeback ratio above threshold', fromStatus: 'active', toStatus: 'suspended', merchantId: 'GM-100101' }];
   return db;
+}
+
+/** Application data that passes validation for the country (test only). */
+export function completeApplicationData(country: string, legalName: string): ApplicationData {
+  const cfg = ONBOARDING_COUNTRIES[country];
+  const d = emptyApplicationData(country);
+  const reg: Record<string, [string, string]> = { MY: ['', ''], ID: ['9120001234567', '012345678901000'], VN: ['0312345678', '0312345678'], TH: ['0105561234567', '0105561234567'], PH: ['CS201912345', '123456789'] };
+  d.business = { tradingName: legalName, businessType: cfg.businessTypes[0], industry: 'Education', website: 'https://example.test', address: '1 Demo Street', localRegistrationNumber: reg[country][0], taxId: reg[country][1], expectedMonthlyVolume: 1000 };
+  d.contact = { name: 'Test Person', email: 'test@example.test', phone: '+60 12 345 6789', supportEmail: '' };
+  d.bank = Object.fromEntries(cfg.bankFields.map((f) => [f.key, f.key === 'accountNumber' ? '1234567890' : f.key === 'accountName' ? legalName : f.key === 'swiftCode' ? '' : 'Demo']));
+  d.directors = [{ id: 'x', name: 'Test Person', nationality: 'Malaysian', idNumber: 'A1', role: 'director_and_owner', ownershipPct: 100 }];
+  d.documents = cfg.documents.filter((x) => x.required).map((x, i) => ({ id: `d${i}`, type: x.type, fileName: 'a.pdf', sizeKb: 10, uploadedAt: 0, sample: true }));
+  d.pricing = cfg.paymentMethods.map((m, i) => ({ code: m.code, enabled: i === 0, mdr: m.defaultMdr }));
+  return d;
 }

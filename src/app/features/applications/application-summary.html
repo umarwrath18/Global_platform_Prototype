@@ -14,6 +14,13 @@
     <div><dt>Trading name</dt><dd>{{ data.business.tradingName || '—' }}</dd></div>
     <div><dt>Business type</dt><dd>{{ data.business.businessType || '—' }}</dd></div>
     <div><dt>Industry</dt><dd>{{ data.business.industry || '—' }}</dd></div>
+    <div>
+      <dt>MCC</dt>
+      <dd>
+        @if (mcc(); as m) {{{ m.code }} – {{ m.description }}} @else {Not captured}
+        @if (mccRestricted()) {<span class="tag warn">Restricted in {{ c.name }} – Risk review</span>}
+      </dd>
+    </div>
     <div><dt>Website</dt><dd>{{ data.business.website || '—' }}</dd></div>
     <div><dt>{{ c.localRegistration.label }}</dt><dd>{{ sameCountry() ? profile().registrationNumber : data.business.localRegistrationNumber || '—' }}</dd></div>
     <div><dt>{{ c.taxId.label }}</dt><dd>{{ data.business.taxId || '—' }}</dd></div>

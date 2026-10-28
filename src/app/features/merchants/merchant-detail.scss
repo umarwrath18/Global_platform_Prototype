@@ -135,3 +135,43 @@
 .lifecycle-modal > .edit-actions { padding: 0 20px 20px; }
 .lifecycle-reason textarea { resize: vertical; min-height: 100px; }
 @media (max-width: 640px) { .header-actions { width: 100%; } .lifecycle-modal { padding: 0; } }
+
+.mcc-current {
+  margin: 0 0 8px;
+
+  strong {
+    margin-right: 6px;
+  }
+}
+
+.mcc-request,
+.mcc-form {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.mcc-form {
+  border-left-color: var(--mobi-blue);
+}
+
+.mcc-request-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.mcc-history {
+  margin-top: 16px;
+}
+
+.mcc-request .f-field {
+  margin-top: 12px;
+}

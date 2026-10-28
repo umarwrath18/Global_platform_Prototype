@@ -111,6 +111,7 @@
             } @else {
               <dl class="kv">
                 <div><dt>GMID</dt><dd class="mono">{{ d.merchant.id }}</dd></div>
+                <div><dt>MCC</dt><dd>{{ d.merchant.mcc ? d.merchant.mcc.code + ' – ' + d.merchant.mcc.description : 'Not captured' }}</dd></div>
                 <div><dt>Legal name</dt><dd>{{ d.merchant.legalName }}</dd></div>
                 <div><dt>Registration country</dt><dd>{{ countryName(d.merchant.registrationCountry) }}</dd></div>
                 <div><dt>Registration number</dt><dd>{{ d.merchant.registrationNumber }}</dd></div>
@@ -124,6 +125,82 @@
                 </div>
               </dl>
             }
+          </div>
+        </section>
+
+        <section class="panel-card mcc-card" aria-labelledby="mcc-title">
+          <div class="panel-head">
+            <div>
+              <h2 id="mcc-title">Merchant category code (MCC)</h2>
+              <p>Set on the parent merchant and shared by its sub-merchants.@if (mccService.isTestFixture()) {{{ ' ' }}<strong>Test fixture – not an approved catalogue.</strong>}</p>
+            </div>
+            @if (canRequestMcc() && !mccForm()) {
+              <button type="button" class="btn" (click)="openMccForm()">Request MCC change</button>
+            }
+          </div>
+          <div class="panel-body">
+            <p class="mcc-current">
+              @if (d.merchant.mcc; as m) {
+                <strong class="mono">{{ m.code }}</strong> {{ m.description }}
+                <span class="muted">· set {{ date(m.setAt) }} by {{ m.setBy }}@if (m.catalogueKind === 'test_fixture') { · test fixture}</span>
+              } @else {
+                <span class="muted">Not captured.</span>
+              }
+            </p>
+            @if (!d.mccChangeNeedsRisk && roles.role() === 'sales') {
+              <p class="f-hint">Until Risk approves this merchant, set or change the MCC in its country application. After that, changes need Risk approval.</p>
+            }
+
+            @if (d.mccRequest; as r) {
+              <div class="mcc-request" role="region" aria-label="Pending MCC change">
+                <p class="mcc-request-head"><span class="status warning">Waiting for Risk</span> {{ r.id }} · requested {{ dateTime(r.requestedAt) }} by {{ r.requestedBy }} ({{ teamLabel(r.requestedRole) }})</p>
+                <dl class="kv">
+                  <div><dt>Current</dt><dd>{{ mccLabel(r.previous) }}</dd></div>
+                  <div><dt>Proposed</dt><dd>{{ mccLabel(r.proposed) }}</dd></div>
+                  <div class="wide"><dt>Reason</dt><dd>{{ r.reason }}</dd></div>
+                  @if (r.restrictedIn.length) {
+                    <div class="wide"><dt>Flag</dt><dd><span class="tag warn">Restricted in {{ r.restrictedIn.map(countryName).join(', ') }} – Risk review</span></dd></div>
+                  }
+                </dl>
+                @if (roles.role() === 'risk') {
+                  <div class="f-field">
+                    <label for="mcc-comment">Comment <span class="muted">(required to reject)</span></label>
+                    <textarea id="mcc-comment" class="f-input" rows="3" maxlength="1000" [value]="mccComment()" (input)="mccComment.set($any($event.target).value)"></textarea>
+                  </div>
+                  <div class="actions edit-actions">
+                    <button type="button" class="btn danger-outline" [disabled]="!!mccBusy()" (click)="decideMcc('reject')">@if (mccBusy() === 'reject') {<span class="spinner" aria-hidden="true"></span>}Reject</button>
+                    <button type="button" class="btn primary" [disabled]="!!mccBusy()" (click)="decideMcc('approve')">@if (mccBusy() === 'approve') {<span class="spinner" aria-hidden="true"></span>}Approve change</button>
+                  </div>
+                } @else {
+                  <p class="f-hint">The MCC stays {{ r.previous?.code ?? 'unset' }} until Risk approves this change.</p>
+                }
+              </div>
+            }
+
+            @if (mccForm()) {
+              <form class="mcc-form" (submit)="$event.preventDefault(); requestMcc()">
+                <div class="f-field">
+                  <label for="mcc-new">New MCC <span class="req">*</span></label>
+                  <select id="mcc-new" class="f-input" (change)="mccCode.set($any($event.target).value)">
+                    <option value="" [selected]="!mccCode()">Select MCC</option>
+                    @for (e of mccCandidates(); track e.code) {
+                      <option [value]="e.code">{{ e.code }} – {{ e.description }}{{ e.check.restricted.length ? ' (restricted in ' + e.check.restricted.join(', ') + ')' : '' }}</option>
+                    }
+                  </select>
+                  <p class="f-hint">Only codes available in every country this merchant has applied for are listed.</p>
+                </div>
+                <div class="f-field">
+                  <label for="mcc-reason">Reason <span class="req">*</span></label>
+                  <textarea id="mcc-reason" class="f-input" rows="3" maxlength="500" [value]="mccReason()" (input)="mccReason.set($any($event.target).value)"></textarea>
+                  <p class="f-hint">At least 10 characters. Risk sees this, and it's kept in the MCC history.</p>
+                </div>
+                <div class="actions edit-actions">
+                  <button type="button" class="btn" (click)="mccForm.set(false)" [disabled]="!!mccBusy()">Cancel</button>
+                  <button type="submit" class="btn primary" [disabled]="!!mccBusy()">@if (mccBusy() === 'request') {<span class="spinner" aria-hidden="true"></span>}Send to Risk</button>
+                </div>
+              </form>
+            }
+            @if (mccError(); as e) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
           </div>
         </section>
 
@@ -203,6 +280,24 @@
               </li>
             } @empty {
               <li class="t-empty">No lifecycle actions recorded.</li>
+            }
+          </ol>
+        </section>
+        <section class="mcc-history">
+          <div class="panel-head"><div><h2>MCC history</h2><p>Changes, requests and Risk decisions</p></div></div>
+          <ol class="timeline">
+            @for (e of d.mccEvents; track $index) {
+              <li>
+                <span class="t-action">{{ mccOutcomeLabel[e.outcome] }}@if (e.requestId) { · {{ e.requestId }}}</span>
+                <span class="t-comment">{{ mccLabel(e.previous) }} → {{ mccLabel(e.next) }}</span>
+                <span class="t-meta">Requested {{ dateTime(e.requestedAt) }} · {{ e.requestedBy }} · {{ teamLabel(e.requestedRole) }}</span>
+                @if (e.decidedBy) {<span class="t-meta">{{ e.outcome === 'change_approved' ? 'Approved' : 'Rejected' }} {{ dateTime(e.decidedAt!) }} · {{ e.decidedBy }} · {{ teamLabel(e.decidedRole) }}</span>}
+                <span class="t-meta">Reason: {{ e.reason }}</span>
+                @if (e.comment) {<span class="t-meta">Risk: {{ e.comment }}</span>}
+                @if (e.restrictedIn.length) {<span class="t-meta">Restricted in {{ e.restrictedIn.join(', ') }}</span>}
+              </li>
+            } @empty {
+              <li class="t-empty">No MCC changes recorded.</li>
             }
           </ol>
         </section>

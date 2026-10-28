@@ -2,6 +2,7 @@
 // The UI depends only on these shapes; the simulated backend can be replaced by Mobi's
 // real merchant services without changing the screens.
 
+import type { MccAuditEvent, MccChangeRequest, MccRef, MerchantMcc } from './mcc';
 import type { CountryOnboardingConfig } from './onboarding-config';
 
 /** Prototype-only: the internal team the signed-in user is acting as. */
@@ -40,6 +41,8 @@ export interface GlobalMerchant {
   lifecycleUpdatedBy?: string | null;
   /** Batch 1 Global Account used for portal login; created on the first country go-live. */
   linkedAccountId: string | null;
+  /** Merchant category code of the parent merchant (sub-merchants use this one). Absent: not captured. */
+  mcc?: MerchantMcc | null;
   createdAt: number;
   updatedAt: number;
   createdBy: string;
@@ -222,7 +225,7 @@ export interface CountryApplication {
   data: ApplicationData;
   prefill: PrefillSource[];
   /** Global profile values as they were when the application was last submitted. */
-  submittedProfile: Pick<GlobalMerchant, 'legalName' | 'registrationCountry' | 'registrationNumber'> | null;
+  submittedProfile: (Pick<GlobalMerchant, 'legalName' | 'registrationCountry' | 'registrationNumber'> & { mcc?: MccRef | null }) | null;
   corrections: Corrections | null;
   verification: VerificationEvidence | null;
   readiness: Readiness;
@@ -276,6 +279,12 @@ export interface MerchantDetail {
   lifecycleEvents: MerchantLifecycleEvent[];
   /** Live regional MIDs of the merchant's entities. */
   mids: RegionalMidView[];
+  /** MCC audit history, latest first. */
+  mccEvents: MccAuditEvent[];
+  /** The pending MCC change request, if any. */
+  mccRequest: MccChangeRequest | null;
+  /** True once the merchant has been approved by Risk: MCC changes then need Risk approval. */
+  mccChangeNeedsRisk: boolean;
 }
 
 export interface ApplicationDetail {
@@ -285,6 +294,8 @@ export interface ApplicationDetail {
   mid: RegionalMidView | null;
   /** Set when the application is operational but no MID could be assigned safely. */
   midIssue: string | null;
+  /** True once the merchant has been approved by Risk: MCC changes then need Risk approval. */
+  mccChangeNeedsRisk: boolean;
 }
 
 export type ReviewDecision = 'approve' | 'return' | 'reject';
@@ -313,7 +324,9 @@ export type NotificationEvent =
   | 'approved'
   | 'rejected'
   | 'configuration_ready'
-  | 'go_live';
+  | 'go_live'
+  | 'mcc_change_requested'
+  | 'mcc_change_decided';
 
 export interface PortalNotification {
   id: string;
@@ -321,6 +334,7 @@ export interface PortalNotification {
   event: NotificationEvent;
   title: string;
   body: string;
+  /** Empty for merchant-level notifications (MCC changes), which link to the merchant instead. */
   applicationId: string;
   merchantId: string;
   /** Country of the application (absent on records created before this field existed). */
@@ -349,6 +363,9 @@ export type MerchantApiErrorCode =
   | 'MIGRATION_PENDING'
   | 'DATA_UNREADABLE'
   | 'DATA_VERSION_UNSUPPORTED'
+  | 'MCC_NOT_AVAILABLE'
+  | 'MCC_CHANGE_PENDING'
+  | 'MCC_CHANGE_REQUIRED'
   | 'NOT_FOUND';
 
 export interface MerchantApiError {

@@ -362,3 +362,17 @@
     position: static;
   }
 }
+
+.f-static {
+  margin: 0;
+  padding: 9px 0 2px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.f-hint.warn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--warning);
+}

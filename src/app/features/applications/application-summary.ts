@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import { registeredInCountry } from '../../core/merchants/application-rules';
 import { ApplicationData, CountryApplication, GlobalMerchant, SECTION_LABEL, SectionKey } from '../../core/merchants/merchant-models';
+import { MccService } from '../../core/merchants/mcc.service';
 import { countryName, rulesFor } from '../../core/merchants/onboarding-config';
 import { Icon } from '../../shared/icon';
 import { fmtDate } from '../../shared/merchant-ui';
@@ -16,6 +17,7 @@ const ROLE_LABEL = { director: 'Director', beneficial_owner: 'Beneficial owner',
   styleUrl: './application-summary.scss',
 })
 export class ApplicationSummaryView {
+  private readonly mccService = inject(MccService);
   readonly application = input.required<CountryApplication>();
   readonly merchant = input.required<GlobalMerchant>();
   /** Working copy to show instead of the saved data (used on the Review & submit step). */
@@ -27,6 +29,12 @@ export class ApplicationSummaryView {
   protected readonly cfg = computed(() => rulesFor(this.application()));
   protected readonly profile = computed(() => this.application().submittedProfile ?? this.merchant());
   protected readonly sameCountry = computed(() => registeredInCountry(this.profile(), this.application().country));
+  /** The MCC Risk reviewed (once submitted) or the merchant's current one (drafts). */
+  protected readonly mcc = computed(() => this.profile().mcc ?? null);
+  protected readonly mccRestricted = computed(() => {
+    const m = this.mcc();
+    return !!m && this.mccService.availability(m.code, this.application().country) === 'restricted';
+  });
   protected readonly flagged = computed(() => new Set(this.application().status === 'returned' ? this.application().corrections?.sections ?? [] : []));
   protected readonly label = SECTION_LABEL;
   protected readonly roleLabel = ROLE_LABEL;

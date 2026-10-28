@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import { SECTION_ORDER } from '../../core/merchants/application-rules';
 import { MerchantApi, toMerchantError } from '../../core/merchants/merchant-api.service';
+import { MccService } from '../../core/merchants/mcc.service';
 import { CountryApplication, ReviewDecision, SECTION_LABEL, SectionKey } from '../../core/merchants/merchant-models';
+import { countryName } from '../../core/merchants/onboarding-config';
 import { Icon } from '../../shared/icon';
 import { isStrictValidation } from '../../core/merchants/validation-mode';
 import { fmtDateTime } from '../../shared/merchant-ui';
@@ -16,10 +18,17 @@ import { fmtDateTime } from '../../shared/merchant-ui';
 })
 export class ReviewPanel {
   private readonly api = inject(MerchantApi);
+  private readonly mccService = inject(MccService);
 
   readonly application = input.required<CountryApplication>();
   readonly decided = output<CountryApplication>();
 
+  /** The submitted MCC when it is restricted in this application's country (flagged, not prohibited). */
+  protected readonly restrictedMcc = computed(() => {
+    const a = this.application();
+    const m = a.submittedProfile?.mcc;
+    return m && this.mccService.availability(m.code, a.country) === 'restricted' ? { ...m, country: countryName(a.country) } : null;
+  });
   protected readonly decision = signal<ReviewDecision | null>(null);
   protected readonly comment = signal('');
   protected readonly sections = signal<Set<SectionKey>>(new Set());

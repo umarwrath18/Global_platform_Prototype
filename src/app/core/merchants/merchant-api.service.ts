@@ -16,6 +16,7 @@ import {
   ReviewRequest,
   UpdateMerchantRequest,
 } from './merchant-models';
+import type { MccChangeRequest } from './mcc';
 import { StaffRoleService } from './staff-role.service';
 
 export type MerchantClientError = MerchantApiError | { code: 'NETWORK_ERROR'; message?: string } | { code: 'UNKNOWN_ERROR'; message?: string };
@@ -68,6 +69,22 @@ export class MerchantApi {
 
   updateLifecycle(id: string, action: 'suspend' | 'reactivate', reason: string) {
     return this.run(this.http.post<GlobalMerchant>(`/api/merchants/${encodeURIComponent(id)}/lifecycle`, { action, reason }, { headers: this.headers }));
+  }
+
+  /** Sets the MCC directly (only before the merchant's first Risk approval). */
+  setMcc(merchantId: string, code: string) {
+    return this.run(this.http.put<GlobalMerchant>(`/api/merchants/${encodeURIComponent(merchantId)}/mcc`, { code }, { headers: this.headers }));
+  }
+
+  requestMccChange(merchantId: string, code: string, reason: string) {
+    return this.run(this.http.post<MccChangeRequest>(`/api/merchants/${encodeURIComponent(merchantId)}/mcc-requests`, { code, reason }, { headers: this.headers }), true);
+  }
+
+  decideMccChange(merchantId: string, requestId: string, decision: 'approve' | 'reject', comment: string) {
+    return this.run(
+      this.http.post<MccChangeRequest>(`/api/merchants/${encodeURIComponent(merchantId)}/mcc-requests/${encodeURIComponent(requestId)}/decision`, { decision, comment }, { headers: this.headers }),
+      true,
+    );
   }
 
   createApplication(merchantId: string, country: string) {

@@ -29,6 +29,7 @@ import {
   StaffRole,
 } from '../merchants/merchant-models';
 import { ONBOARDING_COUNTRIES, READINESS_CHECKLISTS, REGISTRATION_COUNTRIES } from '../merchants/onboarding-config';
+import { EMPTY_MCC_CATALOGUE, MccAuditEvent, MccCatalogue, MccCatalogueEntry, MccChangeRequest, mccCountryCheck, mccIssue, MccRef } from '../merchants/mcc';
 import { regionForCountry } from '../merchants/regions';
 import { randomToken } from './crypto';
 import { entityOfApplication, GoLiveIntent, goLiveBlocker, isRuleError, issueMid, MerchantEntity, parentEntityOf, RegionalMid, toMidView } from './merchant-identity';
@@ -49,7 +50,7 @@ export interface MerchantDb {
   version: number;
   /** Highest data upgrade applied (absent = before entities and MIDs). See merchant-migrations.ts. */
   schemaRevision?: number;
-  seq: { merchant: number; application: number; notification: number; entity?: number; mid?: number };
+  seq: { merchant: number; application: number; notification: number; entity?: number; mid?: number; mccRequest?: number };
   merchants: MerchantRecord[];
   applications: CountryApplication[];
   notifications: PortalNotification[];
@@ -58,6 +59,8 @@ export interface MerchantDb {
   mids?: RegionalMid[];
   goLiveIntents?: GoLiveIntent[];
   migrationLog?: MigrationLogEntry[];
+  mccRequests?: MccChangeRequest[];
+  mccEvents?: MccAuditEvent[];
 }
 
 export interface MerchantDataReport {
@@ -101,6 +104,8 @@ export interface MerchantServerOptions {
   strictValidation?: () => boolean;
   /** Country Configuration; when present its stored rules are loaded before every request. */
   countryConfig?: { sync(): void };
+  /** MCC catalogue; without one (or while it is empty) MCC is not required anywhere. */
+  mcc?: { catalogue(): MccCatalogue };
 }
 
 class ApiError {
@@ -175,7 +180,7 @@ export class MerchantServer {
       const query = new URLSearchParams(rawQuery ?? '');
       const seg = rawPath.split('/').filter(Boolean).slice(1); // drop "api"
       const m = method.toUpperCase();
-      const [resource, id, sub] = seg;
+      const [resource, id, sub, subId, action] = seg;
 
       if (resource === 'merchants') {
         if (!id && m === 'GET') return ok(this.listMerchants());
@@ -184,6 +189,9 @@ export class MerchantServer {
         if (id && !sub && m === 'PATCH') return ok(this.updateMerchant(id, body, role));
         if (id && sub === 'lifecycle' && m === 'POST') return ok(this.updateMerchantLifecycle(id, body, caller, role));
         if (id && sub === 'applications' && m === 'POST') return ok(this.createApplication(id, body, caller, role), 201);
+        if (id && sub === 'mcc' && !subId && m === 'PUT') return ok(this.setMcc(id, body, caller, role));
+        if (id && sub === 'mcc-requests' && !subId && m === 'POST') return ok(this.requestMccChange(id, body, caller, role), 201);
+        if (id && sub === 'mcc-requests' && subId && action === 'decision' && m === 'POST') return ok(this.decideMccChange(id, subId, body, caller, role));
       }
       if (resource === 'applications') {
         if (!id && m === 'GET') return ok(this.listApplications(query));
@@ -225,6 +233,9 @@ export class MerchantServer {
       applications: db.applications.filter((a) => a.merchantId === m.id).sort((a, b) => a.createdAt - b.createdAt),
       lifecycleEvents: (db.lifecycleEvents ?? []).filter((e) => e.merchantId === id).sort((a, b) => b.at - a.at),
       mids: (db.mids ?? []).filter((x) => x.gmid === m.id).map(toMidView),
+      mccEvents: (db.mccEvents ?? []).filter((e) => e.merchantId === m.id).sort((a, b) => b.at - a.at),
+      mccRequest: (db.mccRequests ?? []).find((r) => r.merchantId === m.id && r.status === 'pending') ?? null,
+      mccChangeNeedsRisk: this.riskApproved(db, m.id),
     };
   }
 
@@ -352,6 +363,7 @@ export class MerchantServer {
       merchant: this.withStatus(db, this.findMerchant(db, application.merchantId)),
       mid: mid ? toMidView(mid) : null,
       midIssue: application.status === 'operational' && !mid ? (issue?.detail ?? 'No live MID has been assigned.') : null,
+      mccChangeNeedsRisk: this.riskApproved(db, application.merchantId),
     };
   }
 
@@ -364,6 +376,9 @@ export class MerchantServer {
     const cfg = ONBOARDING_COUNTRIES[country];
     if (!cfg) fail(422, 'COUNTRY_NOT_SUPPORTED', { message: 'Onboarding is not available for this country.' });
     if (cfg.onboardingEnabled === false) fail(422, 'COUNTRY_NOT_SUPPORTED', { message: `New applications for ${cfg.name} are paused in Country configuration.` });
+    if (merchant.mcc && mccCountryCheck(this.catalogue(), merchant.mcc.code, [country]).unavailable.length) {
+      fail(422, 'MCC_NOT_AVAILABLE', { message: `${merchant.legalName}'s MCC ${merchant.mcc.code} is not available in ${cfg.name}, so it can't apply there.` });
+    }
 
     const existing = db.applications.filter((a) => a.merchantId === merchantId && a.country === country);
     const open = existing.find((a) => a.status !== 'rejected');
@@ -457,6 +472,8 @@ export class MerchantServer {
     if (!EDITABLE.includes(app.status)) fail(409, 'INVALID_TRANSITION', { message: 'Only draft or returned applications can be submitted.' });
     if (body?.data) app.data = this.readData(app.country, body.data);
     const errors = validateApplication(app.country, app.data, merchant);
+    const mccProblem = mccIssue(this.catalogue(), app.country, merchant.mcc);
+    if (mccProblem) errors.push(mccProblem);
     if (errors.length && this.strict) {
       app.updatedAt = this.now();
       this.save(db);
@@ -467,7 +484,7 @@ export class MerchantServer {
     const now = this.now();
     app.status = 'pending_risk_review';
     app.submissionCount += 1;
-    app.submittedProfile = { legalName: merchant.legalName, registrationCountry: merchant.registrationCountry, registrationNumber: merchant.registrationNumber };
+    app.submittedProfile = { legalName: merchant.legalName, registrationCountry: merchant.registrationCountry, registrationNumber: merchant.registrationNumber, mcc: merchant.mcc ? { code: merchant.mcc.code, description: merchant.mcc.description } : null };
     app.verification = simulateVerification(merchant, app.data, now);
     app.rulesSnapshot = JSON.parse(JSON.stringify(ONBOARDING_COUNTRIES[app.country]));
     app.corrections = null;
@@ -690,6 +707,144 @@ export class MerchantServer {
     return { entityId: entity.id, regionCode };
   }
 
+  // ------------------------------------------------------------------- MCC
+
+  /**
+   * Sets the parent merchant's MCC directly. Only before Risk has approved the merchant; after that
+   * a change needs a change request that Risk approves. Every change is recorded.
+   */
+  private setMcc(id: string, body: any, caller: Caller, role: StaffRole): GlobalMerchant {
+    this.requireRole(role, 'sales');
+    const db = this.load();
+    const m = this.findMerchant(db, id);
+    if (this.riskApproved(db, m.id)) {
+      fail(409, 'MCC_CHANGE_REQUIRED', { message: `${m.legalName} has been approved by Risk, so its MCC can only change through a change request that Risk approves.` });
+    }
+    const { entry, catalogue, restricted } = this.readMccChoice(db, m.id, body?.code);
+    if (m.mcc?.code === entry.code) return this.withStatus(db, m);
+    const now = this.now();
+    const previous = mccRef(m.mcc);
+    m.mcc = this.assignedMcc(entry, catalogue, now, caller.name);
+    m.updatedAt = now;
+    this.mccEvent(db, {
+      at: now, merchantId: m.id, outcome: 'set_before_approval', previous, next: mccRef(entry), reason: str(body?.reason, 500).trim() || 'Set before Risk approval',
+      requestId: null, requestedBy: caller.name, requestedRole: role, requestedAt: now, decidedBy: null, decidedRole: null, decidedAt: null, comment: null, restrictedIn: restricted,
+    });
+    this.save(db);
+    return this.withStatus(db, m);
+  }
+
+  /** Asks Risk to change an approved merchant's MCC. The MCC stays as it is until Risk approves. */
+  private requestMccChange(id: string, body: any, caller: Caller, role: StaffRole): MccChangeRequest {
+    this.requireRole(role, 'sales');
+    const db = this.load();
+    const m = this.findMerchant(db, id);
+    if (!this.riskApproved(db, m.id)) {
+      fail(409, 'INVALID_TRANSITION', { message: `${m.legalName} hasn't been approved by Risk yet, so its MCC can be set directly in its application.` });
+    }
+    const pending = (db.mccRequests ?? []).find((r) => r.merchantId === m.id && r.status === 'pending');
+    if (pending) fail(409, 'MCC_CHANGE_PENDING', { message: `MCC change ${pending.id} is waiting for a Risk decision. Wait for that decision first.` });
+    const reason = str(body?.reason, 500).trim();
+    if (reason.length < 10) fail(422, 'VALIDATION_FAILED', { errors: [{ section: 'business', field: 'reason', message: 'Explain why the MCC should change (at least 10 characters).' }] });
+    const { entry, restricted } = this.readMccChoice(db, m.id, body?.code);
+    if (m.mcc?.code === entry.code) fail(422, 'VALIDATION_FAILED', { message: `${entry.code} is already this merchant's MCC.` });
+
+    const now = this.now();
+    db.seq.mccRequest ??= 1;
+    const request: MccChangeRequest = {
+      id: `MCR-${String(db.seq.mccRequest++).padStart(4, '0')}`,
+      merchantId: m.id, previous: mccRef(m.mcc), proposed: mccRef(entry)!, reason, restrictedIn: restricted,
+      requestedBy: caller.name, requestedRole: role, requestedAt: now,
+      status: 'pending', decidedBy: null, decidedRole: null, decidedAt: null, decisionComment: null,
+    };
+    db.mccRequests ??= [];
+    db.mccRequests.push(request);
+    this.mccEvent(db, this.requestEvent(request, 'change_requested', now));
+    this.notifyMerchant(db, 'mcc_change_requested', m, ['risk'], {
+      title: `MCC change to review: ${m.legalName}`,
+      body: `${caller.name} asked to change the MCC from ${mccText(request.previous)} to ${mccText(request.proposed)}${restricted.length ? ` (restricted in ${restricted.join(', ')})` : ''}. Reason: ${reason}`,
+      to: [TEAM_MAILBOX.risk],
+    });
+    this.save(db);
+    return request;
+  }
+
+  /** Risk approves (the MCC changes now) or rejects (nothing changes) a pending MCC change request. */
+  private decideMccChange(id: string, requestId: string, body: any, caller: Caller, role: StaffRole): MccChangeRequest {
+    this.requireRole(role, 'risk');
+    const db = this.load();
+    const m = this.findMerchant(db, id);
+    const request = (db.mccRequests ?? []).find((r) => r.id === requestId && r.merchantId === m.id) ?? fail(404, 'NOT_FOUND', { message: `No MCC change request ${requestId}.` });
+    if (request.status !== 'pending') fail(409, 'INVALID_TRANSITION', { message: `MCC change ${request.id} has already been ${request.status}.` });
+    const decision = body?.decision;
+    if (decision !== 'approve' && decision !== 'reject') fail(400, 'VALIDATION_FAILED', { message: 'Choose approve or reject.' });
+    const comment = str(body?.comment, 1000).trim();
+    if (decision === 'reject' && comment.length < 10) {
+      fail(422, 'VALIDATION_FAILED', { errors: [{ section: 'business', field: 'comment', message: 'Give the reason for rejecting (at least 10 characters).' }] });
+    }
+
+    const now = this.now();
+    if (decision === 'approve') {
+      // The catalogue or the merchant's countries may have changed since the request was made.
+      const { entry, catalogue, restricted } = this.readMccChoice(db, m.id, request.proposed.code);
+      m.mcc = this.assignedMcc(entry, catalogue, now, caller.name);
+      m.updatedAt = now;
+      request.restrictedIn = restricted;
+    }
+    Object.assign(request, { status: decision === 'approve' ? 'approved' : 'rejected', decidedBy: caller.name, decidedRole: role, decidedAt: now, decisionComment: comment || null });
+    this.mccEvent(db, this.requestEvent(request, decision === 'approve' ? 'change_approved' : 'change_rejected', now));
+    this.notifyMerchant(db, 'mcc_change_decided', m, ['sales'], {
+      title: `MCC change ${decision === 'approve' ? 'approved' : 'rejected'}: ${m.legalName}`,
+      body: decision === 'approve'
+        ? `Risk approved the MCC change to ${mccText(request.proposed)}.${comment ? ` ${comment}` : ''}`
+        : `Risk rejected the MCC change to ${mccText(request.proposed)}. The MCC stays ${mccText(request.previous)}. ${comment}`,
+      to: [TEAM_MAILBOX.sales],
+    });
+    this.save(db);
+    return request;
+  }
+
+  private catalogue(): MccCatalogue {
+    return this.opts.mcc?.catalogue() ?? EMPTY_MCC_CATALOGUE;
+  }
+
+  /** Risk has approved at least one of the merchant's applications (MCC changes then need Risk). */
+  private riskApproved(db: MerchantDb, merchantId: string): boolean {
+    return db.applications.some((a) => a.merchantId === merchantId && a.history.some((h) => h.toStatus === 'risk_approved'));
+  }
+
+  /** A catalogue MCC that is available in every country the merchant has an open or live application in. */
+  private readMccChoice(db: MerchantDb, merchantId: string, rawCode: unknown): { entry: MccCatalogueEntry; catalogue: MccCatalogue; restricted: string[] } {
+    const catalogue = this.catalogue();
+    if (!catalogue.source || !catalogue.entries.length) fail(422, 'MCC_NOT_AVAILABLE', { message: 'No MCC catalogue has been loaded yet, so an MCC cannot be assigned.' });
+    const code = str(rawCode, 8).trim();
+    const entry = catalogue.entries.find((e) => e.code === code) ?? fail(422, 'MCC_NOT_AVAILABLE', { message: `MCC ${code || '(blank)'} is not in the catalogue.` });
+    const countries = db.applications.filter((a) => a.merchantId === merchantId && a.status !== 'rejected').map((a) => a.country);
+    const { unavailable, restricted } = mccCountryCheck(catalogue, entry.code, countries);
+    if (unavailable.length) {
+      fail(422, 'MCC_NOT_AVAILABLE', { message: `MCC ${entry.code} is not available in ${unavailable.map((c) => ONBOARDING_COUNTRIES[c]?.name ?? c).join(', ')}.` });
+    }
+    return { entry, catalogue, restricted };
+  }
+
+  private assignedMcc(entry: MccCatalogueEntry, catalogue: MccCatalogue, at: number, by: string) {
+    return { code: entry.code, description: entry.description, catalogueVersion: catalogue.source!.version, catalogueKind: catalogue.source!.kind, setAt: at, setBy: by };
+  }
+
+  private requestEvent(r: MccChangeRequest, outcome: MccAuditEvent['outcome'], at: number): MccAuditEvent {
+    return {
+      at, merchantId: r.merchantId, outcome, previous: r.previous, next: r.proposed, reason: r.reason, requestId: r.id,
+      requestedBy: r.requestedBy, requestedRole: r.requestedRole, requestedAt: r.requestedAt,
+      decidedBy: r.decidedBy, decidedRole: r.decidedRole, decidedAt: r.decidedAt, comment: r.decisionComment, restrictedIn: r.restrictedIn,
+    };
+  }
+
+  private mccEvent(db: MerchantDb, e: MccAuditEvent) {
+    db.mccEvents ??= [];
+    db.mccEvents.unshift(e);
+    db.mccEvents = db.mccEvents.slice(0, 1000);
+  }
+
   // ---------------------------------------------------------- notifications
 
   private markRead(body: any, role: StaffRole): { updated: number } {
@@ -723,6 +878,23 @@ export class MerchantServer {
       applicationId: app.id,
       merchantId: merchant.id,
       country: app.country,
+      audience,
+      email: { to: msg.to, subject: `[Mobi Global Platform] ${msg.title}`, status: 'simulated' },
+      readBy: [],
+    });
+    db.notifications = db.notifications.slice(0, 300);
+  }
+
+  /** A notification about the merchant as a whole (no application); it links to the merchant. */
+  private notifyMerchant(db: MerchantDb, event: NotificationEvent, merchant: MerchantRecord, audience: StaffRole[], msg: { title: string; body: string; to: string[] }) {
+    db.notifications.unshift({
+      id: `NT-${db.seq.notification++}`,
+      at: this.now(),
+      event,
+      title: msg.title,
+      body: msg.body,
+      applicationId: '',
+      merchantId: merchant.id,
       audience,
       email: { to: msg.to, subject: `[Mobi Global Platform] ${msg.title}`, status: 'simulated' },
       readBy: [],
@@ -918,3 +1090,5 @@ export class MerchantServer {
 }
 
 const ok = (body: unknown, status = 200): ServerReply => ({ status, body });
+const mccRef = (m: MccRef | null | undefined): MccRef | null => (m ? { code: m.code, description: m.description } : null);
+const mccText = (m: MccRef | null) => (m ? `${m.code} (${m.description})` : 'none');

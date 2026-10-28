@@ -93,6 +93,19 @@ completed go-live returns the same result, and a go-live interrupted after the G
 activated finishes on retry without a second account or MID. Sub-merchants exist only in the data
 model and its rules so far; there is no screen to create them yet.
 
+**Merchant category codes (MCC).** The MCC belongs to the parent merchant (GMID) and is shared by
+its sub-merchants. Codes come from one catalogue with per-country availability: *available*, or
+*restricted* (can be chosen but is flagged for Risk review); codes not listed for a country can't be
+used there. **No approved catalogue has been supplied, so the catalogue is empty by default** and MCC
+isn't required anywhere. Where a catalogue covers a country, Sales / Operations choose the MCC in the
+country application (only codes available there are listed) and it's required at submission.
+Before the merchant's first Risk approval the MCC can be changed directly; after that, changes go
+through a request that Risk approves or rejects, and the MCC changes only on approval. Every change,
+request and decision is recorded with the old and new MCC, reason, requester, approver, times and
+outcome (merchant page → MCC history). Suspended merchants can still request MCC changes.
+To try it, load the clearly labelled test fixture: `mobiDemo.loadMccTestFixture()`, then reload.
+Its entries are test data, not approved Mobi, scheme or regulatory rules.
+
 **Data upgrade.** The first request with this build upgrades existing merchant data in place
 (schema revision 3, still `version: 2`): it copies the original to `mobi.gp.merchantdb.backup.r2`
 first, adds entities, regions and MIDs, and changes nothing else. Operational countries get an MID
@@ -122,6 +135,9 @@ mobiDemo.resetMerchants()            // restore only the merchant data
 mobiDemo.resetCountryConfig()        // restore the default country configuration
 mobiDemo.merchantDataReport()        // upgrade status, backup, and records flagged for review
 mobiDemo.restoreMerchantBackup()     // put back the pre-upgrade copy (keeps a copy of current data)
+mobiDemo.loadMccTestFixture()        // load the labelled TEST FIXTURE MCC catalogue (not approved data)
+mobiDemo.loadMccCatalogue(entries, { name, version })   // load a supplied catalogue (validated first)
+mobiDemo.clearMccCatalogue()         // remove the catalogue; assigned merchant MCCs are kept
 mobiDemo.strictValidation(true)      // full production validation (reload after)
 ```
 

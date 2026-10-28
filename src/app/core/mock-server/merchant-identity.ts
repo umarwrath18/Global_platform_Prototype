@@ -1,3 +1,4 @@
+import type { MerchantMcc } from '../merchants/mcc';
 import { CountryApplication, MerchantApiErrorCode, MerchantLifecycleStatus, RegionalMidView } from '../merchants/merchant-models';
 import type { MerchantRecord } from './merchant-server';
 
@@ -92,11 +93,19 @@ export function entityProblems(entity: MerchantEntity, entities: MerchantEntity[
     else if (parent.kind !== 'parent') out.push('A sub-merchant cannot be the parent of another sub-merchant.');
     else if (parent.gmid !== entity.gmid) out.push("A sub-merchant must share its parent's GMID.");
   }
+  // The MCC belongs to the parent merchant (GMID record); no entity carries its own.
+  if ('mcc' in entity) out.push(entity.kind === 'sub' ? "A sub-merchant uses its parent's MCC and cannot have its own." : 'The MCC is kept on the merchant record, not the entity.');
   if (entity.legalEntity) {
     if (!entity.legalEntity.legalName.trim()) out.push('A separate legal entity needs a legal name.');
     if (!entity.legalEntity.registrationNumber.trim()) out.push('A separate legal entity needs a registration number.');
   }
   return out;
+}
+
+/** A parent's or sub-merchant's MCC: always the parent merchant's (GMID record). */
+export function mccOfEntity(merchants: Pick<MerchantRecord, 'id' | 'mcc'>[], entities: MerchantEntity[], entityId: string): MerchantMcc | null {
+  const entity = entities.find((e) => e.id === entityId);
+  return (entity && merchants.find((m) => m.id === entity.gmid)?.mcc) ?? null;
 }
 
 /** Re-parenting is out of scope: a saved sub-merchant keeps its parent. */
