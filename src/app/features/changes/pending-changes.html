@@ -1,0 +1,50 @@
+@if (changes().length) {
+  <section class="panel-card changes-card" [attr.aria-label]="title()">
+    <div class="panel-head"><div><h2>{{ title() }}</h2><p>After Risk approval, these details change only when Risk approves.</p></div></div>
+    <div class="panel-body cr-list">
+      @for (r of changes(); track r.id) {
+        <article class="cr" [class.pending]="r.status === 'pending'">
+          <header class="cr-head">
+            <span class="status" [class.warning]="r.status === 'pending'" [class.success]="r.status === 'approved'" [class.danger]="r.status === 'rejected'">{{ statusLabel[r.status] }}</span>
+            <strong>{{ sectionLabel[r.section] }}@if (r.country) { · {{ countryName(r.country) }}}</strong>
+            <span class="muted">{{ r.id }} · requested {{ dateTime(r.requestedAt) }} by {{ r.requestedBy }} ({{ teamLabel[r.requestedRole] }})</span>
+          </header>
+          <div class="table-wrap">
+            <table class="data-table cr-table">
+              <thead><tr><th scope="col">Field</th><th scope="col">Current</th><th scope="col">Proposed</th></tr></thead>
+              <tbody>
+                @for (c of r.changes; track c.field) {
+                  <tr><td>{{ c.label }}</td><td class="muted">{{ c.from }}</td><td>{{ c.to }}</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <p class="cr-reason"><strong>Reason</strong> {{ r.reason }}</p>
+          @if (r.decidedBy && r.status !== 'pending') {
+            <p class="cr-reason"><strong>{{ statusLabel[r.status] }}</strong> {{ dateTime(r.decidedAt!) }} · {{ r.decidedBy }}@if (r.decisionComment) { – {{ r.decisionComment }}}</p>
+          }
+          @if (r.status === 'pending') {
+            @if (roles.role() === 'risk') {
+              <div class="cr-decide">
+                <label [attr.for]="'cr-comment-' + r.id">Comment <span class="muted">(required to reject)</span></label>
+                <textarea [id]="'cr-comment-' + r.id" class="f-input" rows="2" maxlength="1000" [value]="commentFor(r.id)" (input)="setComment(r.id, $any($event.target).value)"></textarea>
+                <div class="cr-actions">
+                  <button type="button" class="btn sm danger-outline" [disabled]="!!busy()" (click)="decide(r, 'reject')">@if (busy() === r.id) {<span class="spinner" aria-hidden="true"></span>}Reject</button>
+                  <button type="button" class="btn sm primary" [disabled]="!!busy()" (click)="decide(r, 'approve')">Approve and apply</button>
+                </div>
+              </div>
+            } @else if (roles.role() === 'sales') {
+              <div class="cr-actions">
+                <span class="muted">Nothing changes until Risk approves.</span>
+                <button type="button" class="btn sm" [disabled]="!!busy()" (click)="withdraw(r)">Withdraw</button>
+              </div>
+            } @else {
+              <p class="muted small">Waiting for Risk. Nothing changes until Risk approves.</p>
+            }
+          }
+          @if (error()?.id === r.id) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ error()!.message }}</div></div>}
+        </article>
+      }
+    </div>
+  </section>
+}

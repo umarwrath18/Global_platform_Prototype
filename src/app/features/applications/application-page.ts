@@ -18,6 +18,8 @@ import { StatusBadge, fmtDate, fmtDateTime } from '../../shared/merchant-ui';
 import { ApplicationForm } from './application-form';
 import { ApplicationSummaryView } from './application-summary';
 import { ProductPaymentConfig } from '../products/product-payment-config';
+import { ChangeRequestForm } from '../changes/change-request-form';
+import { PendingChanges } from '../changes/pending-changes';
 import { productPhase } from '../../core/merchants/products';
 import { ReadinessPanel } from './readiness-panel';
 import { ReviewPanel } from './review-panel';
@@ -39,7 +41,7 @@ const NEXT_OWNER: Partial<Record<ApplicationStatus, { role: StaffRole; text: str
 @Component({
   selector: 'app-application-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Icon, StatusBadge, StatusTracker, ApplicationForm, ApplicationSummaryView, ReviewPanel, ReadinessPanel, ProductPaymentConfig],
+  imports: [RouterLink, Icon, StatusBadge, StatusTracker, ApplicationForm, ApplicationSummaryView, ReviewPanel, ReadinessPanel, ProductPaymentConfig, ChangeRequestForm, PendingChanges],
   templateUrl: './application-page.html',
   styleUrl: './application-page.scss',
 })
@@ -53,6 +55,8 @@ export class ApplicationPage implements HasUnsavedChanges {
 
   private readonly form = viewChild(ApplicationForm);
   private readonly products = viewChild(ProductPaymentConfig);
+  private readonly changeRequestForm = viewChild(ChangeRequestForm);
+  protected readonly changeForm = signal(false);
 
   protected readonly detail = signal<ApplicationDetail | null>(null);
   protected readonly loading = signal(true);
@@ -84,7 +88,7 @@ export class ApplicationPage implements HasUnsavedChanges {
   }
 
   hasUnsavedChanges() {
-    return (this.form()?.hasUnsavedChanges() ?? false) || (this.products()?.hasUnsavedChanges() ?? false);
+    return (this.form()?.hasUnsavedChanges() ?? false) || (this.products()?.hasUnsavedChanges() ?? false) || (this.changeRequestForm()?.hasUnsavedChanges() ?? false);
   }
 
   protected async load(id = this.id()) {
@@ -117,6 +121,17 @@ export class ApplicationPage implements HasUnsavedChanges {
   protected readonly showProducts = computed(() => !!this.app() && productPhase(this.app()!.status) !== 'proposal');
 
   /** Product changes can complete the onboarding gate and its automatic checklist items. */
+  protected async onChangeSubmitted(message: string) {
+    this.changeForm.set(false);
+    await this.load();
+    this.flash(message);
+  }
+
+  protected async onChangeAction(message: string) {
+    await this.load();
+    this.flash(message);
+  }
+
   protected onProductsChanged() {
     void this.load();
   }

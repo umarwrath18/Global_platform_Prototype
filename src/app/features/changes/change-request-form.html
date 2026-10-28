@@ -1,0 +1,102 @@
+@let d = draft();
+@let c = cfg();
+<section class="cr-form" aria-labelledby="cr-form-title">
+  <header class="cr-form-head">
+    <h3 id="cr-form-title">Request a change · {{ c.name }}</h3>
+    <button type="button" class="btn sm ghost" (click)="cancel()">Cancel</button>
+  </header>
+  <p class="f-hint">Risk approved these details, so a change takes effect only when Risk approves it. The record of what Risk originally reviewed is kept.</p>
+
+  <div class="seg" role="radiogroup" aria-label="What to change">
+    @for (s of sections; track s) {
+      <button type="button" role="radio" [attr.aria-checked]="section() === s" [class.on]="section() === s" (click)="chooseSection(s)">{{ sectionLabel[s] }}</button>
+    }
+  </div>
+
+  @switch (section()) {
+    @case ('business') {
+      <div class="f-grid">
+        <div class="f-field"><label for="cr-trading">Trading name</label><input id="cr-trading" class="f-input" [class.invalid]="err('business.tradingName')" [value]="d.business.tradingName" (input)="setBusiness('tradingName', $any($event.target).value)" />@if (err('business.tradingName'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        <div class="f-field"><label for="cr-type">Business type</label>
+          <select id="cr-type" class="f-input" (change)="setBusiness('businessType', $any($event.target).value)">
+            @for (t of c.businessTypes; track t) {<option [value]="t" [selected]="t === d.business.businessType">{{ t }}</option>}
+          </select>@if (err('business.businessType'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        <div class="f-field"><label for="cr-industry">Industry</label>
+          <select id="cr-industry" class="f-input" (change)="setBusiness('industry', $any($event.target).value)">
+            @for (t of industries; track t) {<option [value]="t" [selected]="t === d.business.industry">{{ t }}</option>}
+          </select></div>
+        <div class="f-field"><label for="cr-web">Website</label><input id="cr-web" class="f-input" [class.invalid]="err('business.website')" [value]="d.business.website" (input)="setBusiness('website', $any($event.target).value)" />@if (err('business.website'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        <div class="f-field"><label for="cr-lreg">{{ c.localRegistration.label }}</label><input id="cr-lreg" class="f-input" [class.invalid]="err('business.localRegistrationNumber')" [value]="d.business.localRegistrationNumber" (input)="setBusiness('localRegistrationNumber', $any($event.target).value)" />@if (err('business.localRegistrationNumber'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        <div class="f-field"><label for="cr-tax">{{ c.taxId.label }}</label><input id="cr-tax" class="f-input" [class.invalid]="err('business.taxId')" [value]="d.business.taxId" (input)="setBusiness('taxId', $any($event.target).value)" />@if (err('business.taxId'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        <div class="f-field"><label for="cr-vol">Expected monthly volume ({{ c.currency }})</label><input id="cr-vol" class="f-input" type="number" min="0" [value]="d.business.expectedMonthlyVolume ?? ''" (input)="setBusiness('expectedMonthlyVolume', $any($event.target).value)" />@if (err('business.expectedMonthlyVolume'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        <div class="f-field full"><label for="cr-addr">Business address in {{ c.name }}</label><textarea id="cr-addr" class="f-input" rows="2" [class.invalid]="err('business.address')" [value]="d.business.address" (input)="setBusiness('address', $any($event.target).value)"></textarea>@if (err('business.address'); as m) {<p class="f-error">{{ m }}</p>}</div>
+      </div>
+    }
+    @case ('bank') {
+      <div class="f-grid">
+        @for (f of c.bankFields; track f.key) {
+          <div class="f-field">
+            <label [attr.for]="'cr-bank-' + f.key">{{ f.label }}@if (f.required) { <span class="req">*</span>}</label>
+            @if (f.key === 'accountNumber') {
+              <input [id]="'cr-bank-' + f.key" class="f-input" autocomplete="off" inputmode="numeric" [class.invalid]="err('bank.' + f.key)" [value]="bankValue(f.key)" [placeholder]="currentAccount() ? 'Current ' + currentAccount() : ''" (input)="setBank(f.key, $any($event.target).value)" aria-describedby="cr-acct-hint" />
+              <p class="f-hint" id="cr-acct-hint">Leave blank to keep the current account number{{ currentAccount() ? ' (' + currentAccount() + ')' : '' }}.</p>
+            } @else {
+              <input [id]="'cr-bank-' + f.key" class="f-input" [class.invalid]="err('bank.' + f.key)" [value]="bankValue(f.key)" (input)="setBank(f.key, $any($event.target).value)" />
+            }
+            @if (err('bank.' + f.key); as m) {<p class="f-error">{{ m }}</p>}
+          </div>
+        }
+      </div>
+    }
+    @case ('directors') {
+      <p class="f-hint">{{ c.directors.note }}</p>
+      @if (err('directors'); as m) {<p class="f-error">{{ m }}</p>}
+      <div class="people">
+        @for (p of d.directors; track p.id; let i = $index) {
+          <fieldset class="person">
+            <legend class="sr-only">Person {{ i + 1 }}</legend>
+            <div class="f-field"><label [attr.for]="'cr-dn-' + i">Full name</label><input [id]="'cr-dn-' + i" class="f-input" [value]="p.name" (input)="setDirector(i, 'name', $any($event.target).value)" />@if (err('directors.' + i + '.name'); as m) {<p class="f-error">{{ m }}</p>}</div>
+            <div class="f-field"><label [attr.for]="'cr-dnat-' + i">Nationality</label><input [id]="'cr-dnat-' + i" class="f-input" [value]="p.nationality" (input)="setDirector(i, 'nationality', $any($event.target).value)" />@if (err('directors.' + i + '.nationality'); as m) {<p class="f-error">{{ m }}</p>}</div>
+            <div class="f-field"><label [attr.for]="'cr-did-' + i">ID / passport</label><input [id]="'cr-did-' + i" class="f-input" [value]="p.idNumber" (input)="setDirector(i, 'idNumber', $any($event.target).value)" />@if (err('directors.' + i + '.idNumber'); as m) {<p class="f-error">{{ m }}</p>}</div>
+            <div class="f-field"><label [attr.for]="'cr-drole-' + i">Role</label>
+              <select [id]="'cr-drole-' + i" class="f-input" (change)="setDirector(i, 'role', $any($event.target).value)">
+                <option value="director" [selected]="p.role === 'director'">Director</option>
+                <option value="beneficial_owner" [selected]="p.role === 'beneficial_owner'">Beneficial owner</option>
+                <option value="director_and_owner" [selected]="p.role === 'director_and_owner'">Director &amp; owner</option>
+              </select></div>
+            <div class="f-field"><label [attr.for]="'cr-dpct-' + i">Ownership %</label><input [id]="'cr-dpct-' + i" class="f-input" type="number" min="0" max="100" [value]="p.ownershipPct ?? ''" (input)="setDirector(i, 'ownershipPct', $any($event.target).value)" />@if (err('directors.' + i + '.ownershipPct'); as m) {<p class="f-error">{{ m }}</p>}</div>
+            <button type="button" class="btn sm ghost" (click)="removeDirector(i)" [attr.aria-label]="'Remove person ' + (i + 1)">Remove</button>
+          </fieldset>
+        }
+      </div>
+      <button type="button" class="btn sm" (click)="addDirector()"><app-icon name="plus" [size]="14" />Add person</button>
+    }
+    @case ('documents') {
+      <ul class="docs">
+        @for (rule of c.documents; track rule.type) {
+          <li>
+            <div><strong>{{ rule.label }}</strong>@if (rule.required) { <span class="req">*</span>}</div>
+            @for (f of filesFor(rule.type); track f.id) {
+              <span class="doc-file">{{ f.fileName }} · {{ f.sizeKb }} KB <button type="button" class="btn sm ghost" (click)="removeDoc(f.id)" [attr.aria-label]="'Remove ' + f.fileName">Remove</button></span>
+            }
+            <label class="btn sm"><input type="file" class="sr-only" accept=".pdf,.jpg,.jpeg,.png" (change)="attachFile(rule.type, $any($event.target))" />Add file</label>
+            @if (docError(rule.type); as m) {<p class="f-error">{{ m }}</p>}
+          </li>
+        }
+      </ul>
+      <p class="f-hint">Prototype: only the file name and size are kept; no file content is stored.</p>
+    }
+  }
+
+  <div class="f-field full">
+    <label for="cr-reason">Reason for the change <span class="req">*</span></label>
+    <textarea id="cr-reason" class="f-input" rows="2" maxlength="500" [value]="reason()" (input)="reason.set($any($event.target).value)"></textarea>
+    <p class="f-hint">At least 10 characters. Risk sees this, and it's kept in the history.</p>
+  </div>
+  @if (error(); as e) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
+  @if (attempted() && issues().length) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ issues().length }} item{{ issues().length === 1 ? '' : 's' }} must be fixed before sending.</div></div>}
+  <footer class="cr-form-foot">
+    <button type="button" class="btn sm" (click)="cancel()" [disabled]="saving()">Cancel</button>
+    <button type="button" class="btn sm primary" (click)="submit()" [disabled]="saving()">@if (saving()) {<span class="spinner" aria-hidden="true"></span>}Send to Risk</button>
+  </footer>
+</section>

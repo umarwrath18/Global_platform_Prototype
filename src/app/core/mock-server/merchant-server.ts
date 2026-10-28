@@ -28,12 +28,14 @@ import {
 } from '../merchants/merchant-models';
 import { ONBOARDING_COUNTRIES, READINESS_CHECKLISTS, REGISTRATION_COUNTRIES } from '../merchants/onboarding-config';
 import { PricingVersion, ProductConfig, productPhase } from '../merchants/products';
+import { ChangeRequestRecord, describeChange, FieldChange, ProfileEvent } from '../merchants/change-requests';
 import { EMPTY_MCC_CATALOGUE, MccAuditEvent, MccCatalogue, MccCatalogueEntry, MccChangeRequest, mccCountryCheck, mccIssue, MccRef } from '../merchants/mcc';
 import { regionForCountry } from '../merchants/regions';
 import { randomToken } from './crypto';
 import { entityOfApplication, GoLiveIntent, goLiveBlocker, isRuleError, issueMid, MerchantEntity, parentEntityOf, RegionalMid, toMidView } from './merchant-identity';
 import { MigrationFlag, migrationFlags, MigrationLogEntry, normaliseMerchantDb, SCHEMA_REVISION } from './merchant-migrations';
 import { buildMerchantSeed } from './merchant-seed';
+import { approvalsFor, ChangeContext, decideChange, merchantRiskApproved, profileEvent, requestCountryChange, requestProfileChange, toChangeView, withdrawChange } from './change-requests';
 import { cancelPricing, decidePricing, DERIVED_CHECKLIST, onboardingGaps, ProductContext, productView, saveProducts, setPricing, syncDerivedChecklist } from './product-pricing';
 import { ApiError, fail } from './server-errors';
 import { simulateVerification } from './verification';
@@ -51,7 +53,7 @@ export interface MerchantDb {
   version: number;
   /** Highest data upgrade applied (absent = before entities and MIDs). See merchant-migrations.ts. */
   schemaRevision?: number;
-  seq: { merchant: number; application: number; notification: number; entity?: number; mid?: number; mccRequest?: number; pricing?: number };
+  seq: { merchant: number; application: number; notification: number; entity?: number; mid?: number; mccRequest?: number; pricing?: number; changeRequest?: number };
   merchants: MerchantRecord[];
   applications: CountryApplication[];
   notifications: PortalNotification[];
@@ -65,6 +67,9 @@ export interface MerchantDb {
   /** Product & Payment Config per application; absent until products are first saved. */
   productConfigs?: ProductConfig[];
   pricingVersions?: PricingVersion[];
+  /** Change requests after Risk approval (profile identity and country details). */
+  changeRequests?: ChangeRequestRecord[];
+  profileEvents?: ProfileEvent[];
 }
 
 export interface MerchantDataReport {
@@ -158,7 +163,7 @@ export class MerchantServer {
   }
 
   static handles(path: string) {
-    return /^\/api\/(merchants|applications|notifications)(\/|\?|$)/.test(path);
+    return /^\/api\/(merchants|applications|notifications|changes|approvals)(\/|\?|$)/.test(path);
   }
 
   async handle(method: string, path: string, body: any, token: string | null, roleHeader: string | null): Promise<ServerReply> {
@@ -179,7 +184,8 @@ export class MerchantServer {
         if (!id && m === 'GET') return ok(this.listMerchants());
         if (!id && m === 'POST') return ok(this.createMerchant(body, caller, role), 201);
         if (id && !sub && m === 'GET') return ok(this.merchantDetail(id));
-        if (id && !sub && m === 'PATCH') return ok(this.updateMerchant(id, body, role));
+        if (id && !sub && m === 'PATCH') return ok(this.updateMerchant(id, body, caller, role));
+        if (id && sub === 'changes' && m === 'POST') return ok(this.changeAction(caller, role, (ctx) => requestProfileChange(ctx, id, body)), 201);
         if (id && sub === 'lifecycle' && m === 'POST') return ok(this.updateMerchantLifecycle(id, body, caller, role));
         if (id && sub === 'applications' && m === 'POST') return ok(this.createApplication(id, body, caller, role), 201);
         if (id && sub === 'mcc' && !subId && m === 'PUT') return ok(this.setMcc(id, body, caller, role));
@@ -193,12 +199,16 @@ export class MerchantServer {
         if (id && sub === 'submit' && m === 'POST') return ok(this.submit(id, body, caller, role));
         if (id && sub === 'review' && m === 'POST') return ok(this.review(id, body, caller, role));
         if (id && sub === 'readiness' && m === 'POST') return ok(await this.readiness(id, body, caller, role));
+        if (id && sub === 'changes' && m === 'POST') return ok(this.changeAction(caller, role, (ctx) => requestCountryChange(ctx, id, body)), 201);
         if (id && sub === 'products' && m === 'GET') return ok(this.products(id, role));
         if (id && sub === 'products' && m === 'PUT') return ok(this.productAction(id, caller, role, (ctx) => ({ message: saveProducts(ctx, body) })));
         if (id && sub === 'pricing' && !subId && m === 'POST') return ok(this.productAction(id, caller, role, (ctx) => ({ version: setPricing(ctx, body) })), 201);
         if (id && sub === 'pricing' && subId && action === 'cancel' && m === 'POST') return ok(this.productAction(id, caller, role, (ctx) => ({ version: cancelPricing(ctx, subId, body) })));
         if (id && sub === 'pricing' && subId && action === 'decision' && m === 'POST') return ok(this.productAction(id, caller, role, (ctx) => ({ version: decidePricing(ctx, subId, body) })));
       }
+      if (resource === 'changes' && id && sub === 'decision' && m === 'POST') return ok(this.changeAction(caller, role, (ctx) => decideChange(ctx, id, body)));
+      if (resource === 'changes' && id && sub === 'withdraw' && m === 'POST') return ok(this.changeAction(caller, role, (ctx) => withdrawChange(ctx, id)));
+      if (resource === 'approvals' && !id && m === 'GET') return ok(approvalsFor(this.load(), role));
       if (resource === 'notifications') {
         if (!id && m === 'GET') return ok(this.load().notifications);
         if (id === 'read' && m === 'POST') return ok(this.markRead(body, role));
@@ -234,6 +244,8 @@ export class MerchantServer {
       mccEvents: (db.mccEvents ?? []).filter((e) => e.merchantId === m.id).sort((a, b) => b.at - a.at),
       mccRequest: (db.mccRequests ?? []).find((r) => r.merchantId === m.id && r.status === 'pending') ?? null,
       mccChangeNeedsRisk: this.riskApproved(db, m.id),
+      pendingChanges: (db.changeRequests ?? []).filter((r) => r.merchantId === m.id && r.status === 'pending').map(toChangeView),
+      profileEvents: (db.profileEvents ?? []).filter((e) => e.merchantId === m.id),
     };
   }
 
@@ -299,16 +311,57 @@ export class MerchantServer {
     return this.withStatus(db, merchant);
   }
 
-  private updateMerchant(id: string, body: any, role: StaffRole): GlobalMerchant {
+  /**
+   * Direct profile edits by Sales / Operations, always recorded. Contact details can change at any
+   * time. Once Risk has approved the merchant, the legal identity changes only through a change
+   * request that Risk approves.
+   */
+  private updateMerchant(id: string, body: any, caller: Caller, role: StaffRole): GlobalMerchant {
     this.requireRole(role, 'sales');
     const db = this.load();
     const m = this.findMerchant(db, id);
     const input = this.readMerchantInput({ ...m, ...body });
+    const before = { legalName: m.legalName, registrationCountry: m.registrationCountry, registrationNumber: m.registrationNumber };
+    const after = { legalName: input.legalName, registrationCountry: input.registrationCountry, registrationNumber: input.registrationNumber };
+    const identity = describeChange('identity', before, after);
+    if (identity.length && this.riskApproved(db, m.id)) {
+      fail(409, 'CHANGE_REQUEST_REQUIRED', { message: `${m.legalName} has been approved by Risk, so its legal identity can only change through a request that Risk approves.` });
+    }
     const clash = !input.registrationNumber ? undefined : db.merchants.find((x) => x.id !== m.id && x.registrationCountry === input.registrationCountry && normReg(x.registrationNumber) === normReg(input.registrationNumber));
     if (clash) fail(409, 'DUPLICATE_MERCHANT', { existingMerchantId: clash.id, message: `${clash.legalName} (${clash.id}) already uses this registration number.` });
-    Object.assign(m, { legalName: input.legalName, registrationCountry: input.registrationCountry, registrationNumber: input.registrationNumber, primaryContact: input.primaryContact, updatedAt: this.now() });
+    const contact: FieldChange[] = (['name', 'email', 'phone'] as const)
+      .filter((k) => m.primaryContact[k] !== input.primaryContact[k])
+      .map((k) => ({ field: `primaryContact.${k}`, label: { name: 'Main contact', email: 'Email', phone: 'Phone' }[k], from: m.primaryContact[k] || 'Not set', to: input.primaryContact[k] || 'Not set' }));
+    if (!identity.length && !contact.length) return this.withStatus(db, m);
+    const now = this.now();
+    Object.assign(m, { ...after, primaryContact: input.primaryContact, updatedAt: now });
+    if (identity.length) profileEvent(db, { at: now, merchantId: m.id, action: 'identity_updated', changes: identity, reason: null, by: caller.name, role, requestId: null, comment: null });
+    if (contact.length) profileEvent(db, { at: now, merchantId: m.id, action: 'contact_updated', changes: contact, reason: null, by: caller.name, role, requestId: null, comment: null });
     this.save(db);
     return this.withStatus(db, m);
+  }
+
+  /** Runs a change-request action and saves it with its history entries and notifications in one write. */
+  private changeAction<T>(caller: Caller, role: StaffRole, run: (ctx: ChangeContext) => T): T {
+    const db = this.load();
+    const result = run({
+      db,
+      caller,
+      role,
+      now: this.now(),
+      readData: (country, raw) => this.readData(country, raw),
+      recordApp: (app, text, comment) => this.event(app, caller, role, text, null, null, comment),
+      notify: (event, merchant, app, audience, title, body) => {
+        db.notifications.unshift({
+          id: `NT-${db.seq.notification++}`, at: this.now(), event, title, body, applicationId: app?.id ?? '', merchantId: merchant.id, ...(app ? { country: app.country } : {}), audience,
+          email: { to: audience.filter((a): a is Exclude<StaffRole, 'finops'> => a !== 'finops').map((a) => TEAM_MAILBOX[a]), subject: `[Mobi Global Platform] ${title}`, status: 'simulated' },
+          readBy: [],
+        });
+        db.notifications = db.notifications.slice(0, 300);
+      },
+    });
+    this.save(db);
+    return result;
   }
 
   private readMerchantInput(body: any): CreateMerchantRequest {
@@ -363,6 +416,7 @@ export class MerchantServer {
       midIssue: application.status === 'operational' && !mid ? (issue?.detail ?? 'No live MID has been assigned.') : null,
       mccChangeNeedsRisk: this.riskApproved(db, application.merchantId),
       productGaps: productPhase(application.status) === 'onboarding' ? onboardingGaps(db, application, this.now()) : null,
+      changes: (db.changeRequests ?? []).filter((r) => r.applicationId === application.id).sort((a, b) => b.requestedAt - a.requestedAt).map(toChangeView),
     };
   }
 
@@ -824,7 +878,7 @@ export class MerchantServer {
 
   /** Risk has approved at least one of the merchant's applications (MCC changes then need Risk). */
   private riskApproved(db: MerchantDb, merchantId: string): boolean {
-    return db.applications.some((a) => a.merchantId === merchantId && a.history.some((h) => h.toStatus === 'risk_approved'));
+    return merchantRiskApproved(db, merchantId);
   }
 
   /** A catalogue MCC that is available in every country the merchant has an open or live application in. */

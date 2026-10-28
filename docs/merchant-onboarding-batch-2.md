@@ -171,7 +171,7 @@ Automated: `npm test` runs 14 merchant-server unit tests (plus the 30 Batch 1 au
 5. Who receives each email (merchant contact vs. internal teams), and is there an approved notification service?
 6. Verification provider selection (AI Precise or another) and which checks are mandatory.
 7. Duplicate-detection rules beyond registration number + name (e.g. tax ID, directors, bank account).
-8. Should editing the Global profile after submission notify Risk or require re-review?
+8. Editing after Risk approval (decided): legal identity, business details, bank / settlement account, directors and beneficial owners, and documents change only through a request that Risk approves; contact details stay direct; everything is recorded. Ending active pricing after onboarding is deferred.
 9. Merchant users on the linked Global Account: invitation and activation flow (out of scope here).
 10. Self-onboarding (future): the application API is role-checked per action, so a merchant-facing role can later be allowed to edit drafts and submit without changing the review flow.
 11. Country configuration is edited by Sales / Operations (decided). Every change needs a reason and is recorded with the person and team. In production this must come from real staff permissions, not the prototype's role switcher.
@@ -182,3 +182,4 @@ Automated: `npm test` runs 14 merchant-server unit tests (plus the 30 Batch 1 au
 16. MCC separation of duties (prototype limitation): approval is limited by team (Risk), but one login can switch teams, so the same person could request and approve. Production needs person-level checks.
 17. Payout methods (open): no approved PayOut methods exist for any country, so PayOut is disabled. Product & Payment Config will list them once an approved list is supplied.
 18. Product & Payment Config decisions: "Issue production keys" is the onboarding handoff (to be confirmed against the intended process); FinOps approval is a prototype "View as" option only, with in-app notifications and no email; settlement changes never need approval; a product with active pricing can't be switched off after onboarding (ending pricing would be a later feature).
+19. Separation of duties (prototype limitation): Risk and FinOps approvals are checked by team only. One login can switch teams in "View as" and approve its own change, MCC or pricing request. Production needs person-level checks.

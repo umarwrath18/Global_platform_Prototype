@@ -146,6 +146,22 @@
               <app-product-payment-config [applicationId]="a.id" (changed)="onProductsChanged()" />
             </section>
           }
+          @if (inReadiness()) {
+            <section class="ppc-section" aria-label="Changes after Risk approval">
+              <div class="ppc-title">
+                <h2>Changes after approval</h2>
+                @if (role() === 'sales' && !changeForm()) {<button type="button" class="btn sm" (click)="changeForm.set(true)">Request a change</button>}
+              </div>
+              @if (changeForm()) {
+                <app-change-request-form [application]="a" [merchant]="m" (submitted)="onChangeSubmitted($event)" (closed)="changeForm.set(false)" />
+              }
+              @if (d.changes.length) {
+                <app-pending-changes [changes]="d.changes" title="Change requests" (changed)="onChangeAction($event)" />
+              } @else if (!changeForm()) {
+                <p class="hint-line"><app-icon name="info" [size]="14" />Business details, bank account, directors and documents change only through a request that Risk approves.</p>
+              }
+            </section>
+          }
           @if (['draft', 'returned'].includes(a.status) && role() !== 'sales') {
             <p class="hint-line"><app-icon name="lock" [size]="14" />View only. Sales / Operations can edit draft and returned applications.</p>
           }

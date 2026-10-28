@@ -129,6 +129,24 @@ application: its MDRs become legacy pricing only where the history records the a
 MDR is in range; no settlement cycle is assumed. There is no standalone pricing page or popup.
 After onboarding, open Merchants → the card icon on a row, or a country's "Products & pricing" link.
 
+**Changes after Risk approval.** Once Risk has approved a merchant, anything Risk reviewed changes
+only through a change request that Risk approves: the legal identity (merchant page → "Request
+identity change") and, per country, business details, bank / settlement account, directors and
+beneficial owners, and documents (application page → "Changes after approval"). Sales / Operations
+request and can withdraw their own requests; Risk approves (the change is applied at once) or
+rejects with a reason (nothing changes). Contact details stay directly editable. Every edit,
+request and decision is recorded (merchant page → Profile history, and the application history),
+with the old and new values; bank account numbers are always masked and are never shown in full
+in the request form (leave the field blank to keep the current number). The application's
+submitted profile and rules snapshot keep what Risk originally reviewed. Before the first Risk
+approval, profile edits stay direct and are recorded too.
+
+**Approvals.** One page lists what is waiting for the acting team: Risk sees profile, country and
+MCC change requests; FinOps sees pricing changes; Sales / Operations see their own requests; CS
+sees everything, read only. Each item links to the page where the decision is made. Approval is
+checked by team only: in this prototype one login can switch teams in "View as" and approve its own
+request. Production needs person-level separation of duties.
+
 **Data upgrade.** The first request with this build upgrades existing merchant data in place
 (schema revision 3, still `version: 2`): it copies the original to `mobi.gp.merchantdb.backup.r2`
 first, adds entities, regions and MIDs, and changes nothing else. Operational countries get an MID

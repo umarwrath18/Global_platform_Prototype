@@ -1,0 +1,63 @@
+<main class="page">
+  <div class="portal-head">
+    <div>
+      <h1>Approvals</h1>
+      <p class="sub">Changes after onboarding that need a decision: profile and country changes and MCC changes (Risk), and pricing changes (FinOps).</p>
+    </div>
+  </div>
+
+  @if (view(); as v) {
+    <section class="panel-card" aria-labelledby="pending-title">
+      <div class="panel-head">
+        <div>
+          <h2 id="pending-title">{{ v.heading }} <span class="count">{{ v.pending.length }}</span></h2>
+          <p>{{ v.canDecide ? 'Oldest first. Open an item to review and decide.' : roles.role() === 'sales' ? 'Requests made by Sales / Operations that are still waiting.' : 'View only.' }}</p>
+        </div>
+      </div>
+      @if (v.pending.length) {
+        <ul class="ap-list">
+          @for (i of v.pending; track i.kind + i.id) {
+            <li>
+              <div class="ap-main">
+                <span class="tag">{{ kindLabel[i.kind] }}</span>
+                <a class="row-link" [routerLink]="i.link">{{ i.title }}</a>
+                <span class="muted">{{ i.merchantName }} · {{ i.id }}</span>
+              </div>
+              <p class="ap-summary">{{ i.summary }}</p>
+              <p class="ap-meta">Requested {{ dateTime(i.requestedAt) }} by {{ i.requestedBy }} ({{ teamLabel[i.requestedRole] }}) · decided by {{ teamLabel[i.approverTeam] }}</p>
+              <a class="btn sm" [routerLink]="i.link">{{ v.canDecide ? 'Review' : 'Open' }}</a>
+            </li>
+          }
+        </ul>
+      } @else {
+        <div class="empty-state"><div class="icon-tile"><app-icon name="check-circle" /></div><h3>Nothing waiting</h3><p>New requests appear here and in Notifications.</p></div>
+      }
+    </section>
+
+    <section class="panel-card" aria-labelledby="recent-title">
+      <div class="panel-head"><div><h2 id="recent-title">Recent decisions</h2><p>Latest first</p></div></div>
+      @if (v.recent.length) {
+        <ul class="ap-list">
+          @for (i of v.recent; track i.kind + i.id) {
+            <li>
+              <div class="ap-main">
+                <span class="status" [class]="'status ' + status[i.status].tone">{{ status[i.status].label }}</span>
+                <span class="tag">{{ kindLabel[i.kind] }}</span>
+                <a class="row-link" [routerLink]="i.link">{{ i.title }}</a>
+                <span class="muted">{{ i.merchantName }} · {{ i.id }}</span>
+              </div>
+              <p class="ap-summary">{{ i.summary }}</p>
+              @if (i.decidedAt) {<p class="ap-meta">Decided {{ dateTime(i.decidedAt) }}</p>}
+            </li>
+          }
+        </ul>
+      } @else {
+        <div class="panel-body"><p class="muted">No decisions yet.</p></div>
+      }
+    </section>
+  } @else if (error(); as e) {
+    <section class="panel-card"><div class="empty-state" role="alert"><div class="icon-tile"><app-icon name="alert-circle" /></div><h3>We couldn't load approvals</h3><p>{{ e.message }}</p><button type="button" class="btn" (click)="load()">Try again</button></div></section>
+  } @else {
+    <section class="panel-card"><div class="skeleton-rows" aria-busy="true" aria-label="Loading approvals"><span></span><span></span><span></span></div></section>
+  }
+</main>

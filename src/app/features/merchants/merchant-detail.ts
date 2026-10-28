@@ -5,6 +5,9 @@ import { MerchantApi, MerchantClientError, toMerchantError } from '../../core/me
 import { MCC_OUTCOME_LABEL, mccCountryCheck, mccLabel } from '../../core/merchants/mcc';
 import { MccService } from '../../core/merchants/mcc.service';
 import { productPhase } from '../../core/merchants/products';
+import { IdentityValue, PROFILE_ACTION_LABEL } from '../../core/merchants/change-requests';
+import { FieldIssue } from '../../core/merchants/merchant-models';
+import { PendingChanges } from '../changes/pending-changes';
 import { HistoryEvent, MerchantDetail, READINESS_STATUSES, STAFF_ROLE_LABEL } from '../../core/merchants/merchant-models';
 import { REGISTRATION_COUNTRIES, countryName } from '../../core/merchants/onboarding-config';
 import { StaffRoleService } from '../../core/merchants/staff-role.service';
@@ -26,7 +29,7 @@ const STAGES = ['draft', 'pending_risk_review', ...READINESS_STATUSES];
 @Component({
   selector: 'app-merchant-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Icon, StatusBadge],
+  imports: [RouterLink, Icon, StatusBadge, PendingChanges],
   templateUrl: './merchant-detail.html',
   styleUrl: './merchant-detail.scss',
 })
@@ -61,6 +64,16 @@ export class MerchantDetailPage {
   }
   protected readonly roleLabel = { ...STAFF_ROLE_LABEL, system: 'System' } as Record<HistoryEvent['role'], string>;
   protected readonly mccLabel = mccLabel;
+  protected readonly profileActionLabel = PROFILE_ACTION_LABEL;
+
+  // Legal identity change request (after Risk approval).
+  protected readonly identityForm = signal(false);
+  protected readonly idDraft = signal<IdentityValue>({ legalName: '', registrationCountry: '', registrationNumber: '' });
+  protected readonly idReason = signal('');
+  protected readonly idBusy = signal(false);
+  protected readonly idError = signal<string | null>(null);
+  protected readonly idIssues = signal<FieldIssue[]>([]);
+  protected readonly identityPending = computed(() => (this.detail()?.pendingChanges ?? []).some((c) => c.scope === 'merchant_profile'));
   protected readonly handedOff = (status: Parameters<typeof productPhase>[0]) => productPhase(status) === 'post_handoff';
   protected readonly mccOutcomeLabel = MCC_OUTCOME_LABEL;
   protected readonly teamLabel = (role: string | null) => (role ? (STAFF_ROLE_LABEL as Record<string, string>)[role] ?? role : '');
@@ -197,6 +210,56 @@ export class MerchantDetailPage {
     } finally {
       this.mccBusy.set(null);
     }
+  }
+
+  protected openIdentityForm() {
+    const m = this.detail()!.merchant;
+    this.idDraft.set({ legalName: m.legalName, registrationCountry: m.registrationCountry, registrationNumber: m.registrationNumber });
+    this.idReason.set('');
+    this.idError.set(null);
+    this.idIssues.set([]);
+    this.identityForm.set(true);
+  }
+
+  protected closeIdentityForm() {
+    const m = this.detail()!.merchant;
+    const d = this.idDraft();
+    const dirty = d.legalName !== m.legalName || d.registrationCountry !== m.registrationCountry || d.registrationNumber !== m.registrationNumber || this.idReason().trim() !== '';
+    if (dirty && !confirm('Discard this change request?')) return;
+    this.identityForm.set(false);
+  }
+
+  protected setId(key: keyof IdentityValue, value: string) {
+    this.idDraft.update((d) => ({ ...d, [key]: value }));
+  }
+
+  protected idIssue(field: string) {
+    return this.idIssues().find((i) => i.field === field)?.message ?? null;
+  }
+
+  protected async requestIdentity() {
+    this.idBusy.set(true);
+    this.idError.set(null);
+    this.idIssues.set([]);
+    try {
+      const r = await this.api.requestProfileChange(this.id(), { section: 'identity', value: this.idDraft(), reason: this.idReason().trim() });
+      this.identityForm.set(false);
+      await this.load();
+      this.flash(`${r.id} sent to Risk`);
+    } catch (e) {
+      const err = toMerchantError(e);
+      if ('errors' in err && err.errors?.length) {
+        this.idIssues.set(err.errors);
+        this.idError.set(err.errors.find((i) => i.field === 'reason')?.message ?? `${err.errors.length} item${err.errors.length === 1 ? '' : 's'} must be fixed.`);
+      } else this.idError.set(err.message ?? "We couldn't send the change request.");
+    } finally {
+      this.idBusy.set(false);
+    }
+  }
+
+  protected async onChangeAction(message: string) {
+    await this.load();
+    this.flash(message);
   }
 
   protected startEdit() {

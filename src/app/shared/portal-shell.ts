@@ -29,6 +29,7 @@ const NAV: NavItem[] = [
   { label: 'Merchants', icon: 'store', link: '/merchants' },
   { label: 'Applications', icon: 'file', link: '/applications' },
   { label: 'Notifications', icon: 'bell', link: '/notifications' },
+  { label: 'Approvals', icon: 'check-circle', link: '/approvals' },
 ];
 
 /** Global configuration. */

@@ -181,3 +181,22 @@
   font-family: inherit;
   font-size: 12px;
 }
+
+.id-form {
+  display: grid;
+  gap: 10px;
+
+  h3 {
+    margin: 0;
+    font-size: 14px;
+  }
+}
+
+.f-hint.full {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.profile-history {
+  margin-top: 16px;
+}

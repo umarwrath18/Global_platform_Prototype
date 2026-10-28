@@ -20,6 +20,8 @@ const EVENT_LABEL: Record<NotificationEvent, string> = {
   mcc_change_decided: 'MCC change decided',
   pricing_approval_requested: 'Pricing to approve',
   pricing_decided: 'Pricing decided',
+  change_requested: 'Change to review',
+  change_decided: 'Change decided',
 };
 
 /** In-portal notification history, with the target (simulated) email for each event. */

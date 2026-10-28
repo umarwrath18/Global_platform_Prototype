@@ -5,6 +5,7 @@
 import type { MccAuditEvent, MccChangeRequest, MccRef, MerchantMcc } from './mcc';
 import type { CountryOnboardingConfig } from './onboarding-config';
 import type { ProductGap } from './products';
+import type { ChangeRequest, ProfileEvent } from './change-requests';
 
 /** Prototype-only: the internal team the signed-in user is acting as. */
 export type StaffRole = 'sales' | 'risk' | 'cs' | 'finops';
@@ -288,6 +289,10 @@ export interface MerchantDetail {
   mccRequest: MccChangeRequest | null;
   /** True once the merchant has been approved by Risk: MCC changes then need Risk approval. */
   mccChangeNeedsRisk: boolean;
+  /** Pending change requests for the merchant and its countries. */
+  pendingChanges: ChangeRequest[];
+  /** Profile history (contact edits, identity edits and requests), latest first. */
+  profileEvents: ProfileEvent[];
 }
 
 export interface ApplicationDetail {
@@ -301,6 +306,8 @@ export interface ApplicationDetail {
   mccChangeNeedsRisk: boolean;
   /** During Product & Payment Config: what still stops "Issue production keys". Null at other stages. */
   productGaps: ProductGap[] | null;
+  /** Change requests for this country after Risk approval, latest first. */
+  changes: ChangeRequest[];
 }
 
 export type ReviewDecision = 'approve' | 'return' | 'reject';
@@ -333,7 +340,9 @@ export type NotificationEvent =
   | 'mcc_change_requested'
   | 'mcc_change_decided'
   | 'pricing_approval_requested'
-  | 'pricing_decided';
+  | 'pricing_decided'
+  | 'change_requested'
+  | 'change_decided';
 
 export interface PortalNotification {
   id: string;
@@ -377,6 +386,8 @@ export type MerchantApiErrorCode =
   | 'PRICING_WILL_BE_CANCELLED'
   | 'PRODUCT_HAS_ACTIVE_PRICING'
   | 'PRICING_PENDING'
+  | 'CHANGE_REQUEST_REQUIRED'
+  | 'CHANGE_PENDING'
   | 'NOT_FOUND';
 
 export interface MerchantApiError {

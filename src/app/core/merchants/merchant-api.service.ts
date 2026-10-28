@@ -17,6 +17,7 @@ import {
   UpdateMerchantRequest,
 } from './merchant-models';
 import type { MccChangeRequest } from './mcc';
+import type { ApprovalsView, ChangeRequest, CreateChangeRequest } from './change-requests';
 import type { PricingVersion, ProductPricingView, SaveProductsRequest, SetPricingRequest } from './products';
 import { StaffRoleService } from './staff-role.service';
 
@@ -41,6 +42,9 @@ export class MerchantApi {
   private readonly notificationState = signal<PortalNotification[]>([]);
   readonly notifications = this.notificationState.asReadonly();
   readonly myNotifications = computed(() => this.notificationState().filter((n) => n.audience.includes(this.roles.role())));
+  private readonly approvalsCountState = signal(0);
+  /** Items waiting for the acting team's decision (Risk, FinOps). */
+  readonly approvalsCount = this.approvalsCountState.asReadonly();
   readonly unreadCount = computed(() => this.myNotifications().filter((n) => !n.readBy.includes(this.roles.role())).length);
 
   private get headers() {
@@ -118,6 +122,28 @@ export class MerchantApi {
     return this.run(this.http.post<CountryApplication>(`/api/applications/${encodeURIComponent(id)}/readiness`, action, { headers: this.headers }), true);
   }
 
+  // ------------------------------------------ Change requests and approvals
+
+  requestProfileChange(merchantId: string, req: CreateChangeRequest) {
+    return this.run(this.http.post<ChangeRequest>(`/api/merchants/${encodeURIComponent(merchantId)}/changes`, req, { headers: this.headers }), true);
+  }
+
+  requestCountryChange(applicationId: string, req: CreateChangeRequest) {
+    return this.run(this.http.post<ChangeRequest>(`/api/applications/${encodeURIComponent(applicationId)}/changes`, req, { headers: this.headers }), true);
+  }
+
+  decideChange(id: string, decision: 'approve' | 'reject', comment: string) {
+    return this.run(this.http.post<ChangeRequest>(`/api/changes/${encodeURIComponent(id)}/decision`, { decision, comment }, { headers: this.headers }), true);
+  }
+
+  withdrawChange(id: string) {
+    return this.run(this.http.post<ChangeRequest>(`/api/changes/${encodeURIComponent(id)}/withdraw`, {}, { headers: this.headers }), true);
+  }
+
+  getApprovals() {
+    return this.run(this.http.get<ApprovalsView>('/api/approvals', { headers: this.headers }));
+  }
+
   // ---------------------------------------------- Product & Payment Config
 
   getProducts(applicationId: string) {
@@ -145,6 +171,8 @@ export class MerchantApi {
   async refreshNotifications() {
     try {
       this.notificationState.set(await firstValueFrom(this.http.get<PortalNotification[]>('/api/notifications', { headers: this.headers })));
+      const approvals = await firstValueFrom(this.http.get<ApprovalsView>('/api/approvals', { headers: this.headers }));
+      this.approvalsCountState.set(approvals.canDecide ? approvals.pending.length : 0);
     } catch {
       // Keep the last known list; 401s are handled by the auth interceptor.
     }

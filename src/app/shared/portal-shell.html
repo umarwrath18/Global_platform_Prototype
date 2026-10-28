@@ -40,6 +40,9 @@
               @if (item.link === '/notifications' && api.unreadCount()) {
                 <span class="nav-count" [attr.aria-label]="api.unreadCount() + ' unread'">{{ api.unreadCount() > 99 ? '99+' : api.unreadCount() }}</span>
               }
+              @if (item.link === '/approvals' && api.approvalsCount()) {
+                <span class="nav-count" [attr.aria-label]="api.approvalsCount() + ' waiting for your decision'">{{ api.approvalsCount() }}</span>
+              }
             </a>
           </li>
         }

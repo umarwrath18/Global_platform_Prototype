@@ -55,12 +55,36 @@
               <h2>Profile</h2>
               <p>Shared by every country this merchant operates in.</p>
             </div>
-            @if (roles.role() === 'sales' && !editing()) {
-              <button type="button" class="btn sm" (click)="startEdit()"><app-icon name="edit" [size]="14" />Edit</button>
+            @if (roles.role() === 'sales' && !editing() && !identityForm()) {
+              <div class="actions">
+                @if (d.mccChangeNeedsRisk && !identityPending()) {
+                  <button type="button" class="btn sm" (click)="openIdentityForm()">Request identity change</button>
+                }
+                <button type="button" class="btn sm" (click)="startEdit()"><app-icon name="edit" [size]="14" />Edit</button>
+              </div>
             }
           </div>
           <div class="panel-body">
-            @if (editing() && draft(); as p) {
+            @if (identityForm()) {
+              <form class="id-form" (submit)="$event.preventDefault(); requestIdentity()" novalidate aria-labelledby="id-form-title">
+                <h3 id="id-form-title">Request a legal identity change</h3>
+                <p class="f-hint">Nothing changes until Risk approves. Risk sees the current and proposed values side by side.</p>
+                <div class="f-grid">
+                  <div class="f-field full"><label for="id-name">Legal name</label><input id="id-name" class="f-input" [value]="idDraft().legalName" (input)="setId('legalName', $any($event.target).value)" />@if (idIssue('identity.legalName'); as m) {<p class="f-error">{{ m }}</p>}</div>
+                  <div class="f-field"><label for="id-rc">Registration country</label>
+                    <select id="id-rc" class="f-input" (change)="setId('registrationCountry', $any($event.target).value)">
+                      @for (c of regCountries; track c.code) {<option [value]="c.code" [selected]="c.code === idDraft().registrationCountry">{{ c.name }}</option>}
+                    </select></div>
+                  <div class="f-field"><label for="id-rn">Registration number</label><input id="id-rn" class="f-input" [value]="idDraft().registrationNumber" (input)="setId('registrationNumber', $any($event.target).value)" />@if (idIssue('identity.registrationNumber'); as m) {<p class="f-error">{{ m }}</p>}</div>
+                  <div class="f-field full"><label for="id-reason">Reason <span class="req">*</span></label><textarea id="id-reason" class="f-input" rows="2" maxlength="500" [value]="idReason()" (input)="idReason.set($any($event.target).value)"></textarea><p class="f-hint">At least 10 characters.</p></div>
+                </div>
+                @if (idError(); as e) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
+                <div class="actions edit-actions">
+                  <button type="button" class="btn" (click)="closeIdentityForm()" [disabled]="idBusy()">Cancel</button>
+                  <button type="submit" class="btn primary" [disabled]="idBusy()">@if (idBusy()) {<span class="spinner" aria-hidden="true"></span>}Send to Risk</button>
+                </div>
+              </form>
+            } @else if (editing() && draft(); as p) {
               <form (submit)="$event.preventDefault(); saveProfile()" novalidate>
                 @if (saveError(); as msg) {
                   <div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ msg }}</div></div>
@@ -68,12 +92,12 @@
                 <div class="f-grid">
                   <div class="f-field full">
                     <label for="p-name">Legal name <span class="req">*</span></label>
-                    <input id="p-name" class="f-input" [class.invalid]="draftErrors()['legalName']" [value]="p.legalName" (input)="setDraft('legalName', $any($event.target).value)" />
+                    <input id="p-name" class="f-input" [disabled]="d.mccChangeNeedsRisk" [class.invalid]="draftErrors()['legalName']" [value]="p.legalName" (input)="setDraft('legalName', $any($event.target).value)" />
                     @if (draftErrors()['legalName']; as m) {<p class="f-error">{{ m }}</p>}
                   </div>
                   <div class="f-field">
                     <label for="p-rc">Registration country <span class="req">*</span></label>
-                    <select id="p-rc" class="f-input" (change)="setDraft('registrationCountry', $any($event.target).value)">
+                    <select id="p-rc" class="f-input" [disabled]="d.mccChangeNeedsRisk" (change)="setDraft('registrationCountry', $any($event.target).value)">
                       @for (c of regCountries; track c.code) {
                         <option [value]="c.code" [selected]="c.code === p.registrationCountry">{{ c.name }}</option>
                       }
@@ -81,9 +105,12 @@
                   </div>
                   <div class="f-field">
                     <label for="p-rn">Registration number <span class="req">*</span></label>
-                    <input id="p-rn" class="f-input" [class.invalid]="draftErrors()['registrationNumber']" [value]="p.registrationNumber" (input)="setDraft('registrationNumber', $any($event.target).value)" />
+                    <input id="p-rn" class="f-input" [disabled]="d.mccChangeNeedsRisk" [class.invalid]="draftErrors()['registrationNumber']" [value]="p.registrationNumber" (input)="setDraft('registrationNumber', $any($event.target).value)" />
                     @if (draftErrors()['registrationNumber']; as m) {<p class="f-error">{{ m }}</p>}
                   </div>
+                  @if (d.mccChangeNeedsRisk) {
+                    <p class="f-hint full">Risk has approved this merchant, so the legal name and registration can only change through a request that Risk approves. Contact details save straight away and are recorded.</p>
+                  }
                   <div class="f-field">
                     <label for="p-cn">Main contact <span class="req">*</span></label>
                     <input id="p-cn" class="f-input" [class.invalid]="draftErrors()['name']" [value]="p.name" (input)="setDraft('name', $any($event.target).value)" />
@@ -127,6 +154,8 @@
             }
           </div>
         </section>
+
+        <app-pending-changes [changes]="d.pendingChanges" (changed)="onChangeAction($event)" />
 
         <section class="panel-card mcc-card" aria-labelledby="mcc-title">
           <div class="panel-head">
@@ -283,6 +312,22 @@
               </li>
             } @empty {
               <li class="t-empty">No lifecycle actions recorded.</li>
+            }
+          </ol>
+        </section>
+        <section class="profile-history">
+          <div class="panel-head"><div><h2>Profile history</h2><p>Contact edits, identity changes and Risk decisions</p></div></div>
+          <ol class="timeline">
+            @for (e of d.profileEvents; track $index) {
+              <li>
+                <span class="t-action">{{ profileActionLabel[e.action] }}@if (e.requestId) { · {{ e.requestId }}}</span>
+                @for (c of e.changes; track c.field) {<span class="t-comment">{{ c.label }}: {{ c.from }} → {{ c.to }}</span>}
+                <span class="t-meta">{{ dateTime(e.at) }} · {{ e.by }} · {{ teamLabel(e.role) }}</span>
+                @if (e.reason) {<span class="t-meta">Reason: {{ e.reason }}</span>}
+                @if (e.comment) {<span class="t-meta">Risk: {{ e.comment }}</span>}
+              </li>
+            } @empty {
+              <li class="t-empty">No profile changes recorded.</li>
             }
           </ol>
         </section>

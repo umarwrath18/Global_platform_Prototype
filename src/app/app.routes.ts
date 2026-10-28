@@ -71,6 +71,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/products/products-page').then((m) => m.ProductsPage),
       },
       {
+        path: 'approvals',
+        title: 'Approvals · Mobi Global Platform',
+        loadComponent: () => import('./features/approvals/approvals').then((m) => m.Approvals),
+      },
+      {
         path: 'configuration/countries',
         title: 'Country configuration · Mobi Global Platform',
         loadComponent: () => import('./features/configuration/country-config-list').then((m) => m.CountryConfigList),
