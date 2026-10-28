@@ -67,6 +67,8 @@ export class ApplicationForm implements OnInit {
     return !!m && this.mcc.availability(m.code, this.application().country) === 'restricted';
   });
   protected readonly mccSaving = signal(false);
+  /** Confirms that the MCC was saved to the merchant (it doesn't wait for "Save draft"). */
+  protected readonly mccSavedNote = signal<string | null>(null);
   protected readonly mccError = signal<string | null>(null);
   protected readonly issues = computed(() => {
     const out = validateApplication(this.application().country, this.data(), this.merchant());
@@ -161,9 +163,11 @@ export class ApplicationForm implements OnInit {
     if (!code) return;
     this.mccSaving.set(true);
     this.mccError.set(null);
+    this.mccSavedNote.set(null);
     try {
       const m = await this.api.setMcc(this.merchant().id, code);
       this.mccSaved.set(m.mcc ?? null);
+      this.mccSavedNote.set(m.mcc ? `MCC ${m.mcc.code} saved to ${this.merchant().legalName}.` : null);
     } catch (e) {
       this.mccError.set(toMerchantError(e).message ?? "We couldn't save the MCC. Please try again.");
     } finally {

@@ -118,6 +118,8 @@
                 <p class="f-hint" id="mcc-hint">Set once for the merchant and shared by all its countries and sub-merchants. Only MCCs available in {{ cfg().name }} are listed.@if (mcc.isTestFixture()) {{{ ' ' }}<strong>Test fixture – not an approved catalogue.</strong>}</p>
               }
               @if (mccRestricted()) {<p class="f-hint warn"><app-icon name="alert-circle" [size]="14" />Restricted in {{ cfg().name }}: it will be flagged for Risk review.</p>}
+              @if (mccSaving()) {<p class="f-hint" role="status"><span class="spinner" aria-hidden="true"></span>Saving MCC…</p>}
+              @else if (mccSavedNote(); as n) {<p class="f-hint saved" role="status"><app-icon name="check-circle" [size]="14" />{{ n }} It's saved straight away, separately from the draft.</p>}
               @if (mccError(); as m) {<p class="f-error" role="alert"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
               @else if (err('business.mcc'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
             </div>

@@ -7,6 +7,7 @@
     </div>
     @if (canAdd() && !adding()) {<button type="button" class="btn sm" (click)="openAdd()"><app-icon name="plus" [size]="14" />Add sub-merchant</button>}
   </div>
+  @if (blockedReason(); as r) {<p class="sm-note" role="note"><app-icon name="info" [size]="14" />{{ r }}</p>}
 
   @if (adding()) {
     @let f = form();
@@ -69,6 +70,7 @@
         <div>
           <h3>{{ s.displayName }}</h3>
           <dl class="kv">
+            <div><dt>Parent merchant</dt><dd>{{ merchant().legalName }} · GMID {{ merchant().id }}</dd></div>
             <div><dt>Legal identity</dt><dd>{{ s.legalEntity ? s.legalEntity.legalName + ' (' + s.legalEntity.registrationNumber + ')' : 'Trades under the parent' }}</dd></div>
             <div><dt>Created</dt><dd>{{ dateTime(s.createdAt) }} · {{ s.createdBy }}</dd></div>
             @if (s.lifecycleStatus === 'suspended') {<div><dt>Suspended</dt><dd>{{ s.lifecycleReason }}</dd></div>}

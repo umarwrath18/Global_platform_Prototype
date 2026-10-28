@@ -20,12 +20,12 @@
             <li>
               <div class="ap-main">
                 <span class="tag">{{ kindLabel[i.kind] }}</span>
-                <a class="row-link" [routerLink]="i.link">{{ i.title }}</a>
+                <a class="row-link" [routerLink]="i.link" [queryParams]="i.query ?? null">{{ i.title }}</a>
                 <span class="muted">{{ i.merchantName }}@if (i.kind !== 'sub_merchant') { · {{ i.id }}}</span>
               </div>
               <p class="ap-summary">{{ i.summary }}</p>
               <p class="ap-meta">Requested {{ dateTime(i.requestedAt) }} by {{ i.requestedBy }} ({{ teamLabel[i.requestedRole] }}) · decided by {{ teamLabel[i.approverTeam] }}</p>
-              <a class="btn sm" [routerLink]="i.link">{{ v.canDecide ? 'Review' : 'Open' }}</a>
+              <a class="btn sm" [routerLink]="i.link" [queryParams]="i.query ?? null">{{ v.canDecide ? 'Review' : 'Open' }}</a>
             </li>
           }
         </ul>
@@ -43,7 +43,7 @@
               <div class="ap-main">
                 <span class="status" [class]="'status ' + status[i.status].tone">{{ status[i.status].label }}</span>
                 <span class="tag">{{ kindLabel[i.kind] }}</span>
-                <a class="row-link" [routerLink]="i.link">{{ i.title }}</a>
+                <a class="row-link" [routerLink]="i.link" [queryParams]="i.query ?? null">{{ i.title }}</a>
                 <span class="muted">{{ i.merchantName }}@if (i.kind !== 'sub_merchant') { · {{ i.id }}}</span>
               </div>
               <p class="ap-summary">{{ i.summary }}</p>

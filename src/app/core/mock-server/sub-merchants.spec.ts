@@ -200,4 +200,14 @@ describe('Sub-merchants', () => {
     expect(keep()).toBe(before);
     expect(server.dataReport().flags).toEqual([]);
   });
+
+  // Regression: parent-child relationships weren't visible outside the parent page.
+  it('counts sub-merchants on the merchant list and links Risk straight to the one to review', async () => {
+    const s = (await create('GM-100101', { country: 'MY', displayName: 'Tanjung Outlet KL', legalEntity: null, submit: true })).body;
+    const list = (await call<any[]>('GET', '/api/merchants')).body;
+    expect(list.find((m) => m.id === 'GM-100101').subMerchantCount).toBe(1);
+    expect(list.find((m) => m.id === 'GM-100102').subMerchantCount).toBe(0);
+    const item = (await call<any>('GET', '/api/approvals', null, 'risk')).body.pending.find((i: any) => i.kind === 'sub_merchant');
+    expect(item).toMatchObject({ link: ['/merchants', 'GM-100101'], query: { sub: s.id } });
+  });
 });

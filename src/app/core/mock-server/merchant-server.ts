@@ -240,7 +240,8 @@ export class MerchantServer {
       .map((m) => {
         const apps = db.applications.filter((a) => a.merchantId === m.id).map((a) => this.summary(db, a, m));
         const lastUpdatedAt = Math.max(m.updatedAt, ...apps.map((a) => a.updatedAt));
-        return { ...this.withStatus(db, m), applications: apps, lastUpdatedAt };
+        const subMerchantCount = (db.entities ?? []).filter((e) => e.gmid === m.id && e.kind === 'sub').length;
+        return { ...this.withStatus(db, m), applications: apps, lastUpdatedAt, subMerchantCount };
       })
       .sort((a, b) => b.lastUpdatedAt - a.lastUpdatedAt);
   }

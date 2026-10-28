@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
+import { afterNextRender, ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, Injector, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { MerchantApi, toMerchantError } from '../../core/merchants/merchant-api.service';
 import { CountryApplication, FieldIssue, GlobalMerchant, STAFF_ROLE_LABEL } from '../../core/merchants/merchant-models';
@@ -20,11 +20,15 @@ const TONE: Record<SubMerchantStatus, string> = { draft: '', pending_risk_review
 })
 export class SubMerchantsPanel {
   private readonly api = inject(MerchantApi);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly injector = inject(Injector);
   protected readonly roles = inject(StaffRoleService);
 
   readonly merchant = input.required<GlobalMerchant>();
   readonly applications = input.required<CountryApplication[]>();
   readonly subMerchants = input.required<SubMerchantView[]>();
+  /** Opens this sub-merchant's details (e.g. from the Approvals page). */
+  readonly openId = input<string | null | undefined>(null);
   readonly changed = output<string>();
 
   protected readonly statusLabel = SUB_MERCHANT_STATUS_LABEL;
@@ -46,7 +50,41 @@ export class SubMerchantsPanel {
   protected readonly countries = computed(() =>
     [...new Set(this.applications().filter((a) => a.status !== 'rejected').map((a) => a.country))].filter((c) => subMerchantRoutes(ONBOARDING_COUNTRIES[c]).opsInitiated),
   );
-  protected readonly canAdd = computed(() => this.roles.role() === 'sales' && this.merchant().lifecycleStatus !== 'suspended' && this.countries().length > 0);
+  protected readonly canAdd = computed(() => !this.blockedReason());
+  /** Why "Add sub-merchant" isn't available right now, phrased as what to do next. */
+  protected readonly blockedReason = computed(() => {
+    const m = this.merchant();
+    if (this.roles.role() !== 'sales') return 'Sales / Operations add sub-merchants. Switch "View as" to Sales / Ops to add one.';
+    if (m.lifecycleStatus === 'suspended') return `${m.legalName} is suspended, so it can't add sub-merchants. Risk must reactivate it first.`;
+    if (this.countries().length) return null;
+    const applied = [...new Set(this.applications().filter((a) => a.status !== 'rejected').map((a) => a.country))];
+    if (!applied.length) return `Start a country application for ${m.legalName} first. Sub-merchants are added in countries where the parent has applied.`;
+    return `Country configuration doesn't allow Sales / Operations to create sub-merchants in ${applied.map(countryName).join(', ')}.`;
+  });
+
+  constructor() {
+    effect(() => {
+      const id = this.openId();
+      if (id && this.subMerchants().some((s) => s.id === id)) {
+        this.selected.set(id);
+        queueMicrotask(() => this.host.nativeElement.querySelector('.sm-detail')?.scrollIntoView?.({ block: 'nearest' }));
+      }
+    });
+  }
+
+  /** Opens the add form and brings it into view (used by the merchant page header action). */
+  startAdd() {
+    if (!this.canAdd()) return;
+    this.openAdd();
+    // After the form has rendered.
+    afterNextRender(
+      () => {
+        this.host.nativeElement.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+        this.host.nativeElement.querySelector<HTMLElement>('#sm-name')?.focus();
+      },
+      { injector: this.injector },
+    );
+  }
   protected readonly current = computed(() => this.subMerchants().find((s) => s.id === this.selected()) ?? null);
   protected readonly regRule = computed<FieldRule | null>(() => ONBOARDING_COUNTRIES[this.form().country]?.localRegistration ?? null);
 

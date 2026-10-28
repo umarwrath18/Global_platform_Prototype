@@ -130,3 +130,59 @@ h4 {
   font-size: 13px;
   color: var(--warning);
 }
+
+.sm-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+// Sub-merchant history: the same timeline as the merchant page (those styles are scoped to it).
+.timeline {
+  max-height: 360px;
+  margin: 0;
+  padding: 0 0 0 6px;
+  overflow-y: auto;
+  list-style: none;
+
+  li {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 0 8px 16px;
+    border-left: 2px solid var(--surface-muted);
+
+    &::before {
+      content: '';
+      position: absolute;
+      left: -6px;
+      top: 13px;
+      width: 10px;
+      height: 10px;
+      border: 2px solid var(--surface);
+      border-radius: 50%;
+      background: var(--mobi-blue);
+    }
+  }
+}
+
+.t-action {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.t-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.t-comment {
+  margin: 2px 0;
+  font-size: 13px;
+}

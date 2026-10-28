@@ -376,3 +376,10 @@
   gap: 6px;
   color: var(--warning);
 }
+
+.f-hint.saved {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--success);
+}

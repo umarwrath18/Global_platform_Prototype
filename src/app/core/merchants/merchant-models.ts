@@ -262,6 +262,8 @@ export interface ApplicationSummary {
 export interface MerchantSummary extends GlobalMerchant {
   applications: ApplicationSummary[];
   lastUpdatedAt: number;
+  /** Sub-merchants under this (parent) merchant. */
+  subMerchantCount: number;
 }
 
 /** A live regional MID as staff see it. Region and country come from the record, never from the MID string. */

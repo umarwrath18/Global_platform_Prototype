@@ -27,6 +27,7 @@
       <div class="actions header-actions">
         @if (roles.role() === 'sales' && d.merchant.lifecycleStatus !== 'suspended') {
           <a class="btn primary" routerLink="/merchants/expand" [queryParams]="{ merchant: d.merchant.id }"><app-icon name="plus" [size]="16" />Add country</a>
+          <button type="button" class="btn" (click)="addSubMerchant()"><app-icon name="plus" [size]="16" />Add sub-merchant</button>
         }
         @if (d.merchant.lifecycleStatus === 'suspended') {
           @if (canReactivate()) { <button type="button" class="btn" (click)="openLifecycleAction('reactivate')">Reactivate</button> }
@@ -299,7 +300,7 @@
           }
         </section>
 
-        <app-sub-merchants-panel [merchant]="d.merchant" [applications]="d.applications" [subMerchants]="d.subMerchants" (changed)="onChangeAction($event)" />
+        <app-sub-merchants-panel id="sub-merchants" [merchant]="d.merchant" [applications]="d.applications" [subMerchants]="d.subMerchants" [openId]="sub()" (changed)="onChangeAction($event)" />
       </div>
 
       <aside class="col-side panel-card" aria-label="Merchant activity">

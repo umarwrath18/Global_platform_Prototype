@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { isEmail, isPhone, validateRegistrationNumber } from '../../core/merchants/application-rules';
 import { MerchantApi, MerchantClientError, toMerchantError } from '../../core/merchants/merchant-api.service';
@@ -41,6 +41,9 @@ export class MerchantDetailPage {
 
   /** Bound from the `:id` route parameter. */
   readonly id = input.required<string>();
+  /** `?sub=` opens that sub-merchant's details (links from the Approvals page). */
+  readonly sub = input<string | undefined>();
+  private readonly subPanel = viewChild(SubMerchantsPanel);
 
   protected readonly detail = signal<MerchantDetail | null>(null);
   protected readonly loading = signal(true);
@@ -261,6 +264,10 @@ export class MerchantDetailPage {
   protected async onChangeAction(message: string) {
     await this.load();
     this.flash(message);
+  }
+
+  protected addSubMerchant() {
+    this.subPanel()?.startAdd();
   }
 
   protected startEdit() {

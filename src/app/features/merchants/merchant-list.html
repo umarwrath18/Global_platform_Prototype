@@ -91,7 +91,7 @@
               <tr>
                 <td>
                   <a class="row-link" [routerLink]="['/merchants', m.id]">{{ m.legalName }}</a>
-                  <div class="meta mono-id">{{ m.id }}</div>
+                  <div class="meta mono-id">{{ m.id }}@if (m.subMerchantCount) { · <a class="sub-link" [routerLink]="['/merchants', m.id]" fragment="sub-merchants">{{ m.subMerchantCount }} sub-merchant{{ m.subMerchantCount === 1 ? '' : 's' }}</a>}</div>
                 </td>
                 <td>
                   {{ countryName(m.registrationCountry) }}

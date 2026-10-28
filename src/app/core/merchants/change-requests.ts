@@ -165,6 +165,8 @@ export interface ApprovalItem {
   approverTeam: StaffRole;
   decidedAt: number | null;
   link: string[];
+  /** Query parameters for the link (e.g. which sub-merchant to open). */
+  query?: Record<string, string>;
 }
 
 export interface ApprovalsView {
