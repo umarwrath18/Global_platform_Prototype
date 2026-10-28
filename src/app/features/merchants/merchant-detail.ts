@@ -42,11 +42,18 @@ export class MerchantDetailPage {
   protected readonly saving = signal(false);
   protected readonly saveError = signal<string | null>(null);
   protected readonly toast = signal<string | null>(null);
+  protected readonly lifecycleAction = signal<'suspend' | 'reactivate' | null>(null);
+  protected readonly lifecycleReason = signal('');
+  protected readonly lifecycleSaving = signal(false);
+  protected readonly lifecycleError = signal<string | null>(null);
   protected readonly regCountries = REGISTRATION_COUNTRIES;
   protected readonly countryName = countryName;
   protected readonly date = fmtDate;
   protected readonly dateTime = fmtDateTime;
   protected readonly roleLabel = { ...STAFF_ROLE_LABEL, system: 'System' } as Record<HistoryEvent['role'], string>;
+
+  protected readonly canSuspend = computed(() => (this.roles.role() === 'sales' || this.roles.role() === 'risk') && this.detail()?.merchant.globalStatus === 'active' && this.detail()?.merchant.lifecycleStatus !== 'suspended');
+  protected readonly canReactivate = computed(() => this.roles.role() === 'risk' && this.detail()?.merchant.lifecycleStatus === 'suspended');
 
   protected readonly history = computed(() =>
     (this.detail()?.applications ?? [])
@@ -94,6 +101,24 @@ export class MerchantDetailPage {
   }
 
   protected readonly stageCount = STAGES.length - 1;
+
+  protected openLifecycleAction(action: 'suspend' | 'reactivate') { this.lifecycleAction.set(action); this.lifecycleReason.set(''); this.lifecycleError.set(null); }
+  protected closeLifecycleAction() { if (!this.lifecycleSaving()) this.lifecycleAction.set(null); }
+  protected async confirmLifecycleAction() {
+    const action = this.lifecycleAction();
+    const reason = this.lifecycleReason().trim();
+    if (!action || reason.length < 5) { this.lifecycleError.set('Enter a reason with at least 5 characters.'); return; }
+    this.lifecycleSaving.set(true); this.lifecycleError.set(null);
+    try {
+      await this.api.updateLifecycle(this.id(), action, reason);
+      this.lifecycleAction.set(null);
+      await this.load();
+      this.flash(action === 'suspend' ? 'Merchant suspended' : 'Merchant reactivated');
+    } catch (e) {
+      const err = toMerchantError(e);
+      this.lifecycleError.set(err.message || "We couldn't update the merchant status.");
+    } finally { this.lifecycleSaving.set(false); }
+  }
 
   protected startEdit() {
     const m = this.detail()!.merchant;

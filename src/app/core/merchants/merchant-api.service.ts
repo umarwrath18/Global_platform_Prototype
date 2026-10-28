@@ -66,6 +66,10 @@ export class MerchantApi {
     return this.run(this.http.patch<GlobalMerchant>(`/api/merchants/${encodeURIComponent(id)}`, req, { headers: this.headers }));
   }
 
+  updateLifecycle(id: string, action: 'suspend' | 'reactivate', reason: string) {
+    return this.run(this.http.post<GlobalMerchant>(`/api/merchants/${encodeURIComponent(id)}/lifecycle`, { action, reason }, { headers: this.headers }));
+  }
+
   createApplication(merchantId: string, country: string) {
     return this.run(this.http.post<CountryApplication>(`/api/merchants/${encodeURIComponent(merchantId)}/applications`, { country }, { headers: this.headers }));
   }
