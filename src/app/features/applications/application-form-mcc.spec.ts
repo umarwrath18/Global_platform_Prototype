@@ -17,7 +17,7 @@ const FIXTURE: MccCatalogue = {
   ],
 };
 
-async function render(catalogue: MccCatalogue, locked = false) {
+async function render(catalogue: MccCatalogue, locked = false, merchantMcc: { code: string; description: string } | null = null) {
   const state = signal(catalogue);
   const mcc = {
     catalogue: state.asReadonly(),
@@ -26,11 +26,14 @@ async function render(catalogue: MccCatalogue, locked = false) {
     optionsFor: (c: string) => mccOptionsFor(state(), c),
     availability: (code: string, c: string) => mccAvailability(state(), code, c),
   };
-  const api = { setMcc: vi.fn(async () => ({ id: 'GM-1', mcc: { code: '5411', description: 'TEST – Grocery stores' } })) };
+  const api = {
+    setMcc: vi.fn(async () => ({ id: 'GM-1', mcc: { code: '5411', description: 'TEST – Grocery stores' } })),
+    submit: vi.fn(async () => ({ id: 'APP-1', status: 'pending_risk_review' })),
+  };
   TestBed.configureTestingModule({ providers: [provideRouter([]), { provide: MerchantApi, useValue: api }, { provide: MccService, useValue: mcc }] });
   const f = TestBed.createComponent(ApplicationForm);
   f.componentRef.setInput('application', { id: 'APP-1', merchantId: 'GM-1', country: 'MY', status: 'draft', data: emptyApplicationData('MY'), prefill: [], corrections: null } as unknown as CountryApplication);
-  f.componentRef.setInput('merchant', { id: 'GM-1', legalName: 'Kedai Ujian Sdn Bhd', registrationCountry: 'MY', mcc: null } as unknown as GlobalMerchant);
+  f.componentRef.setInput('merchant', { id: 'GM-1', legalName: 'Kedai Ujian Sdn Bhd', registrationCountry: 'MY', mcc: merchantMcc } as unknown as GlobalMerchant);
   f.componentRef.setInput('mccLocked', locked);
   await f.whenStable();
   const el = f.nativeElement as HTMLElement;
@@ -39,10 +42,41 @@ async function render(catalogue: MccCatalogue, locked = false) {
 }
 
 describe('Application form – MCC field', () => {
-  it('says plainly when no approved catalogue covers the country, without inventing options', async () => {
-    const { el } = await render(EMPTY_MCC_CATALOGUE);
-    expect(el.textContent).toContain('No approved MCC catalogue covers Malaysia yet');
-    expect(el.querySelector('#mcc')).toBeNull();
+  it('keeps the required field visible with an empty state when no catalogue covers the country, without inventing options', async () => {
+    const { el, field } = await render(EMPTY_MCC_CATALOGUE);
+    expect(field().querySelector('label .req')).not.toBeNull();
+    const select = el.querySelector('#mcc') as HTMLSelectElement;
+    expect(select.disabled).toBe(true);
+    expect([...select.options].map((o) => o.textContent?.trim())).toEqual(['No MCCs available for Malaysia']);
+    expect(field().textContent).toContain('No MCC catalogue is configured for Malaysia yet');
+  });
+
+  it('sits first in Business information, above the trading name', async () => {
+    const { el } = await render(FIXTURE);
+    const labels = [...el.querySelectorAll('.f-grid label')].map((l) => l.getAttribute('for'));
+    expect(labels.indexOf('mcc')).toBe(0);
+    expect(labels.indexOf('tradingName')).toBe(1);
+  });
+
+  it('blocks submission without an MCC, even in guided mode, and returns to the field', async () => {
+    for (const catalogue of [FIXTURE, EMPTY_MCC_CATALOGUE]) {
+      TestBed.resetTestingModule();
+      const { f, el, api } = await render(catalogue);
+      await (f.componentInstance as any).submit();
+      f.detectChanges();
+      await f.whenStable();
+      expect(api.submit).not.toHaveBeenCalled();
+      expect(el.querySelector('#section-title')?.textContent).toBe('Business information');
+      expect(el.querySelector('.alert.danger')?.textContent).toContain('An MCC is required before submitting.');
+    }
+  });
+
+  it('lets a valid MCC through to submission', async () => {
+    const { f, api } = await render(FIXTURE, false, { code: '5411', description: 'TEST – Grocery stores' });
+    const form = f.componentInstance as any;
+    await form.submit(); // guided mode: the first click asks to confirm the other missing items
+    await form.submit();
+    expect(api.submit).toHaveBeenCalledTimes(1);
   });
 
   it("offers only the country's codes and confirms the save (regression: no confirmation was shown)", async () => {

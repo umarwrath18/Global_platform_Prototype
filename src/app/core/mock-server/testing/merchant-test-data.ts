@@ -1,8 +1,10 @@
 import { emptyApplicationData } from '../../merchants/application-rules';
+import { MccCatalogue } from '../../merchants/mcc';
 import { ApplicationData, CountryApplication, StaffRole } from '../../merchants/merchant-models';
 import { ProductPricingView } from '../../merchants/products';
 import { ONBOARDING_COUNTRIES } from '../../merchants/onboarding-config';
 import { buildMerchantSeed } from '../merchant-seed';
+import { MCC_TEST_FIXTURE, MCC_TEST_FIXTURE_NAME, MCC_TEST_FIXTURE_VERSION } from '../mcc-test-fixture';
 import type { MerchantDb, MerchantRecord } from '../merchant-server';
 
 // Test-only helpers for the merchant data upgrade and go-live retries.
@@ -130,4 +132,23 @@ export async function completeProductConfig(call: Call, applicationId: string) {
     const priced = await call('POST', `/api/applications/${applicationId}/pricing`, { methodCode: method.code, mdrPct: method.minMdr }, 'cs');
     if (priced.status !== 201) throw new Error(`Pricing failed: ${JSON.stringify(priced.body)}`);
   }
+}
+
+/** The labelled MCC test fixture as a catalogue source, for specs that submit applications (an MCC is always required). */
+export const TEST_MCC_SOURCE = {
+  catalogue: (): MccCatalogue => ({ source: { kind: 'test_fixture', name: MCC_TEST_FIXTURE_NAME, version: MCC_TEST_FIXTURE_VERSION, loadedAt: 0 }, entries: MCC_TEST_FIXTURE }),
+};
+
+/**
+ * Gives a merchant MCC 8299 (available in every country in the fixture): directly before Risk
+ * approval, otherwise through a change request that Risk approves.
+ */
+export async function assignTestMcc(call: Call, merchantId: string) {
+  const set = await call('PUT', `/api/merchants/${merchantId}/mcc`, { code: '8299' });
+  if (set.status === 200) return;
+  if (set.body?.code !== 'MCC_CHANGE_REQUIRED') throw new Error(`Setting the MCC failed: ${JSON.stringify(set.body)}`);
+  const req = await call('POST', `/api/merchants/${merchantId}/mcc-requests`, { code: '8299', reason: 'Assign an MCC for this test' });
+  if (req.status !== 201) throw new Error(`Requesting the MCC failed: ${JSON.stringify(req.body)}`);
+  const decided = await call('POST', `/api/merchants/${merchantId}/mcc-requests/${req.body.id}/decision`, { decision: 'approve' }, 'risk');
+  if (decided.status !== 200) throw new Error(`Approving the MCC failed: ${JSON.stringify(decided.body)}`);
 }

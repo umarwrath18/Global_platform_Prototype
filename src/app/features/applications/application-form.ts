@@ -61,7 +61,8 @@ export class ApplicationForm implements OnInit {
   private readonly mccSaved = signal<MerchantMcc | null | undefined>(undefined);
   protected readonly currentMcc = computed(() => (this.mccSaved() !== undefined ? this.mccSaved()! : (this.merchant().mcc ?? null)));
   protected readonly mccOptions = computed(() => this.mcc.optionsFor(this.application().country));
-  protected readonly mccRequired = computed(() => this.mcc.covers(this.application().country));
+  /** False when no MCC catalogue covers the country: the field then shows an empty state. */
+  protected readonly mccConfigured = computed(() => this.mcc.covers(this.application().country));
   protected readonly mccRestricted = computed(() => {
     const m = this.currentMcc();
     return !!m && this.mcc.availability(m.code, this.application().country) === 'restricted';
@@ -70,9 +71,11 @@ export class ApplicationForm implements OnInit {
   /** Confirms that the MCC was saved to the merchant (it doesn't wait for "Save draft"). */
   protected readonly mccSavedNote = signal<string | null>(null);
   protected readonly mccError = signal<string | null>(null);
+  /** The MCC is required in every validation mode, so this blocks submission even in guided mode. */
+  protected readonly mccProblem = computed(() => mccIssue(this.mcc.catalogue(), this.application().country, this.currentMcc()));
   protected readonly issues = computed(() => {
     const out = validateApplication(this.application().country, this.data(), this.merchant());
-    const mccProblem = mccIssue(this.mcc.catalogue(), this.application().country, this.currentMcc());
+    const mccProblem = this.mccProblem();
     return mccProblem ? [...out, mccProblem] : out;
   });
   protected readonly dirty = computed(() => JSON.stringify(this.data()) !== this.savedJson());
@@ -259,6 +262,12 @@ export class ApplicationForm implements OnInit {
   protected async submit() {
     this.attempted.set(true);
     const open = this.issues().length;
+    const mccProblem = this.mccProblem();
+    if (mccProblem && !this.strict) {
+      this.go('business');
+      this.message.set({ tone: 'danger', text: `An MCC is required before submitting. ${mccProblem.message}` });
+      return;
+    }
     if (open && this.strict) {
       this.message.set({ tone: 'danger', text: `Complete ${open} item${open === 1 ? '' : 's'} before submitting.` });
       return;

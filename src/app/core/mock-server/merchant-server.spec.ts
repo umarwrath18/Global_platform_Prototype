@@ -5,7 +5,7 @@ import { ONBOARDING_COUNTRIES } from '../merchants/onboarding-config';
 import { AuthServer } from './auth-server';
 import { MerchantServer } from './merchant-server';
 import { DEMO_PASSWORD } from './seed';
-import { completeProductConfig } from './testing/merchant-test-data';
+import { assignTestMcc, completeProductConfig, TEST_MCC_SOURCE } from './testing/merchant-test-data';
 
 class MemoryStorage {
   private data = new Map<string, string>();
@@ -47,7 +47,7 @@ describe('MerchantServer', () => {
     now = Date.UTC(2026, 9, 25);
     const storage = new MemoryStorage();
     auth = new AuthServer({ storage, now: () => now, pbkdf2Iterations: 1000, sendEmail: () => {} });
-    server = new MerchantServer({ storage, now: () => now, auth });
+    server = new MerchantServer({ storage, now: () => now, auth, mcc: TEST_MCC_SOURCE });
     token = ((await auth.handle('POST', '/api/auth/login', { loginId: '123', password: DEMO_PASSWORD }, null)).body as any).token;
   });
 
@@ -123,6 +123,7 @@ describe('MerchantServer', () => {
 
   it('blocks incomplete submissions, including missing required documents', async () => {
     const m = await newMerchant();
+    await assignTestMcc(call, m.id);
     const app = (await call<CountryApplication>('POST', `/api/merchants/${m.id}/applications`, { country: 'MY' })).body;
     const res = await call('POST', `/api/applications/${app.id}/submit`, {});
     expect(res.status).toBe(422);
@@ -138,6 +139,7 @@ describe('MerchantServer', () => {
 
   it('runs the full journey: return, resubmit with the same ID, approve, CS readiness, go-live', async () => {
     const m = await newMerchant();
+    await assignTestMcc(call, m.id);
     const id = (await call<CountryApplication>('POST', `/api/merchants/${m.id}/applications`, { country: 'MY' })).body.id;
     await call('PUT', `/api/applications/${id}`, { data: completeData('MY', m.legalName) });
     expect((await call<CountryApplication>('POST', `/api/applications/${id}/submit`, {})).body.status).toBe('pending_risk_review');
@@ -233,14 +235,18 @@ describe('MerchantServer', () => {
     expect(app.verification?.checks.find((c) => c.name.startsWith('Sanctions'))?.result).toBe('review');
   });
 
-  it('guided mode records gaps but never blocks a step', async () => {
-    const guided = new MerchantServer({ storage: new MemoryStorage(), now: () => now, auth, strictValidation: () => false });
+  it('guided mode records gaps but never blocks a step, except a missing MCC', async () => {
+    const guided = new MerchantServer({ storage: new MemoryStorage(), now: () => now, auth, strictValidation: () => false, mcc: TEST_MCC_SOURCE });
     const g = <T = any>(method: string, path: string, body: unknown = null, role: StaffRole = 'sales') =>
       guided.handle(method, path, body, token, role) as Promise<{ status: number; body: T }>;
 
     const m = (await g<GlobalMerchant>('POST', '/api/merchants', {})).body;
     expect(m.legalName).toBe('Untitled merchant');
     const id = (await g<CountryApplication>('POST', `/api/merchants/${m.id}/applications`, { country: 'MY' })).body.id;
+
+    const noMcc = await g('POST', `/api/applications/${id}/submit`, {});
+    expect(noMcc).toMatchObject({ status: 422, body: { code: 'APPLICATION_INCOMPLETE', errors: [expect.objectContaining({ field: 'business.mcc' })] } });
+    await assignTestMcc(g, m.id);
 
     const submitted = (await g<CountryApplication>('POST', `/api/applications/${id}/submit`, {})).body;
     expect(submitted.status).toBe('pending_risk_review');
@@ -300,6 +306,7 @@ describe('MerchantServer', () => {
       const data = completeData('PH', 'Tanjung Global Trading Sdn Bhd');
       data.business.localRegistrationNumber = 'CS201912345';
       data.business.taxId = '123456789';
+      await assignTestMcc(call, 'GM-100101');
       await lifecycle('GM-100101', 'suspend', 'risk');
 
       // New merchant-level activity is refused.
@@ -339,6 +346,7 @@ describe('MerchantServer', () => {
       const data = completeData('PH', 'Tanjung Global Trading Sdn Bhd');
       data.business.localRegistrationNumber = 'CS201912345';
       data.business.taxId = '123456789';
+      await assignTestMcc(call, 'GM-100101');
       await call('POST', `/api/applications/${id}/submit`, { data });
       await lifecycle('GM-100101', 'suspend', 'sales');
       const returned = await call<CountryApplication>('POST', `/api/applications/${id}/review`, { decision: 'return', comment: 'Hold until the suspension review ends.', sections: ['documents'], evidenceReviewed: true }, 'risk');

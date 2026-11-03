@@ -42,7 +42,7 @@ describe('MCC management', () => {
   });
 
   describe('catalogue', () => {
-    it('is empty until loaded on purpose, and MCC is then optional everywhere', async () => {
+    it('is empty until loaded on purpose, and no application can be submitted until then', async () => {
       expect((await mcc.handle('GET', '/api/config/mcc', null, null)).status).toBe(401);
       expect((await mcc.handle('GET', '/api/config/mcc', null, token)).body).toEqual({ source: null, entries: [] });
       expect(storage.getItem(MCC_KEY)).toBeNull();
@@ -50,7 +50,9 @@ describe('MCC management', () => {
       expect(await setMcc('GM-100104', '5411')).toMatchObject({ status: 422, body: { code: 'MCC_NOT_AVAILABLE', message: expect.stringMatching(/No MCC catalogue/) } });
       const m = await newMerchant('Kedai Buku Sdn Bhd', '202401000101');
       const app = (await call<CountryApplication>('POST', `/api/merchants/${m.id}/applications`, { country: 'MY' })).body;
-      expect((await call<CountryApplication>('POST', `/api/applications/${app.id}/submit`, { data: completeApplicationData('MY', m.legalName) })).body.status).toBe('pending_risk_review');
+      const blocked = await call('POST', `/api/applications/${app.id}/submit`, { data: completeApplicationData('MY', m.legalName) });
+      expect(blocked).toMatchObject({ status: 422, body: { code: 'APPLICATION_INCOMPLETE', errors: [{ field: 'business.mcc', message: expect.stringMatching(/^No MCC catalogue is configured for Malaysia/) }] } });
+      expect((await call<any>('GET', `/api/applications/${app.id}`)).body.application.status).toBe('draft');
       expect(storage.getItem(MCC_KEY)).toBeNull();
     });
 
@@ -98,11 +100,13 @@ describe('MCC management', () => {
       expect(events[0]).toMatchObject({ requestedBy: 'Sarah Lim', requestedRole: 'sales', requestedAt: now, decidedBy: null, merchantId: 'GM-100104' });
     });
 
-    it('requires an MCC at submission only in countries the catalogue covers', async () => {
+    it('requires an MCC at submission in every country, and blocks countries the catalogue doesn’t cover', async () => {
       mcc.load([{ code: '5411', description: 'Spec data – grocery', countries: { MY: 'available' } }], { kind: 'approved', name: 'Spec catalogue (test data)', version: '1' });
       const m = await newMerchant('Kedai Buku Sdn Bhd', '202401000101');
       const ph = (await call<CountryApplication>('POST', `/api/merchants/${m.id}/applications`, { country: 'PH' })).body;
-      expect((await call<CountryApplication>('POST', `/api/applications/${ph.id}/submit`, { data: completeApplicationData('PH', m.legalName) })).body.status).toBe('pending_risk_review');
+      const uncovered = await call('POST', `/api/applications/${ph.id}/submit`, { data: completeApplicationData('PH', m.legalName) });
+      expect(uncovered.body.code).toBe('APPLICATION_INCOMPLETE');
+      expect(uncovered.body.errors).toEqual([expect.objectContaining({ field: 'business.mcc', message: expect.stringMatching(/^No MCC catalogue is configured for/) })]);
 
       const my = (await call<CountryApplication>('POST', `/api/merchants/${m.id}/applications`, { country: 'MY' })).body;
       const blocked = await call('POST', `/api/applications/${my.id}/submit`, { data: completeApplicationData('MY', m.legalName) });

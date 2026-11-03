@@ -6,6 +6,7 @@ import { AuthServer } from './auth-server';
 import { CountryConfigServer } from './country-config-server';
 import { MerchantServer } from './merchant-server';
 import { DEMO_PASSWORD } from './seed';
+import { assignTestMcc, TEST_MCC_SOURCE } from './testing/merchant-test-data';
 
 class MemoryStorage {
   private data = new Map<string, string>();
@@ -37,7 +38,7 @@ describe('CountryConfigServer', () => {
     storage = new MemoryStorage();
     auth = new AuthServer({ storage, now: () => now, pbkdf2Iterations: 1000, sendEmail: () => {} });
     config = new CountryConfigServer({ storage, now: () => now, auth });
-    merchants = new MerchantServer({ storage, now: () => now, auth, countryConfig: config });
+    merchants = new MerchantServer({ storage, now: () => now, auth, countryConfig: config, mcc: TEST_MCC_SOURCE });
     token = await login('123');
   });
 
@@ -90,7 +91,8 @@ describe('CountryConfigServer', () => {
 
   it('records a snapshot of the rules at submission', async () => {
     const m = (await call<GlobalMerchant>('POST', '/api/merchants', { legalName: 'Kopi Nusantara Sdn Bhd', registrationCountry: 'MY', registrationNumber: '202401000077', primaryContact: { name: 'Ana', email: 'ana@kopi.test', phone: '+60 12 000 0000' } })).body;
-    const guided = new MerchantServer({ storage, now: () => now, auth, countryConfig: config, strictValidation: () => false });
+    const guided = new MerchantServer({ storage, now: () => now, auth, countryConfig: config, strictValidation: () => false, mcc: TEST_MCC_SOURCE });
+    await assignTestMcc(call, m.id);
     const id = (await call<CountryApplication>('POST', `/api/merchants/${m.id}/applications`, { country: 'MY' })).body.id;
     const submitted = (await guided.handle('POST', `/api/applications/${id}/submit`, {}, token, 'sales')).body as CountryApplication;
     expect(submitted.rulesSnapshot?.documents.find((d) => d.type === 'ssm_profile')?.label).toBe('SSM company profile (Section 14 / e-Info)');

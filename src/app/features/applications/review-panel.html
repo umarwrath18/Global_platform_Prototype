@@ -20,6 +20,10 @@
       </div>
     }
 
+    <dl class="kv review-mcc">
+      <div><dt>Submitted MCC</dt><dd>@if (submittedMcc(); as m) {{{ m.code }} – {{ m.description }}} @else {Not captured at submission}</dd></div>
+    </dl>
+
     @if (restrictedMcc(); as m) {
       <div class="alert warning compact" role="note">
         <app-icon name="alert-circle" />

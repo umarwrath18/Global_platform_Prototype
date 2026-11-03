@@ -23,6 +23,8 @@ export class ReviewPanel {
   readonly application = input.required<CountryApplication>();
   readonly decided = output<CountryApplication>();
 
+  /** The MCC captured when the application was submitted (applications submitted before MCC was required may have none). */
+  protected readonly submittedMcc = computed(() => this.application().submittedProfile?.mcc ?? null);
   /** The submitted MCC when it is restricted in this application's country (flagged, not prohibited). */
   protected readonly restrictedMcc = computed(() => {
     const a = this.application();

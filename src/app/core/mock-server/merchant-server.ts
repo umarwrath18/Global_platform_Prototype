@@ -114,7 +114,7 @@ export interface MerchantServerOptions {
   strictValidation?: () => boolean;
   /** Country Configuration; when present its stored rules are loaded before every request. */
   countryConfig?: { sync(): void };
-  /** MCC catalogue; without one (or while it is empty) MCC is not required anywhere. */
+  /** MCC catalogue; without one (or while it is empty) no application can be submitted. */
   mcc?: { catalogue(): MccCatalogue };
 }
 
@@ -564,10 +564,13 @@ export class MerchantServer {
     const errors = validateApplication(app.country, app.data, merchant);
     const mccProblem = mccIssue(this.catalogue(), app.country, merchant.mcc);
     if (mccProblem) errors.push(mccProblem);
-    if (errors.length && this.strict) {
+    // The MCC is required in guided mode too; everything else blocks only in strict mode.
+    const blocking = this.strict ? errors : mccProblem ? [mccProblem] : [];
+    if (blocking.length) {
       app.updatedAt = this.now();
       this.save(db);
-      fail(422, 'APPLICATION_INCOMPLETE', { errors, message: `${errors.length} item${errors.length === 1 ? '' : 's'} must be completed before submission.` });
+      const message = this.strict ? `${errors.length} item${errors.length === 1 ? '' : 's'} must be completed before submission.` : mccProblem!.message;
+      fail(422, 'APPLICATION_INCOMPLETE', { errors: blocking, message });
     }
     const resubmission = app.status === 'returned';
     const from = app.status;
