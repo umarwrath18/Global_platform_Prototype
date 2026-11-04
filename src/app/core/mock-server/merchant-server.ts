@@ -12,6 +12,7 @@ import {
   GlobalMerchant,
   GlobalMerchantStatus,
   HistoryEvent,
+  merchantCategoryLabel,
   MerchantDetail,
   MerchantLifecycleEvent,
   MerchantLifecycleStatus,
@@ -114,7 +115,7 @@ export interface MerchantServerOptions {
   strictValidation?: () => boolean;
   /** Country Configuration; when present its stored rules are loaded before every request. */
   countryConfig?: { sync(): void };
-  /** MCC catalogue; without one (or while it is empty) no application can be submitted. */
+  /** MCC catalogue; without one (or while it is empty) MCC is optional everywhere. */
   mcc?: { catalogue(): MccCatalogue };
 }
 
@@ -528,6 +529,7 @@ export class MerchantServer {
       .sort((a, b) => b.updatedAt - a.updatedAt)[0];
     if (source) {
       const from = (field: string) => prefill.push({ field, from: 'application', applicationId: source.id, country: source.country });
+      if (source.data.business.merchantCategory) (data.business.merchantCategory = source.data.business.merchantCategory), from('business.merchantCategory');
       if (source.data.business.industry) (data.business.industry = source.data.business.industry), from('business.industry');
       if (source.data.business.website) (data.business.website = source.data.business.website), from('business.website');
       if (source.data.contact.supportEmail) (data.contact.supportEmail = source.data.contact.supportEmail), from('contact.supportEmail');
@@ -564,13 +566,10 @@ export class MerchantServer {
     const errors = validateApplication(app.country, app.data, merchant);
     const mccProblem = mccIssue(this.catalogue(), app.country, merchant.mcc);
     if (mccProblem) errors.push(mccProblem);
-    // The MCC is required in guided mode too; everything else blocks only in strict mode.
-    const blocking = this.strict ? errors : mccProblem ? [mccProblem] : [];
-    if (blocking.length) {
+    if (errors.length && this.strict) {
       app.updatedAt = this.now();
       this.save(db);
-      const message = this.strict ? `${errors.length} item${errors.length === 1 ? '' : 's'} must be completed before submission.` : mccProblem!.message;
-      fail(422, 'APPLICATION_INCOMPLETE', { errors: blocking, message });
+      fail(422, 'APPLICATION_INCOMPLETE', { errors, message: `${errors.length} item${errors.length === 1 ? '' : 's'} must be completed before submission.` });
     }
     const resubmission = app.status === 'returned';
     const from = app.status;
@@ -1091,6 +1090,7 @@ export class MerchantServer {
     base.business = {
       tradingName: str(b.tradingName, 160),
       businessType: str(b.businessType, 80),
+      merchantCategory: merchantCategoryLabel(b.merchantCategory) ? b.merchantCategory : '',
       industry: str(b.industry, 80),
       website: str(b.website, 200).trim(),
       address: str(b.address, 400),

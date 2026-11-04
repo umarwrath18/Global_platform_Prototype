@@ -71,31 +71,6 @@
           </div>
 
           <div class="f-grid">
-            <div class="f-field full">
-              <label for="mcc">Merchant category code (MCC) <span class="req">*</span></label>
-              @if (mccLocked()) {
-                <p class="f-static">{{ currentMcc() ? currentMcc()!.code + ' – ' + currentMcc()!.description : 'Not captured' }}</p>
-                <p class="f-hint">Risk has approved this merchant, so the MCC can only change through a Risk-approved request. <a [routerLink]="['/merchants', merchant().id]">Request a change</a></p>
-              } @else if (!mccConfigured()) {
-                <select id="mcc" class="f-input" disabled aria-describedby="mcc-empty">
-                  <option selected>No MCCs available for {{ cfg().name }}</option>
-                </select>
-                <p class="f-hint warn" id="mcc-empty" role="status"><app-icon name="alert-circle" [size]="14" />No MCC catalogue is configured for {{ cfg().name }} yet, so there are no MCCs to choose from. This application can't be submitted until one is.@if (currentMcc(); as m) {{{ ' ' }}The merchant's current MCC is {{ m.code }} – {{ m.description }}.}</p>
-              } @else {
-                <select id="mcc" class="f-input" [class.invalid]="err('business.mcc') || mccError()" [disabled]="mccSaving()" (change)="setMcc($any($event.target).value)" aria-describedby="mcc-hint">
-                  <option value="" [selected]="!currentMcc()">Select MCC</option>
-                  @for (o of mccOptions(); track o.code) {
-                    <option [value]="o.code" [selected]="o.code === currentMcc()?.code">{{ o.code }} – {{ o.description }}{{ o.availability === 'restricted' ? ' (restricted)' : '' }}</option>
-                  }
-                </select>
-                <p class="f-hint" id="mcc-hint">Set once for the merchant and shared by all its countries and sub-merchants. Only MCCs available in {{ cfg().name }} are listed.@if (mcc.isTestFixture()) {{{ ' ' }}<strong>Test fixture – not an approved catalogue.</strong>}</p>
-              }
-              @if (mccRestricted()) {<p class="f-hint warn"><app-icon name="alert-circle" [size]="14" />Restricted in {{ cfg().name }}: it will be flagged for Risk review.</p>}
-              @if (mccSaving()) {<p class="f-hint" role="status"><span class="spinner" aria-hidden="true"></span>Saving MCC…</p>}
-              @else if (mccSavedNote(); as n) {<p class="f-hint saved" role="status"><app-icon name="check-circle" [size]="14" />{{ n }} It's saved straight away, separately from the draft.</p>}
-              @if (mccError(); as m) {<p class="f-error" role="alert"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
-              @else if (mccConfigured() && err('business.mcc'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
-            </div>
             <div class="f-field">
               <label for="tradingName">Trading name in {{ c.name }} <span class="req">*</span>
                 @if (prefilled().get('business.tradingName'); as src) {<span class="tag prefill">{{ src }}</span>}
@@ -114,6 +89,19 @@
               @if (err('business.businessType'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
             </div>
             <div class="f-field">
+              <label for="merchantCategory">Merchant category <span class="req">*</span>
+                @if (prefilled().get('business.merchantCategory'); as src) {<span class="tag prefill">{{ src }}</span>}
+              </label>
+              <select id="merchantCategory" class="f-input" [class.invalid]="err('business.merchantCategory')" (change)="setBusiness('merchantCategory', $any($event.target).value); touch('business.merchantCategory')" aria-describedby="merchantCategory-hint">
+                <option value="" [selected]="!d.business.merchantCategory">Select merchant category</option>
+                @for (k of merchantCategories; track k) {
+                  <option [value]="k" [selected]="k === d.business.merchantCategory">{{ merchantCategoryLabel[k] }}</option>
+                }
+              </select>
+              @if (err('business.merchantCategory'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
+              @else {<p class="f-hint" id="merchantCategory-hint">Mobi's internal classification. Separate from industry and MCC.</p>}
+            </div>
+            <div class="f-field">
               <label for="industry">Industry <span class="req">*</span>
                 @if (prefilled().get('business.industry'); as src) {<span class="tag prefill">{{ src }}</span>}
               </label>
@@ -124,6 +112,31 @@
                 }
               </select>
               @if (err('business.industry'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
+            </div>
+            <div class="f-field">
+              <label for="mcc">Merchant category code (MCC) @if (mccConfigured() && !mccLocked()) {<span class="req">*</span>}</label>
+              @if (mccLocked()) {
+                <p class="f-static">{{ currentMcc() ? currentMcc()!.code + ' – ' + currentMcc()!.description : 'Not captured' }}</p>
+                <p class="f-hint">Risk has approved this merchant, so the MCC can only change through a Risk-approved request. <a [routerLink]="['/merchants', merchant().id]">Request a change</a></p>
+              } @else if (!mccConfigured()) {
+                <select id="mcc" class="f-input" disabled aria-describedby="mcc-empty">
+                  <option selected>{{ currentMcc() ? currentMcc()!.code + ' – ' + currentMcc()!.description : 'No MCCs available' }}</option>
+                </select>
+                <p class="f-hint" id="mcc-empty">No MCC catalogue covers {{ cfg().name }} yet, so the MCC can be left empty.</p>
+              } @else {
+                <select id="mcc" class="f-input" [class.invalid]="err('business.mcc') || mccError()" [disabled]="mccSaving()" (change)="setMcc($any($event.target).value)" aria-describedby="mcc-hint">
+                  <option value="" [selected]="!currentMcc()">Select MCC</option>
+                  @for (o of mccOptions(); track o.code) {
+                    <option [value]="o.code" [selected]="o.code === currentMcc()?.code">{{ o.code }} – {{ o.description }}{{ o.availability === 'restricted' ? ' (restricted)' : '' }}</option>
+                  }
+                </select>
+                <p class="f-hint" id="mcc-hint">Set once for the parent merchant; its sub-merchants use the same MCC. Only MCCs available in {{ cfg().name }} are listed.@if (mcc.isTestFixture()) {{{ ' ' }}<strong>Test fixture – not an approved catalogue.</strong>}</p>
+              }
+              @if (mccRestricted()) {<p class="f-hint warn"><app-icon name="alert-circle" [size]="14" />Restricted in {{ cfg().name }}: it will be flagged for Risk review.</p>}
+              @if (mccSaving()) {<p class="f-hint" role="status"><span class="spinner" aria-hidden="true"></span>Saving MCC…</p>}
+              @else if (mccSavedNote(); as n) {<p class="f-hint saved" role="status"><app-icon name="check-circle" [size]="14" />{{ n }} It's saved straight away, separately from the draft.</p>}
+              @if (mccError(); as m) {<p class="f-error" role="alert"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
+              @else if (err('business.mcc'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
             </div>
             <div class="f-field">
               <label for="website">Website

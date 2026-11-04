@@ -13,6 +13,7 @@
     <div><dt>Registered in</dt><dd>{{ countryName(profile().registrationCountry) }} · {{ profile().registrationNumber }}</dd></div>
     <div><dt>Trading name</dt><dd>{{ data.business.tradingName || '—' }}</dd></div>
     <div><dt>Business type</dt><dd>{{ data.business.businessType || '—' }}</dd></div>
+    <div><dt>Merchant category</dt><dd>{{ categoryLabel(data.business.merchantCategory) ?? '—' }}</dd></div>
     <div><dt>Industry</dt><dd>{{ data.business.industry || '—' }}</dd></div>
     <div>
       <dt>MCC</dt>

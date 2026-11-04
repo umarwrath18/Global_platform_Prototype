@@ -21,6 +21,11 @@
           <select id="cr-type" class="f-input" (change)="setBusiness('businessType', $any($event.target).value)">
             @for (t of c.businessTypes; track t) {<option [value]="t" [selected]="t === d.business.businessType">{{ t }}</option>}
           </select>@if (err('business.businessType'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        <div class="f-field"><label for="cr-category">Merchant category</label>
+          <select id="cr-category" class="f-input" [class.invalid]="err('business.merchantCategory')" (change)="setBusiness('merchantCategory', $any($event.target).value)">
+            <option value="" [selected]="!d.business.merchantCategory">Select merchant category</option>
+            @for (k of merchantCategories; track k) {<option [value]="k" [selected]="k === d.business.merchantCategory">{{ merchantCategoryLabel[k] }}</option>}
+          </select>@if (err('business.merchantCategory'); as m) {<p class="f-error">{{ m }}</p>}</div>
         <div class="f-field"><label for="cr-industry">Industry</label>
           <select id="cr-industry" class="f-input" (change)="setBusiness('industry', $any($event.target).value)">
             @for (t of industries; track t) {<option [value]="t" [selected]="t === d.business.industry">{{ t }}</option>}
