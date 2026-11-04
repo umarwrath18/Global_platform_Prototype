@@ -34,8 +34,13 @@ export interface SubMerchantEvent {
 export interface SubMerchantView {
   id: string;
   displayName: string;
-  /** Null: trades under the parent's legal identity. */
+  /** Set only on sub-merchants registered before the current form; null: trades under the parent. */
   legalEntity: { legalName: string; registrationNumber: string } | null;
+  /** Null on sub-merchants registered before these fields were collected. */
+  email: string | null;
+  website: string | null;
+  tradingLicenseUrl: string | null;
+  /** Country of jurisdiction: one where the parent has applied; it goes live there. */
   country: string;
   status: SubMerchantStatus;
   createdVia: 'ops' | 'parent';
@@ -54,9 +59,13 @@ export interface SubMerchantView {
 }
 
 export interface CreateSubMerchantRequest {
+  /** Country of jurisdiction. */
   country: string;
+  /** Business name. */
   displayName: string;
-  legalEntity: { legalName: string; registrationNumber: string } | null;
+  email: string;
+  website: string;
+  tradingLicenseUrl?: string | null;
   /** Send straight to Risk instead of saving a draft. */
   submit?: boolean;
   route?: 'ops' | 'parent';

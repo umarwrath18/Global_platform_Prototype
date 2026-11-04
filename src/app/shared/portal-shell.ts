@@ -34,7 +34,6 @@ const NAV: NavItem[] = [
 
 /** Global configuration. */
 const CONFIGURATION: NavItem[] = [
-  { label: 'Countries', icon: 'globe', link: '/configuration/countries' },
   { label: 'MCC catalogue', icon: 'list', link: '/configuration/mcc' },
 ];
 

@@ -26,13 +26,15 @@ describe('Sub-merchants', () => {
 
   const callOn = (s: MerchantServer) => <T = any>(method: string, path: string, body: unknown = null, role: StaffRole = 'sales') => s.handle(method, path, body, token, role) as Promise<{ status: number; body: T }>;
   let call: ReturnType<typeof callOn>;
-  const create = (gmid: string, body: object, role: StaffRole = 'sales') => call<any>('POST', `/api/merchants/${gmid}/sub-merchants`, body, role);
+  /** Registration details default to valid values; each test sets what it checks. */
+  const create = (gmid: string, body: object, role: StaffRole = 'sales') =>
+    call<any>('POST', `/api/merchants/${gmid}/sub-merchants`, { email: 'outlet@shop.test', website: 'https://outlet.example', ...body }, role);
   const act = (id: string, action: string, body: object = {}, role: StaffRole = 'sales', s = call) => s<any>('POST', `/api/sub-merchants/${id}/${action}`, body, role);
   const db = () => JSON.parse(storage.getItem(KEY)!) as MerchantDb;
   const subs = async (gmid: string) => (await call<MerchantDetail>('GET', `/api/merchants/${gmid}`)).body.subMerchants;
   /** A sub-merchant of GM-100106 in the Philippines, approved by Risk. */
   const approvedPh = async (name = 'Manila Learning Hub – Makati') => {
-    const s = (await create('GM-100106', { country: 'PH', displayName: name, legalEntity: null, submit: true })).body as SubMerchantView;
+    const s = (await create('GM-100106', { country: 'PH', displayName: name, submit: true })).body as SubMerchantView;
     await act(s.id, 'review', { decision: 'approve' }, 'risk');
     return s;
   };
@@ -57,12 +59,12 @@ describe('Sub-merchants', () => {
   afterEach(() => resetCountryConfigs());
 
   describe('creation', () => {
-    it('creates a lightweight child of the parent, optionally a separate legal entity', async () => {
-      const plain = await create('GM-100101', { country: 'MY', displayName: 'Tanjung Outlet KL', legalEntity: null });
+    it('creates a lightweight child of the parent with its registration details', async () => {
+      const plain = await create('GM-100101', { country: 'MY', displayName: 'Tanjung Outlet KL', email: 'kl@tanjung.test', website: 'https://kl.tanjung.example', tradingLicenseUrl: 'https://license.example/kl' });
       expect(plain.status).toBe(201);
-      expect(plain.body).toMatchObject({ status: 'draft', country: 'MY', legalEntity: null, createdVia: 'ops', lifecycleStatus: 'active', mid: null });
-      const separate = await create('GM-100101', { country: 'MY', displayName: 'Tanjung Penang', legalEntity: { legalName: 'Tanjung Penang Sdn Bhd', registrationNumber: '202401000555' } });
-      expect(separate.body.legalEntity).toEqual({ legalName: 'Tanjung Penang Sdn Bhd', registrationNumber: '202401000555' });
+      expect(plain.body).toMatchObject({ status: 'draft', country: 'MY', legalEntity: null, email: 'kl@tanjung.test', website: 'https://kl.tanjung.example', tradingLicenseUrl: 'https://license.example/kl', createdVia: 'ops', lifecycleStatus: 'active', mid: null });
+      const noLicense = await create('GM-100101', { country: 'MY', displayName: 'Tanjung Penang', tradingLicenseUrl: '  ' });
+      expect(noLicense.body.tradingLicenseUrl).toBeNull();
 
       const d = db();
       const parent = d.entities!.find((e) => e.gmid === 'GM-100101' && e.kind === 'parent')!;
@@ -73,43 +75,44 @@ describe('Sub-merchants', () => {
         expect('mcc' in c).toBe(false); // the parent's MCC applies
       }
       expect((await subs('GM-100101')).map((s) => s.displayName)).toEqual(['Tanjung Outlet KL', 'Tanjung Penang']);
-      expect((await create('GM-100101', { country: 'MY', displayName: 'tanjung outlet kl', legalEntity: null })).body.code).toBe('DUPLICATE_MERCHANT');
+      expect((await create('GM-100101', { country: 'MY', displayName: 'tanjung outlet kl' })).body.code).toBe('DUPLICATE_MERCHANT');
     });
 
-    it('validates the name, legal entity and country, and only Sales / Operations can create', async () => {
-      for (const role of ['risk', 'cs', 'finops'] as StaffRole[]) expect((await create('GM-100101', { country: 'MY', displayName: 'Outlet', legalEntity: null }, role)).status).toBe(403);
-      expect((await create('GM-100108', { country: 'MY', displayName: 'Outlet', legalEntity: null })).body.message).toMatch(/has no application in Malaysia/);
-      expect((await create('GM-100101', { country: 'PH', displayName: 'Outlet', legalEntity: null })).body.message).toMatch(/has no application in Philippines/); // only rejected there
-      expect((await create('GM-100101', { country: 'MY', displayName: 'X', legalEntity: null })).body.errors).toEqual([expect.objectContaining({ field: 'displayName' })]);
-      const bad = await create('GM-100101', { country: 'MY', displayName: 'Outlet', legalEntity: { legalName: '', registrationNumber: '123' } });
-      expect(bad.body.errors.map((e: any) => e.field)).toEqual(['legalEntity.legalName', 'legalEntity.registrationNumber']);
-      expect((await create('GM-100101', { country: 'MY', displayName: 'Outlet', legalEntity: { legalName: 'Copy Sdn Bhd', registrationNumber: '201901012345' } })).body.errors[0].message).toMatch(/parent's registration number/);
+    it('validates the business name, email, website, trading license link and country, and only Sales / Operations can create', async () => {
+      for (const role of ['risk', 'cs', 'finops'] as StaffRole[]) expect((await create('GM-100101', { country: 'MY', displayName: 'Outlet' }, role)).status).toBe(403);
+      expect((await create('GM-100108', { country: 'MY', displayName: 'Outlet' })).body.message).toMatch(/has no application in Malaysia/);
+      expect((await create('GM-100101', { country: 'PH', displayName: 'Outlet' })).body.message).toMatch(/has no application in Philippines/); // only rejected there
+      expect((await create('GM-100101', { country: 'MY', displayName: 'X' })).body.errors).toEqual([expect.objectContaining({ field: 'displayName' })]);
+      const missing = await create('GM-100101', { country: 'MY', displayName: 'Outlet', email: '', website: '' });
+      expect(missing.body.errors.map((e: any) => e.message)).toEqual(['Enter the email address.', 'Enter the website.']);
+      const bad = await create('GM-100101', { country: 'MY', displayName: 'Outlet', email: 'not-an-email', website: 'outlet.example', tradingLicenseUrl: 'license' });
+      expect(bad.body.errors.map((e: any) => e.field)).toEqual(['email', 'website', 'tradingLicenseUrl']);
     });
 
     it('is blocked while the parent is suspended', async () => {
       await call('POST', '/api/merchants/GM-100101/lifecycle', { action: 'suspend', reason: 'Chargeback ratio above threshold' }, 'risk');
-      expect((await create('GM-100101', { country: 'MY', displayName: 'Outlet', legalEntity: null })).body.code).toBe('MERCHANT_SUSPENDED');
+      expect((await create('GM-100101', { country: 'MY', displayName: 'Outlet' })).body.code).toBe('MERCHANT_SUSPENDED');
     });
 
     it('follows the creation routes in Country configuration, with each change audited', async () => {
       const put = (routes: object, version: number) =>
         config.handle('PUT', '/api/config/countries/MY', { ...toConfigInput(ONBOARDING_COUNTRIES['MY']), subMerchantCreation: routes, version, reason: 'Sub-merchant policy update' }, token, 'sales');
-      expect((await create('GM-100101', { country: 'MY', displayName: 'Outlet', legalEntity: null, route: 'parent' })).body.code).toBe('SUB_MERCHANT_ROUTE_NOT_ALLOWED');
+      expect((await create('GM-100101', { country: 'MY', displayName: 'Outlet', route: 'parent' })).body.code).toBe('SUB_MERCHANT_ROUTE_NOT_ALLOWED');
 
       expect((await put({ opsInitiated: false, parentInitiated: true }, 1)).status).toBe(200);
-      expect((await create('GM-100101', { country: 'MY', displayName: 'Outlet', legalEntity: null })).body.code).toBe('SUB_MERCHANT_ROUTE_NOT_ALLOWED');
-      expect((await create('GM-100101', { country: 'MY', displayName: 'Outlet', legalEntity: null, route: 'parent' })).body.message).toMatch(/merchant-facing portal/);
+      expect((await create('GM-100101', { country: 'MY', displayName: 'Outlet' })).body.code).toBe('SUB_MERCHANT_ROUTE_NOT_ALLOWED');
+      expect((await create('GM-100101', { country: 'MY', displayName: 'Outlet', route: 'parent' })).body.message).toMatch(/merchant-facing portal/);
       const history = ((await config.handle('GET', '/api/config/countries/MY', null, token, 'sales')).body as any).history;
       expect(history[0]).toMatchObject({ reason: 'Sub-merchant policy update', changes: ['Sub-merchant creation routes: parent merchant'] });
 
       await put({ opsInitiated: true, parentInitiated: false }, 2);
-      expect((await create('GM-100101', { country: 'MY', displayName: 'Outlet', legalEntity: null })).status).toBe(201);
+      expect((await create('GM-100101', { country: 'MY', displayName: 'Outlet' })).status).toBe(201);
     });
   });
 
   describe('Risk review', () => {
     it('submits to Risk, who approves or rejects with a reason; Risk sees it on the Approvals page', async () => {
-      const s = (await create('GM-100101', { country: 'MY', displayName: 'Tanjung Outlet KL', legalEntity: null })).body;
+      const s = (await create('GM-100101', { country: 'MY', displayName: 'Tanjung Outlet KL' })).body;
       expect((await act(s.id, 'submit', {}, 'cs')).status).toBe(403);
       expect((await act(s.id, 'submit')).body.status).toBe('pending_risk_review');
       expect(db().notifications[0]).toMatchObject({ event: 'sub_merchant_submitted', audience: ['risk'], merchantId: 'GM-100101' });
@@ -183,7 +186,7 @@ describe('Sub-merchants', () => {
 
   it('shows the parent’s products, pricing and settlement for that country', async () => {
     await call('PUT', '/api/applications/APP-2026-0001/products', { products: [{ methodCode: 'MY_CARDS', enabled: true }, { methodCode: 'MY_FPX', enabled: true }, { methodCode: 'MY_DUITNOW', enabled: true }], settlement: { MY_FPX: 'T+1' }, revision: 0 }, 'sales');
-    const s = (await create('GM-100101', { country: 'MY', displayName: 'Tanjung Outlet KL', legalEntity: null })).body as SubMerchantView;
+    const s = (await create('GM-100101', { country: 'MY', displayName: 'Tanjung Outlet KL' })).body as SubMerchantView;
     expect(s.parentApplicationId).toBe('APP-2026-0001');
     expect(s.inherited.products).toEqual([
       { name: 'Visa / Mastercard', mdrPct: 2.2, settlement: null },
@@ -195,7 +198,7 @@ describe('Sub-merchants', () => {
   it('leaves the parent’s applications, MIDs and data upgrade untouched', async () => {
     const keep = () => JSON.stringify({ apps: db().applications, mids: db().mids });
     const before = keep();
-    const s = (await create('GM-100101', { country: 'MY', displayName: 'Outlet', legalEntity: null, submit: true })).body;
+    const s = (await create('GM-100101', { country: 'MY', displayName: 'Outlet', submit: true })).body;
     await act(s.id, 'review', { decision: 'approve' }, 'risk');
     expect(keep()).toBe(before);
     expect(server.dataReport().flags).toEqual([]);
@@ -203,7 +206,7 @@ describe('Sub-merchants', () => {
 
   // Regression: parent-child relationships weren't visible outside the parent page.
   it('counts sub-merchants on the merchant list and links Risk straight to the one to review', async () => {
-    const s = (await create('GM-100101', { country: 'MY', displayName: 'Tanjung Outlet KL', legalEntity: null, submit: true })).body;
+    const s = (await create('GM-100101', { country: 'MY', displayName: 'Tanjung Outlet KL', submit: true })).body;
     const list = (await call<any[]>('GET', '/api/merchants')).body;
     expect(list.find((m) => m.id === 'GM-100101').subMerchantCount).toBe(1);
     expect(list.find((m) => m.id === 'GM-100102').subMerchantCount).toBe(0);

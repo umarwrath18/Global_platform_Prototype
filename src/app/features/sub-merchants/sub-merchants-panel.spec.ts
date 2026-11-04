@@ -8,7 +8,7 @@ import { SubMerchantView } from '../../core/merchants/sub-merchants';
 import { SubMerchantsPanel } from './sub-merchants-panel';
 
 const sub = (over: Partial<SubMerchantView> = {}): SubMerchantView => ({
-  id: 'ME-000090', displayName: 'Makati branch', legalEntity: null, country: 'PH', status: 'approved', createdVia: 'ops', createdBy: 'Sarah Lim', createdAt: 0,
+  id: 'ME-000090', displayName: 'Makati branch', legalEntity: null, email: 'makati@manila.test', website: 'https://makati.example', tradingLicenseUrl: null, country: 'PH', status: 'approved', createdVia: 'ops', createdBy: 'Sarah Lim', createdAt: 0,
   lifecycleStatus: 'active', lifecycleReason: null, goLiveChecks: [{ key: 'live_transaction', label: 'Live low-value test transaction succeeded', done: false, doneAt: null, doneBy: null }],
   history: [], mid: null, goLiveBlocker: null, parentApplicationId: 'APP-7', inherited: { products: [{ name: 'GCash', mdrPct: 2, settlement: 'T+1' }] }, ...over,
 });
@@ -32,6 +32,39 @@ async function render(role: StaffRole, subs: SubMerchantView[], merchant: Partia
 }
 
 describe('Sub-merchants panel', () => {
+  it('registers a sub-merchant with business name, email, website, country of jurisdiction and an optional trading license link', async () => {
+    const { api, el, settle, button } = await render('sales', []);
+    api.createSubMerchant.mockResolvedValue(sub({ id: 'ME-000091', displayName: 'Cebu branch', status: 'pending_risk_review' }));
+    button('Add sub-merchant')!.click();
+    await settle();
+    const labels = [...el.querySelectorAll('.sm-form label')].map((l) => l.textContent?.replace(/\s+/g, ' ').trim());
+    expect(labels).toEqual(['Business Name *', 'Email *', 'Website *', 'Country of Jurisdiction *', 'Trading license website link (Optional)']);
+    expect([...el.querySelectorAll<HTMLOptionElement>('#sm-country option')].map((o) => o.value)).toEqual(['PH']);
+    const type = (id: string, value: string) => {
+      const input = el.querySelector<HTMLInputElement>(id)!;
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+    };
+    type('#sm-name', ' Cebu branch ');
+    type('#sm-email', 'cebu@manila.test');
+    type('#sm-website', 'https://cebu.example');
+    button('Save and send to Risk')!.click();
+    await settle();
+    expect(api.createSubMerchant).toHaveBeenCalledWith('GM-1', { country: 'PH', displayName: 'Cebu branch', email: 'cebu@manila.test', website: 'https://cebu.example', tradingLicenseUrl: null, submit: true });
+  });
+
+  it('shows the registration details, and the legal identity only on older sub-merchants that have one', async () => {
+    const { el, settle, button } = await render('risk', [sub({ tradingLicenseUrl: 'https://license.example/123', legalEntity: { legalName: 'Makati Learning Corp.', registrationNumber: 'CS2020' } })]);
+    button('Details')!.click();
+    await settle();
+    const text = el.querySelector('.sm-detail')!.textContent!.replace(/\s+/g, ' ');
+    expect(text).toMatch(/Country of jurisdiction\s*Philippines/);
+    expect(text).toMatch(/Email\s*makati@manila\.test/);
+    expect(text).toMatch(/Website\s*https:\/\/makati\.example/);
+    expect(text).toMatch(/Trading license\s*https:\/\/license\.example\/123/);
+    expect(text).toMatch(/Legal identity\s*Makati Learning Corp\. \(CS2020\)/);
+  });
+
   it('offers "Add sub-merchant" to Sales / Operations only while the parent is not suspended', async () => {
     expect((await render('sales', [])).button('Add sub-merchant')).toBeTruthy();
     TestBed.resetTestingModule();

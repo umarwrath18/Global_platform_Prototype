@@ -29,6 +29,10 @@ export interface MerchantEntity {
   /** Null when the entity trades under the parent's legal identity (and always for the parent, whose profile is the GMID record). */
   legalEntity: LegalEntityDetails | null;
   displayName?: string;
+  // Sub-merchant registration details (absent on sub-merchants registered before they were collected).
+  email?: string;
+  website?: string;
+  tradingLicenseUrl?: string | null;
   /** Sub-merchants only; the parent's lifecycle stays on the merchant record. */
   lifecycleStatus?: MerchantLifecycleStatus;
   lifecycleReason?: string | null;

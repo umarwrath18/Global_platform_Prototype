@@ -1,3 +1,4 @@
+import { isEmail, isUrl } from '../merchants/application-rules';
 import { CountryApplication, StaffRole } from '../merchants/merchant-models';
 import { countryName, ONBOARDING_COUNTRIES, subMerchantRoutes } from '../merchants/onboarding-config';
 import { activePricing } from '../merchants/products';
@@ -60,28 +61,22 @@ export function createSubMerchant(ctx: SubMerchantContext, gmid: string, body: a
     fail(403, 'ROLE_NOT_PERMITTED', { message: 'Parent-created sub-merchants need a merchant-facing portal, which does not exist in this prototype.' });
   }
   requireRole(ctx, ['sales'], 'Only Sales / Operations can create sub-merchants.');
-  if (!routes.opsInitiated) fail(409, 'SUB_MERCHANT_ROUTE_NOT_ALLOWED', { message: `Country configuration doesn't allow Sales / Operations to create sub-merchants in ${cfg.name}.` });
+  if (!routes.opsInitiated) fail(409, 'SUB_MERCHANT_ROUTE_NOT_ALLOWED', { message: `The country rules for ${cfg.name} don't allow Sales / Operations to create sub-merchants.` });
   if (merchant.lifecycleStatus === 'suspended') fail(409, 'MERCHANT_SUSPENDED', { message: `${merchant.legalName} is suspended, so it can't add sub-merchants. Risk must reactivate the merchant first.` });
   if (!parentApplication(ctx.db, parent, country)) fail(422, 'VALIDATION_FAILED', { message: `${merchant.legalName} has no application in ${cfg.name}, so it can't have sub-merchants there.` });
 
   const errors: { section: 'business'; field: string; message: string }[] = [];
   const displayName = str(body?.displayName, 200).trim();
-  if (displayName.length < 2) errors.push({ section: 'business', field: 'displayName', message: 'Enter the sub-merchant name.' });
+  if (displayName.length < 2) errors.push({ section: 'business', field: 'displayName', message: 'Enter the business name.' });
   else if (displayName.length > 120) errors.push({ section: 'business', field: 'displayName', message: 'Use 120 characters or fewer.' });
-  let legalEntity: MerchantEntity['legalEntity'] = null;
-  if (body?.legalEntity) {
-    const legalName = str(body.legalEntity.legalName, 200).trim();
-    const registrationNumber = str(body.legalEntity.registrationNumber, 40).trim();
-    if (!legalName) errors.push({ section: 'business', field: 'legalEntity.legalName', message: 'Enter the registered legal name.' });
-    else if (legalName.length > 160) errors.push({ section: 'business', field: 'legalEntity.legalName', message: 'Use 160 characters or fewer.' });
-    if (!registrationNumber) errors.push({ section: 'business', field: 'legalEntity.registrationNumber', message: `Enter the ${cfg.localRegistration.label}.` });
-    else if (cfg.localRegistration.pattern && !new RegExp(cfg.localRegistration.pattern).test(registrationNumber)) {
-      errors.push({ section: 'business', field: 'legalEntity.registrationNumber', message: `${cfg.localRegistration.label} format is not valid${cfg.localRegistration.hint ? ` (${cfg.localRegistration.hint})` : ''}.` });
-    } else if (registrationNumber.replace(/\W/g, '').toUpperCase() === merchant.registrationNumber.replace(/\W/g, '').toUpperCase()) {
-      errors.push({ section: 'business', field: 'legalEntity.registrationNumber', message: "That's the parent's registration number. Choose \"trades under the parent\" instead." });
-    }
-    legalEntity = { legalName, registrationNumber };
-  }
+  const email = str(body?.email, 200).trim();
+  if (!email) errors.push({ section: 'business', field: 'email', message: 'Enter the email address.' });
+  else if (!isEmail(email)) errors.push({ section: 'business', field: 'email', message: 'Enter a valid email address, e.g. name@company.com' });
+  const website = str(body?.website, 300).trim();
+  if (!website) errors.push({ section: 'business', field: 'website', message: 'Enter the website.' });
+  else if (!isUrl(website)) errors.push({ section: 'business', field: 'website', message: 'Enter a full website address starting with https://' });
+  const tradingLicenseUrl = str(body?.tradingLicenseUrl, 300).trim() || null;
+  if (tradingLicenseUrl && !isUrl(tradingLicenseUrl)) errors.push({ section: 'business', field: 'tradingLicenseUrl', message: 'Enter a full link starting with https://' });
   if (errors.length) fail(422, 'VALIDATION_FAILED', { errors });
   const clash = (ctx.db.entities ?? []).find((e) => e.parentEntityId === parent.id && e.country === country && e.displayName?.toLowerCase() === displayName.toLowerCase() && e.status !== 'rejected');
   if (clash) fail(409, 'DUPLICATE_MERCHANT', { message: `${merchant.legalName} already has a sub-merchant called ${clash.displayName} in ${cfg.name}.` });
@@ -92,8 +87,11 @@ export function createSubMerchant(ctx: SubMerchantContext, gmid: string, body: a
     gmid,
     kind: 'sub',
     parentEntityId: parent.id,
-    legalEntity,
+    legalEntity: null,
     displayName,
+    email,
+    website,
+    tradingLicenseUrl,
     lifecycleStatus: 'active',
     lifecycleReason: null,
     createdAt: ctx.now,
@@ -113,7 +111,7 @@ export function createSubMerchant(ctx: SubMerchantContext, gmid: string, body: a
   const problems = entityProblems(sub, [...(ctx.db.entities ?? []), sub]);
   if (problems.length) fail(422, 'VALIDATION_FAILED', { message: problems.join(' ') });
   ctx.db.entities!.push(sub);
-  record(ctx, sub, `Sub-merchant created (${legalEntity ? 'separate legal entity' : 'trades under the parent'})`);
+  record(ctx, sub, 'Sub-merchant created');
   if (body?.submit === true) submit(ctx, sub, merchant);
   return subMerchantView(ctx.db, sub, ctx.now);
 }
@@ -225,6 +223,9 @@ export function subMerchantView(db: MerchantDb, sub: MerchantEntity, now: number
     id: sub.id,
     displayName: sub.displayName ?? '',
     legalEntity: sub.legalEntity,
+    email: sub.email ?? null,
+    website: sub.website ?? null,
+    tradingLicenseUrl: sub.tradingLicenseUrl ?? null,
     country: sub.country!,
     status: sub.status ?? 'draft',
     createdVia: sub.createdVia ?? 'ops',

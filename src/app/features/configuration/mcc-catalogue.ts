@@ -10,7 +10,7 @@ import { fmtDateTime } from '../../shared/merchant-ui';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Icon],
   templateUrl: './mcc-catalogue.html',
-  styleUrl: './country-config.scss',
+  styleUrl: './mcc-catalogue.scss',
 })
 export class MccCataloguePage {
   protected readonly service = inject(MccService);

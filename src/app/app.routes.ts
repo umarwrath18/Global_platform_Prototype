@@ -76,17 +76,6 @@ export const routes: Routes = [
         loadComponent: () => import('./features/approvals/approvals').then((m) => m.Approvals),
       },
       {
-        path: 'configuration/countries',
-        title: 'Country configuration · Mobi Global Platform',
-        loadComponent: () => import('./features/configuration/country-config-list').then((m) => m.CountryConfigList),
-      },
-      {
-        path: 'configuration/countries/:code',
-        title: 'Country configuration · Mobi Global Platform',
-        canDeactivate: [unsavedChangesGuard],
-        loadComponent: () => import('./features/configuration/country-config-detail').then((m) => m.CountryConfigDetailPage),
-      },
-      {
         path: 'configuration/mcc',
         title: 'MCC catalogue · Mobi Global Platform',
         loadComponent: () => import('./features/configuration/mcc-catalogue').then((m) => m.MccCataloguePage),

@@ -44,7 +44,7 @@ interface CountryOption {
             <span class="c-note">Open application <a [routerLink]="['/applications', o.id]">{{ o.id }}</a></span>
             <app-status [status]="o.status" />
           } @else if (c.paused) {
-            <span class="c-note warn">New applications are paused in Country configuration.</span>
+            <span class="c-note warn">New applications are paused for this country.</span>
           } @else if (c.mccBlocked) {
             <span class="c-note warn">MCC {{ merchant().mcc?.code }} isn't available in {{ c.name }}.</span>
           } @else {

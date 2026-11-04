@@ -22,28 +22,6 @@
   gap: 10px 14px;
 }
 
-.sm-entity {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 18px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-
-  legend {
-    margin-bottom: 4px;
-    font-size: 13px;
-    font-weight: 500;
-  }
-}
-
-.check {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 14px;
-}
-
 .sm-actions,
 .sm-lifecycle {
   display: flex;

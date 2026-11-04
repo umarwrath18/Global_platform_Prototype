@@ -13,23 +13,16 @@
     @let f = form();
     <form class="sm-form" (submit)="$event.preventDefault(); create(true)" novalidate aria-label="New sub-merchant">
       <div class="f-grid">
-        <div class="f-field"><label for="sm-country">Country</label>
-          <select id="sm-country" class="f-input" (change)="set('country', $any($event.target).value)">
+        <div class="f-field"><label for="sm-name">Business Name <span class="req">*</span></label><input id="sm-name" class="f-input" autocomplete="organization" [class.invalid]="issue('displayName')" [value]="f.displayName" (input)="set('displayName', $any($event.target).value)" />@if (issue('displayName'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        <div class="f-field"><label for="sm-email">Email <span class="req">*</span></label><input id="sm-email" type="email" class="f-input" autocomplete="email" [class.invalid]="issue('email')" [value]="f.email" (input)="set('email', $any($event.target).value)" />@if (issue('email'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        <div class="f-field"><label for="sm-website">Website <span class="req">*</span></label><input id="sm-website" type="url" class="f-input" placeholder="https://" [class.invalid]="issue('website')" [value]="f.website" (input)="set('website', $any($event.target).value)" />@if (issue('website'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        <div class="f-field"><label for="sm-country">Country of Jurisdiction <span class="req">*</span></label>
+          <select id="sm-country" class="f-input" (change)="set('country', $any($event.target).value)" aria-describedby="sm-country-hint">
             @for (c of countries(); track c) {<option [value]="c" [selected]="c === f.country">{{ countryName(c) }}</option>}
-          </select></div>
-        <div class="f-field"><label for="sm-name">Sub-merchant name <span class="req">*</span></label><input id="sm-name" class="f-input" [value]="f.displayName" (input)="set('displayName', $any($event.target).value)" />@if (issue('displayName'); as m) {<p class="f-error">{{ m }}</p>}</div>
+          </select>
+          <p class="f-hint" id="sm-country-hint">Countries where {{ merchant().legalName }} has applied.</p></div>
+        <div class="f-field full"><label for="sm-license">Trading license website link <span class="muted">(Optional)</span></label><input id="sm-license" type="url" class="f-input" placeholder="https://" [class.invalid]="issue('tradingLicenseUrl')" [value]="f.tradingLicenseUrl" (input)="set('tradingLicenseUrl', $any($event.target).value)" />@if (issue('tradingLicenseUrl'); as m) {<p class="f-error">{{ m }}</p>}</div>
       </div>
-      <fieldset class="sm-entity">
-        <legend>Legal identity</legend>
-        <label class="check"><input type="radio" name="sm-entity" [checked]="!f.separate" (change)="set('separate', false)" />Trades under the parent ({{ merchant().legalName }})</label>
-        <label class="check"><input type="radio" name="sm-entity" [checked]="f.separate" (change)="set('separate', true)" />Separate legal entity</label>
-      </fieldset>
-      @if (f.separate) {
-        <div class="f-grid">
-          <div class="f-field"><label for="sm-legal">Registered legal name <span class="req">*</span></label><input id="sm-legal" class="f-input" [value]="f.legalName" (input)="set('legalName', $any($event.target).value)" />@if (issue('legalEntity.legalName'); as m) {<p class="f-error">{{ m }}</p>}</div>
-          <div class="f-field"><label for="sm-reg">{{ regRule()?.label ?? 'Registration number' }} <span class="req">*</span></label><input id="sm-reg" class="f-input" [value]="f.registrationNumber" (input)="set('registrationNumber', $any($event.target).value)" />@if (regRule()?.hint; as h) {<p class="f-hint">{{ h }}</p>}@if (issue('legalEntity.registrationNumber'); as m) {<p class="f-error">{{ m }}</p>}</div>
-        </div>
-      }
       <p class="f-hint">No documents, directors, bank details, MCC or keys are collected: the parent's apply. Risk reviews each new sub-merchant.</p>
       @if (error(); as e) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
       <div class="sm-actions">
@@ -47,7 +40,7 @@
         <tbody>
           @for (s of subMerchants(); track s.id) {
             <tr [class.selected-row]="selected() === s.id">
-              <td><strong>{{ s.displayName }}</strong><span class="sm-sub">{{ s.legalEntity ? s.legalEntity.legalName + ' · ' + s.legalEntity.registrationNumber : 'Trades under the parent' }}</span></td>
+              <td><strong>{{ s.displayName }}</strong><span class="sm-sub">{{ s.website ?? (s.legalEntity ? s.legalEntity.legalName + ' · ' + s.legalEntity.registrationNumber : 'Trades under the parent') }}</span></td>
               <td>{{ countryName(s.country) }}</td>
               <td>
                 <span class="status" [class]="'status ' + tone[s.status]">{{ statusLabel[s.status] }}</span>
@@ -71,7 +64,11 @@
           <h3>{{ s.displayName }}</h3>
           <dl class="kv">
             <div><dt>Parent merchant</dt><dd>{{ merchant().legalName }} · GMID {{ merchant().id }}</dd></div>
-            <div><dt>Legal identity</dt><dd>{{ s.legalEntity ? s.legalEntity.legalName + ' (' + s.legalEntity.registrationNumber + ')' : 'Trades under the parent' }}</dd></div>
+            <div><dt>Country of jurisdiction</dt><dd>{{ countryName(s.country) }}</dd></div>
+            <div><dt>Email</dt><dd>{{ s.email ?? '—' }}</dd></div>
+            <div><dt>Website</dt><dd>@if (s.website; as w) {<a [href]="w" target="_blank" rel="noopener noreferrer">{{ w }}</a>} @else {—}</dd></div>
+            <div><dt>Trading license</dt><dd>@if (s.tradingLicenseUrl; as l) {<a [href]="l" target="_blank" rel="noopener noreferrer">{{ l }}</a>} @else {Not provided}</dd></div>
+            @if (s.legalEntity; as le) {<div><dt>Legal identity</dt><dd>{{ le.legalName }} ({{ le.registrationNumber }})</dd></div>}
             <div><dt>Created</dt><dd>{{ dateTime(s.createdAt) }} · {{ s.createdBy }}</dd></div>
             @if (s.lifecycleStatus === 'suspended') {<div><dt>Suspended</dt><dd>{{ s.lifecycleReason }}</dd></div>}
           </dl>

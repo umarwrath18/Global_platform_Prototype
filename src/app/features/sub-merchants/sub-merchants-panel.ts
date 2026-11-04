@@ -2,7 +2,7 @@ import { afterNextRender, ChangeDetectionStrategy, Component, computed, effect, 
 import { RouterLink } from '@angular/router';
 import { MerchantApi, toMerchantError } from '../../core/merchants/merchant-api.service';
 import { CountryApplication, FieldIssue, GlobalMerchant, STAFF_ROLE_LABEL } from '../../core/merchants/merchant-models';
-import { countryName, FieldRule, ONBOARDING_COUNTRIES, subMerchantRoutes } from '../../core/merchants/onboarding-config';
+import { countryName, ONBOARDING_COUNTRIES, subMerchantRoutes } from '../../core/merchants/onboarding-config';
 import { StaffRoleService } from '../../core/merchants/staff-role.service';
 import { SUB_MERCHANT_STATUS_LABEL, SubMerchantStatus, SubMerchantView } from '../../core/merchants/sub-merchants';
 import { Icon } from '../../shared/icon';
@@ -38,7 +38,7 @@ export class SubMerchantsPanel {
   protected readonly teamLabel = STAFF_ROLE_LABEL as Record<string, string>;
 
   protected readonly adding = signal(false);
-  protected readonly form = signal({ country: '', displayName: '', separate: false, legalName: '', registrationNumber: '' });
+  protected readonly form = signal({ displayName: '', email: '', website: '', country: '', tradingLicenseUrl: '' });
   protected readonly issues = signal<FieldIssue[]>([]);
   protected readonly selected = signal<string | null>(null);
   protected readonly comment = signal('');
@@ -59,7 +59,7 @@ export class SubMerchantsPanel {
     if (this.countries().length) return null;
     const applied = [...new Set(this.applications().filter((a) => a.status !== 'rejected').map((a) => a.country))];
     if (!applied.length) return `Start a country application for ${m.legalName} first. Sub-merchants are added in countries where the parent has applied.`;
-    return `Country configuration doesn't allow Sales / Operations to create sub-merchants in ${applied.map(countryName).join(', ')}.`;
+    return `The country rules for ${applied.map(countryName).join(', ')} don't allow Sales / Operations to create sub-merchants.`;
   });
 
   constructor() {
@@ -86,14 +86,13 @@ export class SubMerchantsPanel {
     );
   }
   protected readonly current = computed(() => this.subMerchants().find((s) => s.id === this.selected()) ?? null);
-  protected readonly regRule = computed<FieldRule | null>(() => ONBOARDING_COUNTRIES[this.form().country]?.localRegistration ?? null);
 
   protected issue(field: string) {
     return this.issues().find((i) => i.field === field)?.message ?? null;
   }
 
   protected openAdd() {
-    this.form.set({ country: this.countries()[0] ?? '', displayName: '', separate: false, legalName: '', registrationNumber: '' });
+    this.form.set({ displayName: '', email: '', website: '', country: this.countries()[0] ?? '', tradingLicenseUrl: '' });
     this.issues.set([]);
     this.error.set(null);
     this.adding.set(true);
@@ -101,7 +100,7 @@ export class SubMerchantsPanel {
 
   protected cancelAdd() {
     const f = this.form();
-    if ((f.displayName || f.legalName || f.registrationNumber) && !confirm('Discard this sub-merchant?')) return;
+    if ((f.displayName || f.email || f.website || f.tradingLicenseUrl) && !confirm('Discard this sub-merchant?')) return;
     this.adding.set(false);
   }
 
@@ -118,7 +117,9 @@ export class SubMerchantsPanel {
       const s = await this.api.createSubMerchant(this.merchant().id, {
         country: f.country,
         displayName: f.displayName.trim(),
-        legalEntity: f.separate ? { legalName: f.legalName.trim(), registrationNumber: f.registrationNumber.trim() } : null,
+        email: f.email.trim(),
+        website: f.website.trim(),
+        tradingLicenseUrl: f.tradingLicenseUrl.trim() || null,
         submit,
       });
       this.adding.set(false);

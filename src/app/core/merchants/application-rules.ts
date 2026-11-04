@@ -12,6 +12,7 @@ const URL_RE = /^https?:\/\/[^\s.]+\.[^\s]+$/i;
 
 export const isEmail = (v: string) => EMAIL_RE.test(v.trim());
 export const isPhone = (v: string) => PHONE_RE.test(v.trim());
+export const isUrl = (v: string) => URL_RE.test(v.trim());
 
 /** True when the Global profile's registration number already covers this country. */
 export function registeredInCountry(merchant: Pick<GlobalMerchant, 'registrationCountry'>, country: string) {

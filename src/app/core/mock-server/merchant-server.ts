@@ -465,7 +465,7 @@ export class MerchantServer {
     const country = str(body?.country, 2).toUpperCase();
     const cfg = ONBOARDING_COUNTRIES[country];
     if (!cfg) fail(422, 'COUNTRY_NOT_SUPPORTED', { message: 'Onboarding is not available for this country.' });
-    if (cfg.onboardingEnabled === false) fail(422, 'COUNTRY_NOT_SUPPORTED', { message: `New applications for ${cfg.name} are paused in Country configuration.` });
+    if (cfg.onboardingEnabled === false) fail(422, 'COUNTRY_NOT_SUPPORTED', { message: `New applications for ${cfg.name} are paused for this country.` });
     if (merchant.mcc && mccCountryCheck(this.catalogue(), merchant.mcc.code, [country]).unavailable.length) {
       fail(422, 'MCC_NOT_AVAILABLE', { message: `${merchant.legalName}'s MCC ${merchant.mcc.code} is not available in ${cfg.name}, so it can't apply there.` });
     }
