@@ -1,4 +1,4 @@
-import { ApplicationData, FieldIssue, GlobalMerchant, SectionKey } from './merchant-models';
+import { ApplicationData, FieldIssue, GlobalMerchant, merchantCategoryLabel, SectionKey } from './merchant-models';
 import { CountryOnboardingConfig, FieldRule, ONBOARDING_COUNTRIES } from './onboarding-config';
 
 // Validation shared by the portal (field-level feedback) and the simulated backend
@@ -62,6 +62,7 @@ function validateBusiness(cfg: CountryOnboardingConfig, data: ApplicationData, m
   if (!b.tradingName.trim()) out.push({ section: 'business', field: 'business.tradingName', message: 'Enter the trading name used in this country.' });
   else if (b.tradingName.length > 120) out.push({ section: 'business', field: 'business.tradingName', message: 'Use 120 characters or fewer.' });
   if (!cfg.businessTypes.includes(b.businessType)) out.push({ section: 'business', field: 'business.businessType', message: 'Select the business type.' });
+  if (!merchantCategoryLabel(b.merchantCategory)) out.push({ section: 'business', field: 'business.merchantCategory', message: 'Select the merchant category.' });
   if (!b.industry) out.push({ section: 'business', field: 'business.industry', message: 'Select the industry.' });
   if (b.website.trim() && !URL_RE.test(b.website.trim())) out.push({ section: 'business', field: 'business.website', message: 'Enter a full website address starting with https://' });
   if (!b.address.trim()) out.push({ section: 'business', field: 'business.address', message: `Enter the business address in ${cfg.name}.` });
@@ -120,7 +121,7 @@ function validatePricing(cfg: CountryOnboardingConfig, data: ApplicationData, ou
 export function emptyApplicationData(country: string): ApplicationData {
   const cfg = ONBOARDING_COUNTRIES[country];
   return {
-    business: { tradingName: '', businessType: '', industry: '', website: '', address: '', localRegistrationNumber: '', taxId: '', expectedMonthlyVolume: null },
+    business: { tradingName: '', businessType: '', merchantCategory: '', industry: '', website: '', address: '', localRegistrationNumber: '', taxId: '', expectedMonthlyVolume: null },
     contact: { name: '', email: '', phone: '', supportEmail: '' },
     bank: Object.fromEntries(cfg.bankFields.map((f) => [f.key, ''])),
     directors: [],

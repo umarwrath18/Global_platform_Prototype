@@ -42,41 +42,49 @@ async function render(catalogue: MccCatalogue, locked = false, merchantMcc: { co
 }
 
 describe('Application form – MCC field', () => {
-  it('keeps the required field visible with an empty state when no catalogue covers the country, without inventing options', async () => {
-    const { el, field } = await render(EMPTY_MCC_CATALOGUE);
-    expect(field().querySelector('label .req')).not.toBeNull();
+  it('leaves MCC optional with an empty state when no catalogue covers the country, without inventing options', async () => {
+    const { f, el, field } = await render(EMPTY_MCC_CATALOGUE);
+    expect(field().querySelector('label .req')).toBeNull();
     const select = el.querySelector('#mcc') as HTMLSelectElement;
     expect(select.disabled).toBe(true);
-    expect([...select.options].map((o) => o.textContent?.trim())).toEqual(['No MCCs available for Malaysia']);
-    expect(field().textContent).toContain('No MCC catalogue is configured for Malaysia yet');
+    expect([...select.options].map((o) => o.textContent?.trim())).toEqual(['No MCCs available']);
+    expect(field().textContent).toContain('No MCC catalogue covers Malaysia yet, so the MCC can be left empty.');
+    expect((f.componentInstance as any).issues().some((i: any) => i.field === 'business.mcc')).toBe(false);
   });
 
-  it('sits first in Business information, above the trading name', async () => {
+  it('is required, with the catalogue options, where a catalogue covers the country', async () => {
+    const { f, field } = await render(FIXTURE);
+    expect(field().querySelector('label .req')).not.toBeNull();
+    expect((f.componentInstance as any).issues().some((i: any) => i.field === 'business.mcc')).toBe(true);
+  });
+
+  it('sits with the other Business information fields, after Industry', async () => {
     const { el } = await render(FIXTURE);
     const labels = [...el.querySelectorAll('.f-grid label')].map((l) => l.getAttribute('for'));
-    expect(labels.indexOf('mcc')).toBe(0);
-    expect(labels.indexOf('tradingName')).toBe(1);
+    expect(labels.slice(0, 6)).toEqual(['tradingName', 'businessType', 'merchantCategory', 'industry', 'mcc', 'website']);
   });
 
-  it('blocks submission without an MCC, even in guided mode, and returns to the field', async () => {
-    for (const catalogue of [FIXTURE, EMPTY_MCC_CATALOGUE]) {
-      TestBed.resetTestingModule();
-      const { f, el, api } = await render(catalogue);
-      await (f.componentInstance as any).submit();
-      f.detectChanges();
-      await f.whenStable();
-      expect(api.submit).not.toHaveBeenCalled();
-      expect(el.querySelector('#section-title')?.textContent).toBe('Business information');
-      expect(el.querySelector('.alert.danger')?.textContent).toContain('An MCC is required before submitting.');
-    }
-  });
-
-  it('lets a valid MCC through to submission', async () => {
-    const { f, api } = await render(FIXTURE, false, { code: '5411', description: 'TEST – Grocery stores' });
+  it('submits with MCC empty when no catalogue covers the country', async () => {
+    const { f, api } = await render(EMPTY_MCC_CATALOGUE);
     const form = f.componentInstance as any;
     await form.submit(); // guided mode: the first click asks to confirm the other missing items
     await form.submit();
     expect(api.submit).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers the three merchant categories, requires one and saves the choice with the application', async () => {
+    const { f, el } = await render(EMPTY_MCC_CATALOGUE);
+    const form = f.componentInstance as any;
+    const select = el.querySelector('#merchantCategory') as HTMLSelectElement;
+    expect([...select.options].map((o) => o.textContent?.trim())).toEqual(['Select merchant category', 'Payment Gateway & Business Entity (PGBE)', 'Payment Service Provider', 'Merchant']);
+    expect(form.issues().find((i: any) => i.field === 'business.merchantCategory')?.message).toBe('Select the merchant category.');
+    for (const value of ['pgbe', 'psp', 'merchant']) {
+      select.value = value;
+      select.dispatchEvent(new Event('change'));
+      f.detectChanges();
+      expect(form.data().business.merchantCategory).toBe(value);
+      expect(form.issues().some((i: any) => i.field === 'business.merchantCategory')).toBe(false);
+    }
   });
 
   it("offers only the country's codes and confirms the save (regression: no confirmation was shown)", async () => {

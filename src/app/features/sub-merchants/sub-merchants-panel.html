@@ -64,6 +64,7 @@
           <h3>{{ s.displayName }}</h3>
           <dl class="kv">
             <div><dt>Parent merchant</dt><dd>{{ merchant().legalName }} · GMID {{ merchant().id }}</dd></div>
+            <div><dt>MCC (from parent)</dt><dd>@if (merchant().mcc; as m) {{{ m.code }} – {{ m.description }}} @else {Not set on the parent}</dd></div>
             <div><dt>Country of jurisdiction</dt><dd>{{ countryName(s.country) }}</dd></div>
             <div><dt>Email</dt><dd>{{ s.email ?? '—' }}</dd></div>
             <div><dt>Website</dt><dd>@if (s.website; as w) {<a [href]="w" target="_blank" rel="noopener noreferrer">{{ w }}</a>} @else {—}</dd></div>

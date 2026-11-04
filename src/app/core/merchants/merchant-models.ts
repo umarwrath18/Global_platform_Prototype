@@ -146,10 +146,26 @@ export interface PricingLine {
   mdr: number | null;
 }
 
+/** Mobi's internal merchant classification. Not the same as Industry or MCC. */
+export type MerchantCategory = 'pgbe' | 'psp' | 'merchant';
+
+export const MERCHANT_CATEGORY_LABEL: Record<MerchantCategory, string> = {
+  pgbe: 'Payment Gateway & Business Entity (PGBE)',
+  psp: 'Payment Service Provider',
+  merchant: 'Merchant',
+};
+
+export const MERCHANT_CATEGORIES = Object.keys(MERCHANT_CATEGORY_LABEL) as MerchantCategory[];
+
+/** The label for a stored category, or null when it is empty or not one of the categories. */
+export const merchantCategoryLabel = (c: string | null | undefined): string | null => MERCHANT_CATEGORY_LABEL[c as MerchantCategory] ?? null;
+
 export interface ApplicationData {
   business: {
     tradingName: string;
     businessType: string;
+    /** Absent on applications saved before the category was collected. */
+    merchantCategory?: MerchantCategory | '';
     industry: string;
     website: string;
     address: string;

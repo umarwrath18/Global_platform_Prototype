@@ -195,6 +195,7 @@ function buildApplication(s: AppSeed, ago: (d: number) => number): CountryApplic
   data.business = {
     tradingName: m.legalName,
     businessType: cfg.businessTypes[0],
+    merchantCategory: 'merchant',
     industry: s.industry,
     website: s.website ?? '',
     address: ADDRESSES[s.country],

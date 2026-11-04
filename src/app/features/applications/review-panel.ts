@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, output, si
 import { SECTION_ORDER } from '../../core/merchants/application-rules';
 import { MerchantApi, toMerchantError } from '../../core/merchants/merchant-api.service';
 import { MccService } from '../../core/merchants/mcc.service';
-import { CountryApplication, ReviewDecision, SECTION_LABEL, SectionKey } from '../../core/merchants/merchant-models';
+import { CountryApplication, merchantCategoryLabel, ReviewDecision, SECTION_LABEL, SectionKey } from '../../core/merchants/merchant-models';
 import { countryName } from '../../core/merchants/onboarding-config';
 import { Icon } from '../../shared/icon';
 import { isStrictValidation } from '../../core/merchants/validation-mode';
@@ -42,6 +42,7 @@ export class ReviewPanel {
 
   protected readonly sectionKeys = SECTION_ORDER;
   protected readonly label = SECTION_LABEL;
+  protected readonly categoryLabel = merchantCategoryLabel;
   protected readonly dateTime = fmtDateTime;
 
   protected readonly evidence = computed(() => this.application().verification);

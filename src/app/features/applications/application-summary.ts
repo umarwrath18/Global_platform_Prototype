@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import { registeredInCountry } from '../../core/merchants/application-rules';
-import { ApplicationData, CountryApplication, GlobalMerchant, SECTION_LABEL, SectionKey } from '../../core/merchants/merchant-models';
+import { ApplicationData, CountryApplication, GlobalMerchant, merchantCategoryLabel, SECTION_LABEL, SectionKey } from '../../core/merchants/merchant-models';
 import { MccService } from '../../core/merchants/mcc.service';
 import { countryName, rulesFor } from '../../core/merchants/onboarding-config';
 import { Icon } from '../../shared/icon';
@@ -37,6 +37,7 @@ export class ApplicationSummaryView {
   });
   protected readonly flagged = computed(() => new Set(this.application().status === 'returned' ? this.application().corrections?.sections ?? [] : []));
   protected readonly label = SECTION_LABEL;
+  protected readonly categoryLabel = merchantCategoryLabel;
   protected readonly roleLabel = ROLE_LABEL;
   protected readonly countryName = countryName;
   protected readonly date = fmtDate;

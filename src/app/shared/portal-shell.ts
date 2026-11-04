@@ -32,11 +32,6 @@ const NAV: NavItem[] = [
   { label: 'Approvals', icon: 'check-circle', link: '/approvals' },
 ];
 
-/** Global configuration. */
-const CONFIGURATION: NavItem[] = [
-  { label: 'MCC catalogue', icon: 'list', link: '/configuration/mcc' },
-];
-
 /** Approved MVP modules not built yet: shown disabled so the roadmap is visible, never clickable. */
 const LATER: NavItem[] = [
   { label: 'Pay-ins', icon: 'arrow-down' },
@@ -85,7 +80,6 @@ export class PortalShell {
 
   protected readonly session = this.auth.session;
   protected readonly nav = NAV;
-  protected readonly configuration = CONFIGURATION;
   protected readonly later = LATER;
   protected readonly menuOpen = signal(false);
   protected readonly bellOpen = signal(false);

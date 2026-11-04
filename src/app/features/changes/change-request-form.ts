@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, OnInit, ou
 import { documentFileError, validateApplication } from '../../core/merchants/application-rules';
 import { CHANGE_SECTION_LABEL, ChangeSection, maskValue } from '../../core/merchants/change-requests';
 import { MerchantApi, toMerchantError } from '../../core/merchants/merchant-api.service';
-import { ApplicationData, CountryApplication, Director, FieldIssue, GlobalMerchant } from '../../core/merchants/merchant-models';
+import { ApplicationData, CountryApplication, Director, FieldIssue, GlobalMerchant, MERCHANT_CATEGORIES, MERCHANT_CATEGORY_LABEL } from '../../core/merchants/merchant-models';
 import { INDUSTRIES, ONBOARDING_COUNTRIES } from '../../core/merchants/onboarding-config';
 import { Icon } from '../../shared/icon';
 
@@ -30,6 +30,8 @@ export class ChangeRequestForm implements OnInit {
   protected readonly sections = SECTIONS;
   protected readonly sectionLabel = CHANGE_SECTION_LABEL;
   protected readonly industries = INDUSTRIES;
+  protected readonly merchantCategories = MERCHANT_CATEGORIES;
+  protected readonly merchantCategoryLabel = MERCHANT_CATEGORY_LABEL;
   protected readonly section = signal<CountrySection>('bank');
   protected readonly draft = signal<ApplicationData>(null!);
   protected readonly reason = signal('');

@@ -1,10 +1,8 @@
 import { emptyApplicationData } from '../../merchants/application-rules';
-import { MccCatalogue } from '../../merchants/mcc';
 import { ApplicationData, CountryApplication, StaffRole } from '../../merchants/merchant-models';
 import { ProductPricingView } from '../../merchants/products';
 import { ONBOARDING_COUNTRIES } from '../../merchants/onboarding-config';
 import { buildMerchantSeed } from '../merchant-seed';
-import { MCC_TEST_FIXTURE, MCC_TEST_FIXTURE_NAME, MCC_TEST_FIXTURE_VERSION } from '../mcc-test-fixture';
 import type { MerchantDb, MerchantRecord } from '../merchant-server';
 
 // Test-only helpers for the merchant data upgrade and go-live retries.
@@ -103,7 +101,7 @@ export function completeApplicationData(country: string, legalName: string): App
   const cfg = ONBOARDING_COUNTRIES[country];
   const d = emptyApplicationData(country);
   const reg: Record<string, [string, string]> = { MY: ['', ''], ID: ['9120001234567', '012345678901000'], VN: ['0312345678', '0312345678'], TH: ['0105561234567', '0105561234567'], PH: ['CS201912345', '123456789'] };
-  d.business = { tradingName: legalName, businessType: cfg.businessTypes[0], industry: 'Education', website: 'https://example.test', address: '1 Demo Street', localRegistrationNumber: reg[country][0], taxId: reg[country][1], expectedMonthlyVolume: 1000 };
+  d.business = { tradingName: legalName, businessType: cfg.businessTypes[0], merchantCategory: 'merchant', industry: 'Education', website: 'https://example.test', address: '1 Demo Street', localRegistrationNumber: reg[country][0], taxId: reg[country][1], expectedMonthlyVolume: 1000 };
   d.contact = { name: 'Test Person', email: 'test@example.test', phone: '+60 12 345 6789', supportEmail: '' };
   d.bank = Object.fromEntries(cfg.bankFields.map((f) => [f.key, f.key === 'accountNumber' ? '1234567890' : f.key === 'accountName' ? legalName : f.key === 'swiftCode' ? '' : 'Demo']));
   d.directors = [{ id: 'x', name: 'Test Person', nationality: 'Malaysian', idNumber: 'A1', role: 'director_and_owner', ownershipPct: 100 }];
@@ -132,23 +130,4 @@ export async function completeProductConfig(call: Call, applicationId: string) {
     const priced = await call('POST', `/api/applications/${applicationId}/pricing`, { methodCode: method.code, mdrPct: method.minMdr }, 'cs');
     if (priced.status !== 201) throw new Error(`Pricing failed: ${JSON.stringify(priced.body)}`);
   }
-}
-
-/** The labelled MCC test fixture as a catalogue source, for specs that submit applications (an MCC is always required). */
-export const TEST_MCC_SOURCE = {
-  catalogue: (): MccCatalogue => ({ source: { kind: 'test_fixture', name: MCC_TEST_FIXTURE_NAME, version: MCC_TEST_FIXTURE_VERSION, loadedAt: 0 }, entries: MCC_TEST_FIXTURE }),
-};
-
-/**
- * Gives a merchant MCC 8299 (available in every country in the fixture): directly before Risk
- * approval, otherwise through a change request that Risk approves.
- */
-export async function assignTestMcc(call: Call, merchantId: string) {
-  const set = await call('PUT', `/api/merchants/${merchantId}/mcc`, { code: '8299' });
-  if (set.status === 200) return;
-  if (set.body?.code !== 'MCC_CHANGE_REQUIRED') throw new Error(`Setting the MCC failed: ${JSON.stringify(set.body)}`);
-  const req = await call('POST', `/api/merchants/${merchantId}/mcc-requests`, { code: '8299', reason: 'Assign an MCC for this test' });
-  if (req.status !== 201) throw new Error(`Requesting the MCC failed: ${JSON.stringify(req.body)}`);
-  const decided = await call('POST', `/api/merchants/${merchantId}/mcc-requests/${req.body.id}/decision`, { decision: 'approve' }, 'risk');
-  if (decided.status !== 200) throw new Error(`Approving the MCC failed: ${JSON.stringify(decided.body)}`);
 }

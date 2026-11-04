@@ -1,4 +1,4 @@
-import { ApplicationData, Director, DocumentRecord, GlobalMerchant, StaffRole } from './merchant-models';
+import { ApplicationData, Director, DocumentRecord, GlobalMerchant, merchantCategoryLabel, StaffRole } from './merchant-models';
 import { CountryOnboardingConfig, countryName } from './onboarding-config';
 
 // Changes after Risk approval. Once Risk has approved a merchant, anything Risk reviewed (legal
@@ -96,6 +96,7 @@ const shown = (v: string | number | null | undefined) => (v === null || v === un
 const BUSINESS_LABEL: Record<keyof ApplicationData['business'], string> = {
   tradingName: 'Trading name',
   businessType: 'Business type',
+  merchantCategory: 'Merchant category',
   industry: 'Industry',
   website: 'Website',
   address: 'Business address',
@@ -122,7 +123,8 @@ export function describeChange(section: ChangeSection, before: SectionValue, aft
     const b = after as ApplicationData['business'];
     for (const key of Object.keys(BUSINESS_LABEL) as (keyof ApplicationData['business'])[]) {
       const label = key === 'localRegistrationNumber' && cfg ? cfg.localRegistration.label : key === 'taxId' && cfg ? cfg.taxId.label : BUSINESS_LABEL[key];
-      add(`business.${key}`, label, shown(a[key]), shown(b[key]));
+      const value = (v: (typeof a)[typeof key]) => (key === 'merchantCategory' ? (merchantCategoryLabel(v as string) ?? shown(v)) : shown(v));
+      add(`business.${key}`, label, value(a[key]), value(b[key]));
     }
   } else if (section === 'bank') {
     const a = before as ApplicationData['bank'];

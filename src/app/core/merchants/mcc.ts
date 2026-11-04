@@ -4,11 +4,10 @@ import { ONBOARDING_COUNTRIES } from './onboarding-config';
 // Merchant category codes (MCC), shared by the portal and the simulated backend.
 //
 // The MCC belongs to the parent merchant (GMID) only; sub-merchants use their parent's. Codes come
-// from one catalogue with per-country availability. An MCC is required before any country
-// application can be submitted. No approved catalogue has been supplied yet, so the catalogue is
-// empty by default and applications can't be submitted until one covers their country. A clearly
-// labelled test fixture can be loaded on request for testing (see mcc-test-fixture.ts); it is never
-// approved data.
+// from one catalogue with per-country availability. No approved catalogue has been supplied yet, so
+// the catalogue is empty by default: MCC is then optional, and required only in countries a loaded
+// catalogue covers. A clearly labelled test fixture can be loaded on request for testing (see
+// mcc-test-fixture.ts); it is never approved data.
 
 /** `restricted`: may be selected, but is flagged for Risk review. Countries not listed: not available. */
 export type MccAvailability = 'available' | 'restricted';
@@ -107,7 +106,7 @@ export const MCC_OUTCOME_LABEL: Record<MccAuditOutcome, string> = {
 
 export const mccLabel = (m: MccRef | null | undefined) => (m ? `${m.code} – ${m.description}` : 'None');
 
-/** True when the catalogue has rules for the country, so an MCC can be selected there. */
+/** True when the catalogue has rules for the country, so an MCC can be selected (and is required) there. */
 export function catalogueCovers(catalogue: MccCatalogue, country: string): boolean {
   return catalogue.entries.some((e) => !!e.countries[country]);
 }
@@ -139,13 +138,10 @@ export function mccCountryCheck(catalogue: MccCatalogue, code: string, countries
   return { unavailable, restricted };
 }
 
-/**
- * The MCC rule for one country application: an MCC available in the country is always required.
- * Without a catalogue for the country none can be selected, so the application can't be submitted.
- */
+/** The MCC rule for one country application: required only where the catalogue covers the country. */
 export function mccIssue(catalogue: MccCatalogue, country: string, mcc: MccRef | null | undefined): FieldIssue | null {
+  if (!catalogueCovers(catalogue, country)) return null;
   const name = ONBOARDING_COUNTRIES[country]?.name ?? country;
-  if (!catalogueCovers(catalogue, country)) return { section: 'business', field: 'business.mcc', message: `No MCC catalogue is configured for ${name}, so an MCC can't be selected yet. The application can be submitted once one is.` };
   if (!mcc) return { section: 'business', field: 'business.mcc', message: 'Select the merchant category code (MCC).' };
   if (!mccAvailability(catalogue, mcc.code, country)) return { section: 'business', field: 'business.mcc', message: `MCC ${mcc.code} is not available in ${name}.` };
   return null;
