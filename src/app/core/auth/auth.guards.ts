@@ -19,6 +19,21 @@ export const guestGuard: CanActivateFn = async () => {
   return session ? router.parseUrl(session.landingPath) : true;
 };
 
+/**
+ * Keeps each kind of user in their own portal: merchant users only reach the Merchant Portal,
+ * internal users never do. UI convenience only; every API also checks this on the server.
+ */
+export const portalGuard =
+  (portal: 'internal' | 'merchant'): CanActivateFn =>
+  async () => {
+    const auth = inject(AuthService);
+    const router = inject(Router);
+    await auth.restore();
+    const session = auth.session();
+    if (!session) return router.createUrlTree(['/login'], { queryParams: { reason: 'signin-required' } });
+    return session.portal === portal ? true : router.parseUrl(session.landingPath);
+  };
+
 /** The 2FA step is only reachable after a correct password, and never once signed in. */
 export const twoFactorGuard: CanActivateFn = async () => {
   const auth = inject(AuthService);

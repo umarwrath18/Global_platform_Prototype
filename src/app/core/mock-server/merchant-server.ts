@@ -38,7 +38,7 @@ import { MigrationFlag, migrationFlags, MigrationLogEntry, normaliseMerchantDb, 
 import { buildMerchantSeed } from './merchant-seed';
 import { createSubMerchant, goLiveSubMerchant, reviewSubMerchant, setSubMerchantCheck, SubMerchantContext, subMerchantLifecycle, subMerchantsOf, submitSubMerchant } from './sub-merchants';
 import { approvalsFor, ChangeContext, decideChange, merchantRiskApproved, profileEvent, requestCountryChange, requestProfileChange, toChangeView, withdrawChange } from './change-requests';
-import { cancelPricing, decidePricing, DERIVED_CHECKLIST, onboardingGaps, ProductContext, productView, saveProducts, setPricing, syncDerivedChecklist } from './product-pricing';
+import { cancelPricing, decidePricing, DERIVED_CHECKLIST, onboardingGaps, ProductContext, productState, productView, saveProducts, setPricing, syncDerivedChecklist } from './product-pricing';
 import { ApiError, fail } from './server-errors';
 import { simulateVerification } from './verification';
 
@@ -72,6 +72,12 @@ export interface MerchantDb {
   /** Change requests after Risk approval (profile identity and country details). */
   changeRequests?: ChangeRequestRecord[];
   profileEvents?: ProfileEvent[];
+}
+
+export interface MerchantPortalProfile {
+  id: string;
+  legalName: string;
+  countries: { code: string; currency: string; methods: { code: string; name: string }[] }[];
 }
 
 export interface MerchantDataReport {
@@ -1120,6 +1126,32 @@ export class MerchantServer {
       return { code: m.code, enabled: line?.enabled === true, mdr: line ? num(line.mdr) : m.defaultMdr };
     });
     return base;
+  }
+
+  // ------------------------------------------------- merchant portal (read only)
+
+  /**
+   * What the merchant-facing portal may show for one merchant: its live (operational) countries
+   * and the PayIn payment methods switched on for each. Used by the merchant portal service;
+   * returns null for an unknown merchant.
+   */
+  portalProfile(merchantId: string): MerchantPortalProfile | null {
+    this.ensureSeeded();
+    const db = this.load();
+    const merchant = db.merchants.find((m) => m.id === merchantId);
+    if (!merchant) return null;
+    const countries = db.applications
+      .filter((a) => a.merchantId === merchantId && a.status === 'operational')
+      .map((app) => {
+        const state = productState(db, app);
+        const enabled = new Set(state.config.products.filter((p) => p.enabled && p.flow === 'payin').map((p) => p.methodCode));
+        return {
+          code: app.country,
+          currency: ONBOARDING_COUNTRIES[app.country].currency,
+          methods: state.methods.filter((m) => enabled.has(m.code)).map((m) => ({ code: m.code, name: m.name })),
+        };
+      });
+    return { id: merchant.id, legalName: merchant.legalName, countries };
   }
 
   // ---------------------------------------------------------------- storage

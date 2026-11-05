@@ -17,6 +17,7 @@ export const COUNTRY_CATALOGUE: Record<string, Omit<CountryAccess, 'status'>> = 
 export const ROLES: Record<string, { name: string; permissions: string[] }> = {
   'role-admin': { name: 'Administrator (placeholder)', permissions: [] },
   'role-viewer': { name: 'Viewer (placeholder)', permissions: [] },
+  'role-merchant': { name: 'Merchant user', permissions: ['merchant_portal.view', 'merchant_portal.export'] },
 };
 
 export interface SeedAccount {
@@ -38,6 +39,12 @@ export interface SeedUser {
   demo?: 'service-outage' | 'otp-delivery-failure';
   /** Starts with an authenticator already registered (others must set one up at first sign-in). */
   mfaEnrolled?: boolean;
+  /**
+   * `merchant`: a merchant's own user, who sees only the Merchant Portal (Dashboard, My Transactions)
+   * for `merchantId`. Absent: an internal Global Platform user (today's demo users).
+   */
+  portal?: 'merchant';
+  merchantId?: string;
 }
 
 export const SEED_ACCOUNTS: SeedAccount[] = [
@@ -85,11 +92,15 @@ export const SEED_USERS: SeedUser[] = [
   { id: 'U-6', accountId: 'GA-3003', loginId: 'NUSAPANGAN-ADMIN', name: 'Dewi Lestari', email: 'dewi@nusapangan.example', roleId: 'role-admin', status: 'active' },
   { id: 'U-7', accountId: 'GA-4004', loginId: 'LUMI-ADMIN', name: 'Nguyen Lan', email: 'lan@lumihome.example', roleId: 'role-admin', status: 'active' },
   { id: 'U-8', accountId: 'GA-1001', loginId: 'TANJUNG-KEVIN', name: 'Kevin Ong', email: 'kevin@tanjungtrading.example', roleId: 'role-admin', status: 'active', demo: 'service-outage' },
+  { id: 'U-10', accountId: 'GA-1001', loginId: 'TANJUNG-MERCHANT', name: 'Farah Ismail', email: 'farah.ismail@tanjungtrading.example', roleId: 'role-merchant', status: 'active', portal: 'merchant', merchantId: 'GM-100101' },
+  { id: 'U-11', accountId: 'GA-4004', loginId: 'LUMI-MERCHANT', name: 'Lumi Finance', email: 'finance@lumihome.example', roleId: 'role-merchant', status: 'active', portal: 'merchant', merchantId: 'GM-100102', mfaEnrolled: true },
   { id: 'U-9', accountId: 'GA-1001', loginId: 'TANJUNG-FARID', name: 'Farid Hassan', email: 'farid@tanjungtrading.example', roleId: 'role-admin', status: 'active', demo: 'otp-delivery-failure' },
 ];
 
 /** Shown in the login screen's "sample accounts" panel. */
 export const DEMO_ACCOUNT_GUIDE: { loginId: string; scenario: string }[] = [
+  { loginId: 'TANJUNG-MERCHANT', scenario: 'Merchant portal · Tanjung Global Trading · 2FA not set up yet' },
+  { loginId: 'LUMI-MERCHANT', scenario: 'Merchant portal · Lumi Home Living (no live countries) · 2FA on' },
   { loginId: '123', scenario: 'Administrator · 3 active countries · 2FA not set up yet' },
   { loginId: 'TANJUNG-ADMIN', scenario: 'Administrator · same account · 2FA on' },
   { loginId: 'TANJUNG-VIEWER', scenario: 'Viewer · same account · 2FA on' },

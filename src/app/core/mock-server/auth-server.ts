@@ -82,7 +82,7 @@ export const MFA_POLICY = {
   recoveryCodeCount: 2,
 } as const;
 
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 interface AccountRec extends SeedAccount {
   /** GMID that created this account at go-live. Only on accounts created after this field existed. */
@@ -232,6 +232,8 @@ export interface AuthServerOptions {
   pbkdf2Iterations?: number;
   /** Stand-in for the configured email service. */
   sendEmail: (email: DemoEmail) => void;
+  /** Looks up a merchant's legal name for merchant users' sessions. */
+  merchantName?: (merchantId: string) => string | null;
 }
 
 class HttpError {
@@ -699,6 +701,8 @@ export class AuthServer {
 
   private async requireStaff(db: Db, token: string | null, roleHeader: string | null, allowed: SecurityRole[]) {
     const { user } = await this.requireSession(db, token, true);
+    // Merchant users never reach internal administration, whatever role header they send.
+    if (user.portal === 'merchant') fail(403, 'ROLE_NOT_PERMITTED');
     const role = roleHeader === 'support' || roleHeader === 'security' ? roleHeader : null;
     if (!role || !allowed.includes(role)) fail(403, 'ROLE_NOT_PERMITTED');
     return { user, role: role!, actor: `${user.name} (${SECURITY_ROLE_LABEL[role!]})` };
@@ -933,7 +937,9 @@ export class AuthServer {
       permissions: role.permissions,
       countries: this.countriesFor(account),
       baseCurrency: BASE_CURRENCY,
-      landingPath: '/dashboard',
+      landingPath: user.portal === 'merchant' ? '/merchant/dashboard' : '/dashboard',
+      portal: user.portal === 'merchant' ? 'merchant' : 'internal',
+      merchant: user.portal === 'merchant' && user.merchantId ? { id: user.merchantId, name: this.opts.merchantName?.(user.merchantId) ?? account.name } : null,
       idleExpiresAt: session.lastSeenAt + AUTH_POLICY.sessionIdleMs,
       absoluteExpiresAt: session.absoluteExpiresAt,
     };
@@ -946,6 +952,7 @@ export class AuthServer {
   private async workspaceContext(token: string | null, countryCode: string | null): Promise<WorkspaceContext> {
     const db = this.load();
     const { user, account } = await this.requireSession(db, token, true);
+    if (user.portal === 'merchant') fail(403, 'ROLE_NOT_PERMITTED');
     if (!countryCode) return { scope: 'global', country: null, currency: BASE_CURRENCY };
 
     const country = this.countriesFor(account).find((c) => c.code === countryCode.toUpperCase());
@@ -1110,13 +1117,22 @@ export class AuthServer {
 
   // ----------------------------------------- bridge for other simulated services
 
-  /** Validates a bearer token with the same session rules as the auth APIs (used by the merchant service). */
-  async authenticate(token: string | null): Promise<{ ok: true; caller: { userId: string; name: string } } | { ok: false; response: ServerResponse }> {
+  /**
+   * Validates a bearer token with the same session rules as the auth APIs (used by the other
+   * simulated services). `portal` says which kind of user the calling service serves: internal
+   * services refuse merchant users, and the merchant portal refuses internal users.
+   */
+  async authenticate(
+    token: string | null,
+    portal: 'internal' | 'merchant' = 'internal',
+  ): Promise<{ ok: true; caller: { userId: string; name: string; accountId: string; merchantId: string | null } } | { ok: false; response: ServerResponse }> {
     await this.ensureSeeded();
     const db = this.load();
     try {
       const { user } = await this.requireSession(db, token, true);
-      return { ok: true, caller: { userId: user.id, name: user.name } };
+      const userPortal = user.portal === 'merchant' ? 'merchant' : 'internal';
+      if (userPortal !== portal || (portal === 'merchant' && !user.merchantId)) fail(403, 'ROLE_NOT_PERMITTED');
+      return { ok: true, caller: { userId: user.id, name: user.name, accountId: user.accountId, merchantId: user.merchantId ?? null } };
     } catch (e) {
       if (e instanceof HttpError) return { ok: false, response: { status: e.status, body: e.body } };
       throw e;
@@ -1271,6 +1287,11 @@ export class AuthServer {
         if (existing?.version === DB_VERSION) return;
         if (existing?.version === 4) {
           await this.migrateToMfa(existing);
+          await this.addMissingSeedUsers();
+          return;
+        }
+        if (existing?.version === 5) {
+          await this.addMissingSeedUsers();
           return;
         }
         const users: UserRec[] = [];
@@ -1324,6 +1345,21 @@ export class AuthServer {
     const db: Db = { ...old, version: DB_VERSION, mfa: await this.seedMfa(old.users), challenges: [], stepUps: [], resetRequests: [], alerts: [] };
     const revoked = this.revokeSessions(db, () => true, 'MFA_REQUIRED');
     this.audit(db, 'MFA_ROLLOUT_SESSIONS_REVOKED', { detail: `sessions_revoked=${revoked}` });
+    this.save(db);
+  }
+
+  /** Adds demo users introduced by later builds (e.g. merchant portal users). Existing data is kept. */
+  private async addMissingSeedUsers() {
+    const db = this.load();
+    const added: UserRec[] = [];
+    for (const u of SEED_USERS) {
+      if (db.users.some((x) => x.id === u.id)) continue;
+      added.push({ ...u, passwordHash: await hashPassword(DEMO_PASSWORD, this.iterations), passwordChangedAt: this.now() });
+    }
+    db.users.push(...added);
+    Object.assign(db.mfa, await this.seedMfa(added));
+    db.version = DB_VERSION;
+    if (added.length) this.audit(db, 'SEED_USERS_ADDED', { detail: added.map((u) => u.loginId).join(',') });
     this.save(db);
   }
 

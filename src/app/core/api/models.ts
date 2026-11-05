@@ -21,6 +21,10 @@ export interface SessionView {
   countries: CountryAccess[];
   baseCurrency: string;
   landingPath: string;
+  /** `merchant`: a merchant's own user (Merchant Portal only). `internal`: Global Platform staff view. */
+  portal: 'internal' | 'merchant';
+  /** The merchant a merchant user belongs to; null for internal users. */
+  merchant: { id: string; name: string } | null;
   idleExpiresAt: number;
   absoluteExpiresAt: number;
 }

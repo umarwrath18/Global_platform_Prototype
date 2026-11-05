@@ -3,6 +3,7 @@
 Angular 21 prototype of the Global Platform:
 
 - **Batch 1:** Login & Authentication.
+- **Batch 4:** Merchant Portal MVP for merchant users: Dashboard (available balance, transaction summary) and My Transactions (filters, CSV export).
 - **Batch 3:** Two-factor authentication (Merchant Portal MFA, Phase 1: authenticator app / TOTP).
 - **Batch 2:** Merchant Management & Onboarding (Global Merchants, country applications, country expansion, Risk review, simulated CS readiness and go-live, notifications).
 
@@ -45,11 +46,30 @@ them under "Use a test account".
 | `SERIMUTIARA-ADMIN`   | Account suspended (GA-2002)                           |
 | `NUSAPANGAN-ADMIN`    | Account inactive (GA-3003)                            |
 | `TANJUNG-KEVIN`       | Sign-in service unavailable                           |
+| `TANJUNG-MERCHANT`    | **Merchant user** of Tanjung Global Trading (GM-100101): Merchant Portal only · 2FA not set up yet |
+| `LUMI-MERCHANT`       | **Merchant user** of Lumi Home Living (GM-100102, no live countries yet) · 2FA on |
 
 Registered emails for password recovery follow the user, e.g. `sarah.lim@tanjungtrading.example`
 (user `123`), `aisyah@tanjungtrading.example`, `budi@tanjungtrading.example`, `lan@lumihome.example`.
 `farid@tanjungtrading.example` simulates an email delivery failure. OTP codes appear on
 screen in an **Email preview** card instead of being emailed.
+
+### Merchant Portal (Batch 4)
+
+Sign in as `TANJUNG-MERCHANT` (after 2FA) to see what a merchant sees. There are only two screens:
+- **Dashboard:** available balance (one figure per currency the merchant trades in, never converted),
+  and total, successful and failed transaction counts for Today, Last 7 days or Last 30 days.
+- **My Transactions:** invoice ID, transaction ID, payment method, date and time, amount, currency and
+  status, with filters for date range (presets or custom), payment method, status and transaction ID.
+  **Export CSV** downloads every record matching the filters, as
+  `<merchant-name>-transactions-YYYY-MM-DD.csv`.
+
+Merchant users never see internal modules, the View as switcher, filters or staff notifications. Every
+internal API refuses them, and the merchant API refuses internal users. A merchant's data always comes from
+its session, never from the request. **There is no transaction or balance service yet:** the figures are
+generated sample data for the merchant's live countries and switched-on payment methods, marked
+*Sample data · not live*. See [`docs/merchant-portal-batch-4.md`](docs/merchant-portal-batch-4.md) for the
+API contracts the real backend needs to provide.
 
 ### Two-factor authentication (Batch 3)
 
@@ -237,4 +257,5 @@ repository → **Deploy**. No environment variables are needed.
 
 - [`docs/authentication-batch-1.md`](docs/authentication-batch-1.md): login workflows, rules, security controls, QA cases and open decisions.
 - [`docs/merchant-onboarding-batch-2.md`](docs/merchant-onboarding-batch-2.md): merchant data model, workflows, statuses, demo data, QA cases, limitations and open questions.
+- [`docs/merchant-portal-batch-4.md`](docs/merchant-portal-batch-4.md): Merchant Portal MVP screens, access rules, API contracts, tests and open questions.
 - [`docs/mfa-batch-3.md`](docs/mfa-batch-3.md): two-factor authentication decisions, screens, rules, security controls, QA cases and open questions.
