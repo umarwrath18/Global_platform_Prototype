@@ -19,15 +19,19 @@ import { Icon } from './icon';
             </button>
           </header>
           <p class="subject">{{ m.subject }}</p>
-          <p class="body">Your one-time code is</p>
-          <div class="code-row">
-            <span class="code">{{ m.code }}</span>
-            <button type="button" class="copy" (click)="copy(m)">
-              <app-icon [name]="copiedId() === m.id ? 'check' : 'copy'" [size]="16" />
-              {{ copiedId() === m.id ? 'Copied' : 'Copy' }}
-            </button>
-          </div>
-          <p class="note">This code expires in {{ m.expiresInMin }} minutes. Never share it. Mobi will never ask you for it.</p>
+          @if (m.code) {
+            <p class="body">Your one-time code is</p>
+            <div class="code-row">
+              <span class="code">{{ m.code }}</span>
+              <button type="button" class="copy" (click)="copy(m)">
+                <app-icon [name]="copiedId() === m.id ? 'check' : 'copy'" [size]="16" />
+                {{ copiedId() === m.id ? 'Copied' : 'Copy' }}
+              </button>
+            </div>
+            <p class="note">This code expires in {{ m.expiresInMin }} minutes. Never share it. Mobi will never ask you for it.</p>
+          } @else {
+            <p class="body">{{ m.body }}</p>
+          }
         </article>
       }
     </section>
@@ -144,7 +148,7 @@ export class DemoInbox {
 
   protected async copy(m: InboxMessage) {
     try {
-      await navigator.clipboard.writeText(m.code);
+      await navigator.clipboard.writeText(m.code ?? '');
       this.copiedId.set(m.id);
       setTimeout(() => this.copiedId.set(null), 1500);
     } catch {

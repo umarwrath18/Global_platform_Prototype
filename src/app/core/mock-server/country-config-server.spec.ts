@@ -5,7 +5,7 @@ import { ONBOARDING_COUNTRIES, resetCountryConfigs } from '../merchants/onboardi
 import { AuthServer } from './auth-server';
 import { CountryConfigServer } from './country-config-server';
 import { MerchantServer } from './merchant-server';
-import { DEMO_PASSWORD } from './seed';
+import { signIn } from './testing/sign-in';
 
 class MemoryStorage {
   private data = new Map<string, string>();
@@ -22,7 +22,7 @@ describe('CountryConfigServer', () => {
   let token: string;
   let merchants: MerchantServer;
 
-  const login = async (loginId: string) => ((await auth.handle('POST', '/api/auth/login', { loginId, password: DEMO_PASSWORD }, null)).body as any).token as string;
+  const login = async (loginId: string) => signIn(auth, loginId);
   const get = <T = any>(path: string, server = config, role: StaffRole | null = 'sales') => server.handle('GET', path, null, token, role) as Promise<{ status: number; body: T }>;
   const put = <T = any>(code: string, changes: (input: any) => void, extra: Record<string, unknown> = {}, role: StaffRole | null = 'sales') => {
     const input: any = { ...toConfigInput(ONBOARDING_COUNTRIES[code]), version: extra['version'] ?? 1, reason: 'Approved by Risk policy update' };

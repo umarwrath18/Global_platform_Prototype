@@ -12,7 +12,7 @@ import { MobiLogo } from '../../shared/mobi-logo';
       <aside class="brand" aria-hidden="true">
         <div class="glow"></div>
 
-        <!-- Decorative preview of the signed-in workspace. Not interactive, hidden from assistive tech. -->
+        <!-- Decorative, generic wireframe of a dashboard (no product data). Hidden from assistive tech. -->
         <div class="preview">
           <div class="win">
             <div class="win-side">
@@ -28,26 +28,38 @@ import { MobiLogo } from '../../shared/mobi-logo';
             </div>
             <div class="win-main">
               <div class="win-top"><span></span><span></span><span></span><span class="grow"></span><span class="pill"></span></div>
-              <p class="win-title">Overview</p>
+              <span class="wf-title"></span>
               <div class="kpis">
-                <div class="kpi"><span>Merchants</span><strong>8</strong><svg viewBox="0 0 100 28" preserveAspectRatio="none"><path d="M0 24 L18 22 L36 22 L54 18 L72 18 L86 9 L100 4" /></svg></div>
-                <div class="kpi"><span>Applications</span><strong>13</strong><svg viewBox="0 0 100 28" preserveAspectRatio="none"><path d="M0 25 L20 23 L40 21 L60 20 L80 14 L100 6" /></svg></div>
-                <div class="kpi"><span>Pending review</span><strong>2</strong></div>
-                <div class="kpi"><span>Operational</span><strong>3</strong></div>
+                @for (k of kpis; track $index) {
+                  <div class="kpi">
+                    <span class="wf-line short"></span>
+                    <span class="wf-num"></span>
+                    @if (k) {
+                      <svg viewBox="0 0 100 28" preserveAspectRatio="none"><path [attr.d]="k" /></svg>
+                    }
+                  </div>
+                }
               </div>
               <div class="panels">
                 <div class="panel-mock">
-                  <span class="pm-title">By country</span>
-                  @for (row of bars; track $index) {
-                    <div class="bar-row"><span class="bar-label"></span><span class="bar">@for (seg of row; track $index) {<i [class]="seg.c" [style.flex]="seg.v"></i>}</span></div>
-                  }
+                  <span class="wf-line title"></span>
+                  <div class="chart">
+                    @for (h of columns; track $index) {
+                      <i [style.height.%]="h"></i>
+                    }
+                  </div>
                 </div>
                 <div class="panel-mock">
-                  <span class="pm-title">Needs attention</span>
-                  @for (i of [1, 2, 3]; track i) {
-                    <div class="att"><span class="att-ic" [class]="'att-ic t' + i"></span><span class="att-lines"><i></i><i></i></span></div>
+                  <span class="wf-line title"></span>
+                  @for (i of [1, 2, 3, 4]; track i) {
+                    <div class="att"><span class="att-ic"></span><span class="att-lines"><i></i><i></i></span></div>
                   }
                 </div>
+              </div>
+              <div class="panel-mock table-mock">
+                @for (r of [1, 2, 3]; track r) {
+                  <div class="t-row"><i></i><i></i><i></i><i class="pill"></i></div>
+                }
               </div>
             </div>
           </div>
@@ -216,10 +228,85 @@ import { MobiLogo } from '../../shared/mobi-logo';
       }
     }
 
-    .win-title {
-      margin: 0 0 12px;
-      font-size: 18px;
-      font-weight: 700;
+    /* Wireframe placeholders: grey bars instead of text and numbers. */
+    .wf-title {
+      display: block;
+      width: 120px;
+      height: 14px;
+      margin: 0 0 14px;
+      border-radius: 4px;
+      background: #c9d2de;
+    }
+
+    .wf-line {
+      display: block;
+      height: 7px;
+      border-radius: 4px;
+      background: #e3e8ef;
+
+      &.short {
+        width: 55%;
+      }
+
+      &.title {
+        width: 90px;
+        height: 8px;
+        background: #d5dce6;
+      }
+    }
+
+    .wf-num {
+      display: block;
+      width: 38%;
+      height: 16px;
+      margin-top: 6px;
+      border-radius: 4px;
+      background: #c9d2de;
+    }
+
+    .chart {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      height: 110px;
+      padding-top: 6px;
+      border-bottom: 1px solid #e3e8ef;
+
+      i {
+        display: block;
+        flex: 1;
+        border-radius: 4px 4px 0 0;
+        background: #93c0ec;
+
+        &:nth-child(3n) {
+          background: #2e7bd1;
+        }
+      }
+    }
+
+    .table-mock {
+      margin-top: 10px;
+      gap: 12px;
+    }
+
+    .t-row {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr 1fr 70px;
+      gap: 16px;
+      align-items: center;
+
+      i {
+        display: block;
+        height: 7px;
+        border-radius: 4px;
+        background: #e3e8ef;
+      }
+
+      .pill {
+        height: 14px;
+        border-radius: 7px;
+        background: #eaf3fc;
+      }
     }
 
     .kpis {
@@ -442,12 +529,8 @@ import { MobiLogo } from '../../shared/mobi-logo';
   `,
 })
 export class AuthShell {
-  /** Proportions for the decorative "By country" bars (g = live, b = readiness, l = review, a = returned, r = rejected). */
-  protected readonly bars = [
-    [{ c: 'g', v: 1 }, { c: 'l', v: 2 }, { c: 'e', v: 1 }],
-    [{ c: 'g', v: 1 }, { c: 'a', v: 1 }, { c: 'e', v: 2 }],
-    [{ c: 'g', v: 1 }, { c: 'l', v: 1 }, { c: 'r', v: 1 }, { c: 'e', v: 1 }],
-    [{ c: 'b', v: 2 }, { c: 'e', v: 2 }],
-    [{ c: 'b', v: 1 }, { c: 'r', v: 1 }, { c: 'e', v: 2 }],
-  ];
+  /** Sparkline paths for the wireframe stat cards (null = no sparkline). */
+  protected readonly kpis = ['M0 24 L18 22 L36 22 L54 18 L72 18 L86 9 L100 4', 'M0 25 L20 23 L40 21 L60 20 L80 14 L100 6', null, 'M0 18 L25 20 L50 12 L75 14 L100 8'];
+  /** Bar heights (%) for the wireframe column chart. */
+  protected readonly columns = [42, 58, 50, 72, 64, 80, 68, 90, 76, 86];
 }

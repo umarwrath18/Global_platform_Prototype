@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { checkPassword } from '../api/password-policy';
 import { AUTH_POLICY, AuthServer, DemoEmail } from './auth-server';
 import { DEMO_PASSWORD } from './seed';
+import { signIn } from './testing/sign-in';
 
 class MemoryStorage {
   private data = new Map<string, string>();
@@ -16,7 +17,7 @@ describe('AuthServer', () => {
   let server: AuthServer;
 
   const login = (loginId: string, password = DEMO_PASSWORD) => server.handle('POST', '/api/auth/login', { loginId, password }, null);
-  const tokenFor = async (loginId: string) => ((await login(loginId)).body as { token: string }).token;
+  const tokenFor = (loginId: string) => signIn(server, loginId);
   const advance = (ms: number) => (now += ms);
 
   beforeEach(() => {
@@ -27,13 +28,19 @@ describe('AuthServer', () => {
 
   describe('login', () => {
     it('signs in an active user and returns role, countries and landing page', async () => {
+      const token = await tokenFor('123');
+      expect(token).toMatch(/^[0-9a-f]{64}$/);
+      const body = (await server.handle('GET', '/api/auth/session', null, token)).body as any;
+      expect(body.landingPath).toBe('/dashboard');
+      expect(body.baseCurrency).toBe('USD');
+      expect(body.countries.map((c: any) => `${c.code}:${c.status}`)).toEqual(['MY:active', 'ID:active', 'VN:active', 'TH:pending', 'PH:failed']);
+    });
+
+    it('never returns a session for a correct password alone', async () => {
       const res = await login('123');
       expect(res.status).toBe(200);
-      const body = res.body as any;
-      expect(body.token).toMatch(/^[0-9a-f]{64}$/);
-      expect(body.session.landingPath).toBe('/dashboard');
-      expect(body.session.baseCurrency).toBe('USD');
-      expect(body.session.countries.map((c: any) => `${c.code}:${c.status}`)).toEqual(['MY:active', 'ID:active', 'VN:active', 'TH:pending', 'PH:failed']);
+      expect(res.body).not.toHaveProperty('token');
+      expect(res.body).toMatchObject({ stage: 'setup', user: { loginId: '123' } });
     });
 
     it('treats the Global Account ID case-insensitively and trims it', async () => {
@@ -144,7 +151,7 @@ describe('AuthServer', () => {
 
   describe('password recovery', () => {
     const requestOtp = (email: string) => server.handle('POST', '/api/auth/password/otp', { email }, null);
-    const verify = (requestId: string, code: string) => server.handle('POST', '/api/auth/password/otp/verify', { requestId, code }, null);
+    const verify = (requestId: string, code: string | undefined) => server.handle('POST', '/api/auth/password/otp/verify', { requestId, code }, null);
     const reset = (resetToken: string, pw: string, confirm = pw) =>
       server.handle('POST', '/api/auth/password/reset', { resetToken, newPassword: pw, confirmPassword: confirm }, null);
 
@@ -243,7 +250,7 @@ describe('AuthServer', () => {
     await login('123');
     await server.handle('POST', '/api/auth/password/otp', { email: 'sarah.lim@tanjungtrading.example' }, null);
     const log = await server.auditLog();
-    expect(log.map((e) => e.type)).toEqual(['LOGIN_FAILED', 'LOGIN_SUCCESS', 'OTP_SENT']);
+    expect(log.map((e) => e.type)).toEqual(['LOGIN_FAILED', 'LOGIN_PASSWORD_VERIFIED', 'OTP_SENT']);
     const serialised = JSON.stringify(log);
     expect(serialised).not.toContain('wrong');
     expect(serialised).not.toContain(DEMO_PASSWORD);

@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { authGuard, guestGuard } from './core/auth/auth.guards';
+import { authGuard, guestGuard, twoFactorGuard } from './core/auth/auth.guards';
 import { unsavedChangesGuard } from './features/applications/unsaved-changes.guard';
 
 export const routes: Routes = [
@@ -9,6 +9,12 @@ export const routes: Routes = [
     canActivate: [guestGuard],
     title: 'Sign in · Mobi Global Platform',
     loadComponent: () => import('./features/auth/login').then((m) => m.Login),
+  },
+  {
+    path: 'two-factor',
+    canActivate: [twoFactorGuard],
+    title: 'Two-factor authentication · Mobi Global Platform',
+    loadComponent: () => import('./features/auth/two-factor').then((m) => m.TwoFactor),
   },
   {
     path: 'forgot-password',
@@ -79,6 +85,16 @@ export const routes: Routes = [
         path: 'configuration/mcc',
         title: 'MCC catalogue · Mobi Global Platform',
         loadComponent: () => import('./features/configuration/mcc-catalogue').then((m) => m.MccCataloguePage),
+      },
+      {
+        path: 'account/security',
+        title: 'Account security · Mobi Global Platform',
+        loadComponent: () => import('./features/security/account-security').then((m) => m.AccountSecurity),
+      },
+      {
+        path: 'security/users',
+        title: 'User security · Mobi Global Platform',
+        loadComponent: () => import('./features/security/user-security').then((m) => m.UserSecurity),
       },
       {
         path: 'notifications',

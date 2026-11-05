@@ -3,8 +3,8 @@ import { ApplicationDetail, ApplicationSummary, CountryApplication, GlobalMercha
 import { AuthServer } from './auth-server';
 import { MerchantEntity } from './merchant-identity';
 import { MerchantDb, MerchantServer } from './merchant-server';
-import { DEMO_PASSWORD } from './seed';
 import { completeProductConfig, FlakyStorage } from './testing/merchant-test-data';
+import { signIn } from './testing/sign-in';
 
 const KEY = 'mobi.gp.merchantdb';
 const AUTH_KEY = 'mobi.gp.mockdb';
@@ -42,7 +42,7 @@ describe('go-live and live MIDs', () => {
     storage = new FlakyStorage();
     auth = new AuthServer({ storage, now: () => now, pbkdf2Iterations: 1000, sendEmail: () => {} });
     server = new MerchantServer({ storage, now: () => now, auth });
-    token = ((await auth.handle('POST', '/api/auth/login', { loginId: '123', password: DEMO_PASSWORD }, null)).body as any).token;
+    token = await signIn(auth, '123');
     await call('GET', '/api/merchants');
   });
 

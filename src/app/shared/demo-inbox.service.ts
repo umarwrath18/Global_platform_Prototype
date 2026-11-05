@@ -15,7 +15,7 @@ export class DemoInboxService {
   deliver(email: DemoEmail) {
     const msg = { ...email, id: this.nextId++, receivedAt: Date.now() };
     this.messages.update((list) => [msg, ...list].slice(0, 3));
-    setTimeout(() => this.dismiss(msg.id), email.expiresInMin * 60_000);
+    setTimeout(() => this.dismiss(msg.id), (email.expiresInMin ?? 10) * 60_000);
   }
 
   clear() {

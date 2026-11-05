@@ -7,8 +7,8 @@ import { AuthServer } from './auth-server';
 import { CountryConfigServer } from './country-config-server';
 import { entityProblems } from './merchant-identity';
 import { MerchantDb, MerchantServer } from './merchant-server';
-import { DEMO_PASSWORD } from './seed';
 import { FlakyStorage } from './testing/merchant-test-data';
+import { signIn } from './testing/sign-in';
 
 const KEY = 'mobi.gp.merchantdb';
 
@@ -52,7 +52,7 @@ describe('Sub-merchants', () => {
     server = new MerchantServer({ storage, now: () => now, auth, countryConfig: config });
     guided = new MerchantServer({ storage, now: () => now, auth, countryConfig: config, strictValidation: () => false });
     call = callOn(server);
-    token = ((await auth.handle('POST', '/api/auth/login', { loginId: '123', password: DEMO_PASSWORD }, null)).body as any).token;
+    token = await signIn(auth, '123');
     await call('GET', '/api/merchants');
   });
 

@@ -4,8 +4,8 @@ import { ApplicationData, CountryApplication, GlobalMerchant, MerchantDetail, Me
 import { ONBOARDING_COUNTRIES } from '../merchants/onboarding-config';
 import { AuthServer } from './auth-server';
 import { MerchantServer } from './merchant-server';
-import { DEMO_PASSWORD } from './seed';
 import { completeProductConfig } from './testing/merchant-test-data';
+import { signIn } from './testing/sign-in';
 
 class MemoryStorage {
   private data = new Map<string, string>();
@@ -48,7 +48,7 @@ describe('MerchantServer', () => {
     const storage = new MemoryStorage();
     auth = new AuthServer({ storage, now: () => now, pbkdf2Iterations: 1000, sendEmail: () => {} });
     server = new MerchantServer({ storage, now: () => now, auth });
-    token = ((await auth.handle('POST', '/api/auth/login', { loginId: '123', password: DEMO_PASSWORD }, null)).body as any).token;
+    token = await signIn(auth, '123');
   });
 
   it('requires a valid session', async () => {

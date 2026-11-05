@@ -22,9 +22,9 @@
     <label class="view-as" title="Switch the team view">
       <app-icon name="users" [size]="16" class="va-icon" />
       <span class="va-label">View as</span>
-      <select [value]="roles.role()" (change)="switchRole($any($event.target).value)" aria-label="View as team">
-        @for (r of roleOptions; track r[0]) {
-          <option [value]="r[0]" [selected]="r[0] === roles.role()">{{ shortRole[r[0]] }}</option>
+      <select (change)="switchRole($any($event.target).value)" aria-label="View as team">
+        @for (r of roleOptions; track r) {
+          <option [value]="r" [selected]="r === roles.acting()">{{ shortRole[r] }}</option>
         }
       </select>
       <app-icon name="chevron-down" [size]="14" class="va-chev" />
@@ -32,7 +32,7 @@
 
     <nav class="nav">
       <ul>
-        @for (item of nav; track item.label) {
+        @for (item of nav(); track item.label) {
           <li>
             <a [routerLink]="item.link" routerLinkActive="active" [title]="item.label" (click)="navigated()">
               <app-icon [name]="item.icon" [size]="18" />
@@ -65,7 +65,7 @@
         <span class="avatar" aria-hidden="true">{{ initials() }}</span>
         <span class="user-text">
           <span class="user-name">{{ s.user.name }}</span>
-          <span class="user-role">{{ roleLabel[roles.role()] }}</span>
+          <span class="user-role">{{ roleLabel[roles.acting()] }}</span>
         </span>
         <app-icon name="more" [size]="18" class="more" />
       </button>
@@ -75,6 +75,7 @@
             <strong>{{ s.user.name }}</strong>
             <span>{{ s.user.email }}</span>
           </div>
+          <a role="menuitem" routerLink="/account/security" (click)="menuOpen.set(false); navigated()"><app-icon name="shield" [size]="16" />Account security</a>
           <button type="button" role="menuitem" (click)="logout()"><app-icon name="logout" [size]="16" />Sign out</button>
         </div>
       }

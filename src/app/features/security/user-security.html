@@ -1,0 +1,272 @@
+<main class="page">
+  <div class="portal-head">
+    <div>
+      <h1>User security</h1>
+      <p class="sub">Two-factor authentication status, reset requests, security blocks and the audit trail for merchant users.</p>
+    </div>
+    @if (role()) {
+      <button type="button" class="btn" (click)="load()" [disabled]="loading()"><app-icon name="rotate" [size]="16" />Refresh</button>
+    }
+  </div>
+
+  @if (!role()) {
+    <section class="panel-card">
+      <div class="empty-state">
+        <div class="icon-tile"><app-icon name="shield" /></div>
+        <h3>For Mobi Support and Security Admin</h3>
+        <p>Switch <strong>View as</strong> in the sidebar to Mobi Support or Security Admin to use this page.</p>
+      </div>
+    </section>
+  } @else {
+    <div class="alert compact role-note" role="note">
+      <app-icon name="info" />
+      <div>
+        @if (role() === 'support') {
+          <strong>Acting as Mobi Support.</strong> You can open a reset request for a user who has lost their authenticator. A Security Admin completes identity verification and the reset.
+        } @else {
+          <strong>Acting as Security Admin.</strong> You can complete reset requests after verifying the user’s identity, and waive security blocks. Every action needs a reason and is audited.
+        }
+        Admins never see authenticator secrets or recovery codes.
+      </div>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" [class.on]="tab() === 'users'" [attr.aria-selected]="tab() === 'users'" (click)="tab.set('users')">Users</button>
+      <button type="button" role="tab" [class.on]="tab() === 'requests'" [attr.aria-selected]="tab() === 'requests'" (click)="tab.set('requests')">Reset requests @if (openRequests()) {<span class="count">{{ openRequests() }}</span>}</button>
+      <button type="button" role="tab" [class.on]="tab() === 'alerts'" [attr.aria-selected]="tab() === 'alerts'" (click)="tab.set('alerts')">Tech alerts @if (openAlerts()) {<span class="count">{{ openAlerts() }}</span>}</button>
+      <button type="button" role="tab" [class.on]="tab() === 'audit'" [attr.aria-selected]="tab() === 'audit'" (click)="tab.set('audit')">Audit log</button>
+    </div>
+
+    @if (loadError()) {
+      <div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>We couldn’t load security data. <button type="button" class="link-button" (click)="load()">Try again</button></div></div>
+    }
+
+    @if (loading() && !data()) {
+      <section class="panel-card"><div class="skeleton-rows"><span></span><span></span><span></span><span></span></div></section>
+    } @else if (data(); as d) {
+      @switch (tab()) {
+        <!-- ------------------------------------------ Users -->
+        @case ('users') {
+          <section class="panel-card">
+            <div class="panel-head">
+              <div><h2>Merchant users</h2><p>{{ d.users.length }} users across all Global Accounts</p></div>
+              <input class="f-input" type="search" placeholder="Search name, ID, email or account" aria-label="Search users" style="max-width: 300px" (input)="query.set($any($event.target).value)" />
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr><th>User</th><th>Global Account</th><th>2FA</th><th>Last used</th><th>Recovery codes</th><th>Reset request</th><th><span class="sr-only">Actions</span></th></tr>
+                </thead>
+                <tbody>
+                  @for (u of users(); track u.userId) {
+                    <tr>
+                      <td><span class="who"><strong>{{ u.name }}</strong><span>{{ u.loginId }} · {{ u.email }}</span></span></td>
+                      <td><span class="who"><strong>{{ u.accountName }}</strong><span>{{ u.accountId }}@if (u.accountStatus !== 'active') { · {{ u.accountStatus }} }@if (u.userStatus === 'disabled') { · user disabled }</span></span></td>
+                      <td>
+                        <span class="status" [class]="status[u.mfaStatus].tone">{{ status[u.mfaStatus].label }}</span>
+                        @if (u.blockedAt) {<span class="muted" style="display: block; margin-top: 4px">since {{ dateTime(u.blockedAt) }}</span>}
+                      </td>
+                      <td class="muted">{{ u.lastUsedAt ? rel(u.lastUsedAt) : '—' }}</td>
+                      <td class="muted">{{ u.mfaStatus === 'not_enrolled' ? '—' : u.recoveryCodesRemaining + ' of 2' }}</td>
+                      <td class="muted">{{ u.openRequestId ?? '—' }}</td>
+                      <td>
+                        <div class="row-actions">
+                          @if (isSelf(u)) {
+                            <span class="muted">You</span>
+                          } @else if (role() === 'support') {
+                            @if (!u.openRequestId && u.mfaStatus !== 'not_enrolled') {
+                              <button type="button" class="btn sm" (click)="open('request', u)">Open reset request</button>
+                            }
+                          } @else {
+                            @if (u.blockedAt) {
+                              <button type="button" class="btn sm" (click)="open('waive', u)">Waive block</button>
+                            }
+                            @if (u.openRequestId) {
+                              <button type="button" class="btn sm primary" (click)="open('reset', u)">Verify &amp; reset</button>
+                            }
+                          }
+                        </div>
+                      </td>
+                    </tr>
+                  } @empty {
+                    <tr><td colspan="7" class="muted">No users match “{{ query() }}”.</td></tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </section>
+        }
+
+        <!-- ------------------------------------------ Reset requests -->
+        @case ('requests') {
+          <section class="panel-card">
+            <div class="panel-head"><div><h2>Reset requests</h2><p>Opened by Mobi Support; completed by a Security Admin after identity verification.</p></div></div>
+            @if (d.requests.length) {
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead><tr><th>Request</th><th>User</th><th>Status</th><th>Reason</th><th>Requested</th><th>Completed</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                  <tbody>
+                    @for (r of d.requests; track r.id) {
+                      <tr>
+                        <td class="mono">{{ r.id }}<span class="muted" style="display: block; font-weight: 400">Ref {{ r.reference }}</span></td>
+                        <td><span class="who"><strong>{{ r.userName }}</strong><span>{{ r.loginId }}</span></span></td>
+                        <td><span class="status" [class]="r.status === 'open' ? 'warning' : 'success'">{{ r.status === 'open' ? 'Waiting for Security Admin' : 'Completed' }}</span></td>
+                        <td class="reason">{{ r.reason }}</td>
+                        <td class="muted">{{ dateTime(r.requestedAt) }}<br />{{ r.requestedBy }}</td>
+                        <td class="muted">@if (r.completedAt) {{{ dateTime(r.completedAt) }}<br />{{ r.completedBy }}<br />Verified by: {{ r.verificationMethod }}} @else {—}</td>
+                        <td>
+                          @if (r.status === 'open' && role() === 'security' && userById(r.userId); as u) {
+                            @if (!isSelf(u)) {
+                              <button type="button" class="btn sm primary" (click)="open('reset', u)">Verify &amp; reset</button>
+                            }
+                          }
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            } @else {
+              <div class="empty-state"><div class="icon-tile"><app-icon name="file" /></div><h3>No reset requests</h3><p>Mobi Support opens a request when a user has lost their authenticator and recovery codes.</p></div>
+            }
+          </section>
+        }
+
+        <!-- ------------------------------------------ Tech alerts -->
+        @case ('alerts') {
+          <section class="panel-card">
+            <div class="panel-head"><div><h2>Tech alerts</h2><p>Raised when a user enters more than 3 consecutive incorrect codes. Sign-in stays blocked until a Security Admin waives it.</p></div></div>
+            @if (d.alerts.length) {
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead><tr><th>Alert</th><th>User</th><th>Raised</th><th>Status</th><th>Resolution</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                  <tbody>
+                    @for (a of d.alerts; track a.id) {
+                      <tr>
+                        <td class="mono">{{ a.id }}<span class="muted" style="display: block; font-weight: 400">{{ a.failedAttempts }} failed codes</span></td>
+                        <td><span class="who"><strong>{{ a.userName }}</strong><span>{{ a.loginId }} · {{ a.accountId }}</span></span></td>
+                        <td class="muted">{{ dateTime(a.at) }}</td>
+                        <td><span class="status" [class]="a.status === 'open' ? 'danger' : 'success'">{{ a.status === 'open' ? 'Open · sign-in blocked' : 'Resolved' }}</span></td>
+                        <td class="muted">@if (a.resolvedAt) {{{ a.resolution }} · {{ dateTime(a.resolvedAt) }}<br />{{ a.resolvedBy }}} @else {—}</td>
+                        <td>
+                          @if (a.status === 'open' && role() === 'security' && userById(a.userId); as u) {
+                            @if (!isSelf(u) && u.blockedAt) {
+                              <button type="button" class="btn sm" (click)="open('waive', u)">Waive block</button>
+                            }
+                          }
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            } @else {
+              <div class="empty-state"><div class="icon-tile"><app-icon name="bell" /></div><h3>No alerts</h3><p>Security blocks from repeated incorrect codes will appear here.</p></div>
+            }
+          </section>
+        }
+
+        <!-- ------------------------------------------ Audit log (FR-08) -->
+        @case ('audit') {
+          <section class="panel-card">
+            <div class="panel-head"><div><h2>Audit log</h2><p>Two-factor registration, verification, recovery, replacement, blocks, alerts, resets and waive-offs. Newest first.</p></div></div>
+            @if (auditRows().length) {
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead><tr><th>Time</th><th>Event</th><th>User</th><th>By</th><th>Reason</th><th>Detail</th></tr></thead>
+                  <tbody>
+                    @for (e of auditRows(); track $index) {
+                      <tr>
+                        <td class="muted">{{ dateTime(e.at) }}</td>
+                        <td class="audit-type">{{ eventLabel(e.type) }}</td>
+                        <td>@if (e.userName) {<span class="who"><strong>{{ e.userName }}</strong><span>{{ e.loginId }}</span></span>} @else {<span class="muted">—</span>}</td>
+                        <td class="muted">{{ e.actor ?? (e.userName ? 'User' : 'System') }}</td>
+                        <td class="reason">{{ e.reason ?? '—' }}</td>
+                        <td class="muted reason">{{ e.detail ?? '' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            } @else {
+              <div class="empty-state"><div class="icon-tile"><app-icon name="list" /></div><h3>No events yet</h3></div>
+            }
+          </section>
+        }
+      }
+    }
+  }
+
+  <!-- ------------------------------------------------ Action dialog -->
+  @if (action(); as a) {
+    <div class="modal-backdrop" (click)="close()">
+      <section class="modal panel-card" role="dialog" aria-modal="true" aria-labelledby="action-title" (click)="$event.stopPropagation()">
+        <div class="panel-head">
+          <div>
+            <h2 id="action-title">{{ a.kind === 'request' ? 'Open reset request' : a.kind === 'reset' ? 'Verify identity and reset 2FA' : 'Waive security block' }}</h2>
+            <p>{{ a.user.name }} · {{ a.user.loginId }} · {{ a.user.accountName }}</p>
+          </div>
+          <button type="button" class="btn sm" (click)="close()" [disabled]="busy()">Cancel</button>
+        </div>
+        <div class="panel-body">
+          @if (needsStepUp()) {
+            <p class="step">Confirm it’s you</p>
+            <p class="lead">Enter the current code from <strong>your own</strong> authenticator app. You’ll stay confirmed for 5 minutes.</p>
+            @if (actionErrorText(); as msg) {
+              <div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ msg }}</div></div>
+            }
+            <form class="code-form" (submit)="$event.preventDefault(); confirmIdentity()" novalidate>
+              <label class="f-label" for="stepup">Your authenticator code</label>
+              <div class="code-row">
+                <input id="stepup" class="input code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" (input)="onCode($any($event.target).value, $any($event.target))" />
+                <button type="submit" class="btn primary" [disabled]="code().length !== 6 || busy()">@if (busy()) {<span class="spinner" aria-hidden="true"></span>}Confirm</button>
+              </div>
+            </form>
+          } @else {
+            @switch (a.kind) {
+              @case ('request') {
+                <div class="alert compact" role="note"><app-icon name="info" /><div>Use this when the user has lost their authenticator and can’t use a recovery code. A Security Admin must verify their identity before the reset happens.</div></div>
+                <div class="f-field"><label for="ref">Support ticket reference <span class="req">*</span></label><input id="ref" class="f-input" maxlength="64" placeholder="e.g. CS-48213" (input)="reference.set($any($event.target).value)" /></div>
+                <div class="f-field"><label for="reason">Reason <span class="req">*</span></label><textarea id="reason" class="f-input" maxlength="500" placeholder="What did the user report?" (input)="reason.set($any($event.target).value)"></textarea></div>
+              }
+              @case ('reset') {
+                <div class="alert warning compact" role="note">
+                  <app-icon name="alert-circle" />
+                  <div>
+                    <strong>Request {{ a.user.openRequestId }}</strong>
+                    Resetting deletes this user’s authenticator and recovery codes, and signs them out everywhere. They must register a new authenticator at next sign-in, and we’ll email them.
+                  </div>
+                </div>
+                <div class="f-field">
+                  <label for="method">How was the user’s identity verified? <span class="req">*</span></label>
+                  <input id="method" class="f-input" maxlength="200" placeholder="Describe the check you completed" (input)="method.set($any($event.target).value)" />
+                  <p class="f-hint">Follow the approved identity-verification process. That process is still to be defined by Risk / Security (PRD open question 5).</p>
+                </div>
+                <label class="check"><input type="checkbox" [checked]="identityVerified()" (change)="identityVerified.set($any($event.target).checked)" /><span>I confirm I verified this user’s identity using the approved process</span></label>
+                <div class="f-field"><label for="reason">Reason <span class="req">*</span></label><textarea id="reason" class="f-input" maxlength="500" placeholder="Why is this reset needed?" (input)="reason.set($any($event.target).value)"></textarea></div>
+              }
+              @case ('waive') {
+                <div class="alert compact" role="note"><app-icon name="info" /><div>The user’s failed-attempt count is cleared and they can sign in again with their authenticator. The open Tech alert is resolved.</div></div>
+                <div class="f-field"><label for="reason">Reason <span class="req">*</span></label><textarea id="reason" class="f-input" maxlength="500" placeholder="Why is it safe to remove this block?" (input)="reason.set($any($event.target).value)"></textarea></div>
+              }
+            }
+            @if (actionErrorText(); as msg) {
+              <div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ msg }}</div></div>
+            }
+            <div class="actions" style="justify-content: flex-end">
+              <button type="button" class="btn" (click)="close()" [disabled]="busy()">Cancel</button>
+              <button type="button" class="btn" [class.danger]="a.kind === 'reset'" [class.primary]="a.kind !== 'reset'" [disabled]="!canSubmit()" (click)="submit()">
+                @if (busy()) {<span class="spinner" aria-hidden="true"></span>}
+                {{ a.kind === 'request' ? 'Open request' : a.kind === 'reset' ? 'Reset 2FA' : 'Waive block' }}
+              </button>
+            </div>
+          }
+        </div>
+      </section>
+    </div>
+  }
+
+  @if (toast(); as t) {
+    <div class="p-toast" role="status"><app-icon name="check-circle" [size]="18" />{{ t }}</div>
+  }
+</main>

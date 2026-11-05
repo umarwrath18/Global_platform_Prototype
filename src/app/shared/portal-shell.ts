@@ -9,7 +9,7 @@ import { CountryConfigService } from '../core/merchants/country-config.service';
 import { MccService } from '../core/merchants/mcc.service';
 import { MerchantSummary, PortalNotification, STAFF_ROLE_LABEL, StaffRole } from '../core/merchants/merchant-models';
 import { ONBOARDING_COUNTRIES } from '../core/merchants/onboarding-config';
-import { StaffRoleService } from '../core/merchants/staff-role.service';
+import { ActingRole, SECURITY_ROLE_LABEL, StaffRoleService } from '../core/merchants/staff-role.service';
 import { Icon, IconName } from './icon';
 import { fmtRelative } from './merchant-ui';
 import { MobiLogo } from './mobi-logo';
@@ -30,6 +30,12 @@ const NAV: NavItem[] = [
   { label: 'Applications', icon: 'file', link: '/applications' },
   { label: 'Notifications', icon: 'bell', link: '/notifications' },
   { label: 'Approvals', icon: 'check-circle', link: '/approvals' },
+];
+
+/** What Mobi Support and Security Admin see: they have no merchant permissions. */
+const SECURITY_NAV: NavItem[] = [
+  { label: 'Dashboard', icon: 'grid', link: '/dashboard' },
+  { label: 'User security', icon: 'shield', link: '/security/users' },
 ];
 
 /** Approved MVP modules not built yet: shown disabled so the roadmap is visible, never clickable. */
@@ -79,7 +85,7 @@ export class PortalShell {
   private readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
 
   protected readonly session = this.auth.session;
-  protected readonly nav = NAV;
+  protected readonly nav = computed(() => (this.roles.securityRole() ? SECURITY_NAV : NAV));
   protected readonly later = LATER;
   protected readonly menuOpen = signal(false);
   protected readonly bellOpen = signal(false);
@@ -90,9 +96,9 @@ export class PortalShell {
   protected readonly searchOpen = signal(false);
   protected readonly merchants = signal<MerchantSummary[]>([]);
 
-  protected readonly roleOptions = Object.entries(STAFF_ROLE_LABEL) as [StaffRole, string][];
-  protected readonly roleLabel = STAFF_ROLE_LABEL;
-  protected readonly shortRole: Record<StaffRole, string> = { sales: 'Sales / Ops', risk: 'Risk', cs: 'Customer Success', finops: 'FinOps' };
+  protected readonly roleOptions = [...Object.keys(STAFF_ROLE_LABEL), ...Object.keys(SECURITY_ROLE_LABEL)] as ActingRole[];
+  protected readonly roleLabel: Record<ActingRole, string> = { ...STAFF_ROLE_LABEL, ...SECURITY_ROLE_LABEL };
+  protected readonly shortRole: Record<ActingRole, string> = { sales: 'Sales / Ops', risk: 'Risk', cs: 'Customer Success', finops: 'FinOps', support: 'Mobi Support', security: 'Security Admin' };
   protected readonly countries = Object.values(ONBOARDING_COUNTRIES);
   protected readonly currencies = [...new Set(Object.values(ONBOARDING_COUNTRIES).map((c) => c.currency))];
   protected readonly ranges = Object.entries(DATE_RANGE_LABEL) as [DateRange, string][];
@@ -192,8 +198,10 @@ export class PortalShell {
     this.filters.set(key, value as never);
   }
 
-  protected switchRole(role: StaffRole) {
+  protected switchRole(role: ActingRole) {
     this.roles.set(role);
+    // Support / Security Admin have no merchant pages; take them to their page.
+    if (role === 'support' || role === 'security') void this.router.navigate(['/security/users']);
   }
 
   protected toggle(which: 'bell' | 'menu' | 'help') {

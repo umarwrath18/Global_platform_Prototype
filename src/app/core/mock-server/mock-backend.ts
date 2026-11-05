@@ -34,6 +34,8 @@ export class MockBackend {
       disableUser: (loginId: string) => this.server.setUserStatus(loginId, 'disabled'),
       enableUser: (loginId: string) => this.server.setUserStatus(loginId, 'active'),
       expireSessions: () => this.server.expireSessions(),
+      // 2FA: forget a user's authenticator so first-time setup can be tested again.
+      clearAuthenticator: (loginId: string) => this.server.demoClearAuthenticator(loginId),
       audit: async () => console.table((await this.server.auditLog()).map((e) => ({ ...e, at: new Date(e.at).toISOString() }))),
       // Restores the auth, merchant and country configuration demo data.
       reset: async () => {
@@ -73,7 +75,7 @@ export const mockBackendInterceptor: HttpInterceptorFn = (req, next) => {
         ? () => backend.mcc.handle(req.method, req.urlWithParams, req.body, token)
         : CountryConfigServer.handles(req.url)
         ? () => backend.countryConfig.handle(req.method, req.urlWithParams, req.body, token, req.headers.get('X-Demo-Role'))
-        : () => backend.server.handle(req.method, req.urlWithParams, req.body, token);
+        : () => backend.server.handle(req.method, req.urlWithParams, req.body, token, req.headers.get('X-Demo-Role'));
     const sub = timer(LATENCY_MS)
       .pipe(mergeMap(() => from(handle())))
       .subscribe({

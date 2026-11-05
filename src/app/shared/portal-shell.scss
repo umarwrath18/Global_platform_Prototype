@@ -338,8 +338,12 @@
   padding: 6px;
   color: var(--text);
 
-  button {
+  button,
+  a {
     display: flex;
+    box-sizing: border-box;
+    color: inherit;
+    text-decoration: none;
     align-items: center;
     gap: 10px;
     width: 100%;

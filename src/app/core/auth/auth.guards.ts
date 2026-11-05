@@ -19,6 +19,16 @@ export const guestGuard: CanActivateFn = async () => {
   return session ? router.parseUrl(session.landingPath) : true;
 };
 
+/** The 2FA step is only reachable after a correct password, and never once signed in. */
+export const twoFactorGuard: CanActivateFn = async () => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+  await auth.restore();
+  const session = auth.session();
+  if (session) return router.parseUrl(session.landingPath);
+  return auth.pending() ? true : router.createUrlTree(['/login']);
+};
+
 /** Only allow in-app paths as post-login redirects (prevents open redirects). */
 export function safeReturnUrl(url: string | null | undefined): string | null {
   if (!url || !url.startsWith('/') || url.startsWith('//') || url.includes('\\')) return null;

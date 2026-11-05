@@ -3,8 +3,8 @@ import { ApprovalsView, ChangeRequest } from '../merchants/change-requests';
 import { ApplicationDetail, MerchantDetail, StaffRole } from '../merchants/merchant-models';
 import { AuthServer } from './auth-server';
 import { MerchantDb, MerchantServer } from './merchant-server';
-import { DEMO_PASSWORD } from './seed';
 import { FlakyStorage } from './testing/merchant-test-data';
+import { signIn } from './testing/sign-in';
 
 const KEY = 'mobi.gp.merchantdb';
 
@@ -18,7 +18,7 @@ describe('Changes after Risk approval', () => {
   let server: MerchantServer;
   let token: string;
 
-  const login = async (loginId: string) => ((await auth.handle('POST', '/api/auth/login', { loginId, password: DEMO_PASSWORD }, null)).body as any).token as string;
+  const login = async (loginId: string) => signIn(auth, loginId);
   const call = <T = any>(method: string, path: string, body: unknown = null, role: StaffRole = 'sales', t = token) => server.handle(method, path, body, t, role) as Promise<{ status: number; body: T }>;
   const merchant = async (id: string) => (await call<MerchantDetail>('GET', `/api/merchants/${id}`)).body;
   const application = async (id: string) => (await call<ApplicationDetail>('GET', `/api/applications/${id}`)).body;

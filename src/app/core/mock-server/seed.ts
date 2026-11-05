@@ -36,6 +36,8 @@ export interface SeedUser {
   status: UserStatus;
   /** Prototype-only behaviour hooks for demonstrating failure states. */
   demo?: 'service-outage' | 'otp-delivery-failure';
+  /** Starts with an authenticator already registered (others must set one up at first sign-in). */
+  mfaEnrolled?: boolean;
 }
 
 export const SEED_ACCOUNTS: SeedAccount[] = [
@@ -76,8 +78,8 @@ export const SEED_ACCOUNTS: SeedAccount[] = [
 
 export const SEED_USERS: SeedUser[] = [
   { id: 'U-1', accountId: 'GA-1001', loginId: '123', name: 'Sarah Lim', email: 'sarah.lim@tanjungtrading.example', roleId: 'role-admin', status: 'active' },
-  { id: 'U-2', accountId: 'GA-1001', loginId: 'TANJUNG-ADMIN', name: 'Aisyah Rahman', email: 'aisyah@tanjungtrading.example', roleId: 'role-admin', status: 'active' },
-  { id: 'U-3', accountId: 'GA-1001', loginId: 'TANJUNG-VIEWER', name: 'Budi Santoso', email: 'budi@tanjungtrading.example', roleId: 'role-viewer', status: 'active' },
+  { id: 'U-2', accountId: 'GA-1001', loginId: 'TANJUNG-ADMIN', name: 'Aisyah Rahman', email: 'aisyah@tanjungtrading.example', roleId: 'role-admin', status: 'active', mfaEnrolled: true },
+  { id: 'U-3', accountId: 'GA-1001', loginId: 'TANJUNG-VIEWER', name: 'Budi Santoso', email: 'budi@tanjungtrading.example', roleId: 'role-viewer', status: 'active', mfaEnrolled: true },
   { id: 'U-4', accountId: 'GA-1001', loginId: 'TANJUNG-RAVI', name: 'Ravi Kumar', email: 'ravi@tanjungtrading.example', roleId: 'role-viewer', status: 'disabled' },
   { id: 'U-5', accountId: 'GA-2002', loginId: 'SERIMUTIARA-ADMIN', name: 'Nur Izzah', email: 'izzah@serimutiara.example', roleId: 'role-admin', status: 'active' },
   { id: 'U-6', accountId: 'GA-3003', loginId: 'NUSAPANGAN-ADMIN', name: 'Dewi Lestari', email: 'dewi@nusapangan.example', roleId: 'role-admin', status: 'active' },
@@ -88,10 +90,10 @@ export const SEED_USERS: SeedUser[] = [
 
 /** Shown in the login screen's "sample accounts" panel. */
 export const DEMO_ACCOUNT_GUIDE: { loginId: string; scenario: string }[] = [
-  { loginId: '123', scenario: 'Administrator · 3 active countries' },
-  { loginId: 'TANJUNG-ADMIN', scenario: 'Administrator · same account' },
-  { loginId: 'TANJUNG-VIEWER', scenario: 'Viewer · same account' },
-  { loginId: 'LUMI-ADMIN', scenario: 'Account with no active countries' },
+  { loginId: '123', scenario: 'Administrator · 3 active countries · 2FA not set up yet' },
+  { loginId: 'TANJUNG-ADMIN', scenario: 'Administrator · same account · 2FA on' },
+  { loginId: 'TANJUNG-VIEWER', scenario: 'Viewer · same account · 2FA on' },
+  { loginId: 'LUMI-ADMIN', scenario: 'Account with no active countries · 2FA not set up yet' },
   { loginId: 'TANJUNG-RAVI', scenario: 'User access disabled' },
   { loginId: 'SERIMUTIARA-ADMIN', scenario: 'Account suspended' },
   { loginId: 'NUSAPANGAN-ADMIN', scenario: 'Account inactive' },

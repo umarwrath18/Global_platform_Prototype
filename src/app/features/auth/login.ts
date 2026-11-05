@@ -22,6 +22,9 @@ const REASON_NOTICES: Record<SignedOutReason | 'password-reset', Notice> = {
   'account-inactive': { tone: 'danger', title: 'Account inactive', text: 'Your session ended because this Global Account is not active. Please contact Mobi Support.' },
   'user-disabled': { tone: 'danger', title: 'Access disabled', text: 'Your session ended because your user access was disabled. Please contact Mobi Support.' },
   'password-reset': { tone: 'success', text: 'Password updated. Sign in with your new password.' },
+  'mfa-required': { tone: 'info', title: 'Two-factor authentication is now required', text: 'For your security, please sign in again and set up an authenticator app to continue.' },
+  'mfa-blocked': { tone: 'danger', title: 'Sign-in blocked', text: 'Too many incorrect authentication codes. Mobi’s security team has been alerted. Please contact Mobi Support to restore access.' },
+  'mfa-reset': { tone: 'warning', title: 'Two-factor authentication was reset', text: 'Sign in again and register a new authenticator app to continue.' },
 };
 
 @Component({
@@ -78,6 +81,8 @@ export class Login {
         return { tone: 'danger', title: 'Account inactive', text: 'This Global Account is not active. Please contact Mobi Support for assistance.' };
       case 'USER_DISABLED':
         return { tone: 'danger', title: 'Access disabled', text: 'Your user access has been disabled. Please contact Mobi Support for assistance.' };
+      case 'MFA_BLOCKED':
+        return { tone: 'danger', title: 'Sign-in blocked', text: 'Too many incorrect authentication codes were entered. Mobi’s security team has been alerted. Please contact Mobi Support to restore access.' };
       case 'NETWORK_ERROR':
         return { tone: 'warning', title: 'No connection', text: 'You appear to be offline. Check your internet connection and try again.' };
       case 'SERVICE_UNAVAILABLE':
@@ -88,6 +93,8 @@ export class Login {
   });
 
   constructor() {
+    // Coming back to the password step abandons any half-finished 2FA step.
+    this.auth.cancelPending();
     const reason = this.route.snapshot.queryParamMap.get('reason') as keyof typeof REASON_NOTICES | null;
     if (reason && REASON_NOTICES[reason]) this.notice.set(REASON_NOTICES[reason]);
 
@@ -121,9 +128,10 @@ export class Login {
     this.notice.set(null);
     this.form.disable({ emitEvent: false });
     try {
-      const session = await this.auth.login(loginId.trim(), password, remember);
-      const target = safeReturnUrl(this.route.snapshot.queryParamMap.get('returnUrl')) ?? session.landingPath;
-      await this.router.navigateByUrl(target);
+      // The password alone never grants access: continue to the second factor.
+      await this.auth.login(loginId.trim(), password, remember);
+      const returnUrl = safeReturnUrl(this.route.snapshot.queryParamMap.get('returnUrl'));
+      await this.router.navigate(['/two-factor'], returnUrl ? { queryParams: { returnUrl } } : {});
     } catch (e) {
       const err = toClientError(e);
       if (err.code === 'LOGIN_LOCKED' && 'retryAfterSec' in err && err.retryAfterSec) {

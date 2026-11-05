@@ -6,8 +6,8 @@ import { MccCatalogueServer } from './mcc-catalogue-server';
 import { MCC_TEST_FIXTURE } from './mcc-test-fixture';
 import { entityProblems, MerchantEntity, mccOfEntity } from './merchant-identity';
 import { MerchantDb, MerchantServer } from './merchant-server';
-import { DEMO_PASSWORD } from './seed';
 import { completeApplicationData, FlakyStorage, v2Fixture } from './testing/merchant-test-data';
+import { signIn } from './testing/sign-in';
 
 const KEY = 'mobi.gp.merchantdb';
 const MCC_KEY = 'mobi.gp.mcccatalogue';
@@ -38,7 +38,7 @@ describe('MCC management', () => {
     auth = new AuthServer({ storage, now: () => now, pbkdf2Iterations: 1000, sendEmail: () => {} });
     mcc = new MccCatalogueServer({ storage, now: () => now, auth });
     server = new MerchantServer({ storage, now: () => now, auth, mcc });
-    token = ((await auth.handle('POST', '/api/auth/login', { loginId: '123', password: DEMO_PASSWORD }, null)).body as any).token;
+    token = await signIn(auth, '123');
   });
 
   describe('catalogue', () => {

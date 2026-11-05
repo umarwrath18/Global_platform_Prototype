@@ -1,0 +1,117 @@
+.screen-title:focus {
+  outline: none;
+}
+
+.icon-tile.danger {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.benefits {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 20px;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-muted);
+
+  li {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  app-icon {
+    flex: none;
+    margin-top: 1px;
+    color: var(--mobi-blue);
+  }
+
+  strong {
+    color: var(--text);
+  }
+}
+
+.next {
+  margin-top: 20px;
+}
+
+.field-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.alt-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-top: 20px;
+}
+
+.foot {
+  margin: 24px 0 0;
+  text-align: center;
+}
+
+.link-button.muted {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.route {
+  display: grid;
+  gap: 14px;
+  margin: 8px 0 20px;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: grid;
+    gap: 4px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text-muted);
+    justify-items: start;
+  }
+
+  strong {
+    color: var(--text);
+  }
+}
+
+.fineprint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-subtle);
+}
+
+.ack {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+
+  input {
+    width: 18px;
+    height: 18px;
+    margin: 1px 0 0;
+    accent-color: var(--mobi-blue);
+  }
+}
+
+.wide {
+  display: flex;
+  width: 100%;
+  text-decoration: none;
+  color: var(--text);
+}

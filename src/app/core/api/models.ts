@@ -30,9 +30,135 @@ export interface LoginRequest {
   password: string;
 }
 
-export interface LoginResponse {
+/**
+ * A password-only sign-in never creates a session. It returns a short-lived 2FA challenge:
+ * - `verify`: the user has an authenticator and must enter a code (or a recovery code).
+ * - `setup`: the user has no authenticator yet and must register one (mandatory).
+ * - `rebind`: a recovery code was used, so a new authenticator must be registered.
+ * - `acknowledge`: setup is done; the user must confirm they saved their recovery codes.
+ */
+export type MfaStage = 'verify' | 'setup' | 'rebind' | 'acknowledge';
+
+export interface MfaChallenge {
+  challengeToken: string;
+  stage: MfaStage;
+  expiresInSec: number;
+  user: { name: string; loginId: string };
+}
+
+/** Response to a successful password check. */
+export type LoginResponse = MfaChallenge;
+
+/** Issued only after both factors are verified. */
+export interface SignedInResponse {
   token: string;
   session: SessionView;
+}
+
+export interface AuthenticatorEnrolment {
+  /** Base32 secret for manual entry. Shown during setup only, never again. */
+  secret: string;
+  otpauthUri: string;
+  issuer: string;
+  accountLabel: string;
+}
+
+export interface RecoveryCodesResponse {
+  recoveryCodes: string[];
+}
+
+export interface MfaRecoveryResponse {
+  stage: 'rebind';
+  recoveryCodesRemaining: number;
+}
+
+export type MfaStatus = 'not_enrolled' | 'active' | 'blocked';
+
+export interface AccountSecurityView {
+  status: MfaStatus;
+  enrolledAt: number | null;
+  lastUsedAt: number | null;
+  recoveryCodesRemaining: number;
+  recoveryCodesTotal: number;
+  recoveryCodesGeneratedAt: number | null;
+}
+
+export interface ReplaceAuthenticatorStart extends AuthenticatorEnrolment {
+  replaceToken: string;
+}
+
+// ---- Security administration (Mobi Support and Security Admin) ----
+
+export type SecurityRole = 'support' | 'security';
+
+export interface SecurityUserRow {
+  userId: string;
+  loginId: string;
+  name: string;
+  email: string;
+  accountId: string;
+  accountName: string;
+  userStatus: UserStatus;
+  accountStatus: AccountStatus;
+  mfaStatus: MfaStatus;
+  enrolledAt: number | null;
+  lastUsedAt: number | null;
+  recoveryCodesRemaining: number;
+  failedAttempts: number;
+  blockedAt: number | null;
+  openRequestId: string | null;
+}
+
+export interface ResetRequestView {
+  id: string;
+  userId: string;
+  userName: string;
+  loginId: string;
+  status: 'open' | 'completed';
+  reason: string;
+  reference: string;
+  requestedBy: string;
+  requestedAt: number;
+  completedBy: string | null;
+  completedAt: number | null;
+  verificationMethod: string | null;
+}
+
+export interface SecurityAlertView {
+  id: string;
+  at: number;
+  userId: string;
+  userName: string;
+  loginId: string;
+  accountId: string;
+  type: 'MFA_BLOCKED';
+  failedAttempts: number;
+  status: 'open' | 'resolved';
+  resolvedBy: string | null;
+  resolvedAt: number | null;
+  resolution: string | null;
+}
+
+export interface SecurityAuditView {
+  at: number;
+  type: string;
+  actor: string | null;
+  userName: string | null;
+  loginId: string | null;
+  accountId: string | null;
+  reason: string | null;
+  detail: string | null;
+}
+
+export interface SecurityOverview {
+  users: SecurityUserRow[];
+  requests: ResetRequestView[];
+  alerts: SecurityAlertView[];
+}
+
+export interface StepUpResponse {
+  stepUpToken: string;
+  expiresInSec: number;
 }
 
 export interface WorkspaceContext {
@@ -73,7 +199,23 @@ export type ApiErrorCode =
   | 'RESET_TOKEN_INVALID'
   | 'RESET_NOT_ALLOWED'
   | 'PASSWORD_POLICY'
-  | 'NOT_FOUND';
+  | 'NOT_FOUND'
+  | 'MFA_REQUIRED'
+  | 'MFA_CHALLENGE_EXPIRED'
+  | 'MFA_STAGE_INVALID'
+  | 'MFA_CODE_INVALID'
+  | 'MFA_CODE_REUSED'
+  | 'MFA_BLOCKED'
+  | 'MFA_RESET'
+  | 'MFA_SETUP_ATTEMPTS_EXCEEDED'
+  | 'RECOVERY_CODE_USED'
+  | 'RECOVERY_CODES_EXHAUSTED'
+  | 'ACK_REQUIRED'
+  | 'STEP_UP_REQUIRED'
+  | 'ROLE_NOT_PERMITTED'
+  | 'RESET_REQUEST_REQUIRED'
+  | 'RESET_REQUEST_EXISTS'
+  | 'NOT_BLOCKED';
 
 export interface ApiErrorBody {
   code: ApiErrorCode;

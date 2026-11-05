@@ -5,8 +5,8 @@ import { PricingVersion, ProductPricingView, todayIso } from '../merchants/produ
 type PricingResult = { version: PricingVersion; view: ProductPricingView };
 import { AuthServer } from './auth-server';
 import { MerchantDb, MerchantServer } from './merchant-server';
-import { DEMO_PASSWORD } from './seed';
 import { completeProductConfig, FlakyStorage } from './testing/merchant-test-data';
+import { signIn } from './testing/sign-in';
 
 const KEY = 'mobi.gp.merchantdb';
 const DAY = 24 * 60 * 60_000;
@@ -44,7 +44,7 @@ describe('Product & Payment Config', () => {
   /** Moves the clock and signs in again (sessions expire after 30 idle minutes). */
   const advance = async (ms: number) => {
     now += ms;
-    token = ((await auth.handle('POST', '/api/auth/login', { loginId: '123', password: DEMO_PASSWORD }, null)).body as any).token;
+    token = await signIn(auth, '123');
   };
 
   beforeEach(async () => {
@@ -54,7 +54,7 @@ describe('Product & Payment Config', () => {
     server = new MerchantServer({ storage, now: () => now, auth });
     guided = new MerchantServer({ storage, now: () => now, auth, strictValidation: () => false });
     call = callOn(server);
-    token = ((await auth.handle('POST', '/api/auth/login', { loginId: '123', password: DEMO_PASSWORD }, null)).body as any).token;
+    token = await signIn(auth, '123');
     await call('GET', '/api/merchants');
   });
 

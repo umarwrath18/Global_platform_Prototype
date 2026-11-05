@@ -3,6 +3,7 @@
 Angular 21 prototype of the Global Platform:
 
 - **Batch 1:** Login & Authentication.
+- **Batch 3:** Two-factor authentication (Merchant Portal MFA, Phase 1: authenticator app / TOTP).
 - **Batch 2:** Merchant Management & Onboarding (Global Merchants, country applications, country expansion, Risk review, simulated CS readiness and go-live, notifications).
 
 Other MVP modules are intentionally not built yet.
@@ -36,10 +37,10 @@ them under "Use a test account".
 
 | Global Account ID     | Scenario                                              |
 | --------------------- | ----------------------------------------------------- |
-| `123`                 | Administrator · Tanjung Global Trading (GA-1001): MY/ID/VN active, TH pending, PH failed |
-| `TANJUNG-ADMIN`       | Second administrator on the same account (GA-1001)    |
-| `TANJUNG-VIEWER`      | Viewer on GA-1001                                     |
-| `LUMI-ADMIN`          | Active account with no active countries (GA-4004)     |
+| `123`                 | Administrator · Tanjung Global Trading (GA-1001): MY/ID/VN active, TH pending, PH failed · **2FA not set up yet** |
+| `TANJUNG-ADMIN`       | Second administrator on the same account (GA-1001) · **2FA on** |
+| `TANJUNG-VIEWER`      | Viewer on GA-1001 · **2FA on**                        |
+| `LUMI-ADMIN`          | Active account with no active countries (GA-4004) · **2FA not set up yet** |
 | `TANJUNG-RAVI`        | Individual user disabled                              |
 | `SERIMUTIARA-ADMIN`   | Account suspended (GA-2002)                           |
 | `NUSAPANGAN-ADMIN`    | Account inactive (GA-3003)                            |
@@ -49,6 +50,38 @@ Registered emails for password recovery follow the user, e.g. `sarah.lim@tanjung
 (user `123`), `aisyah@tanjungtrading.example`, `budi@tanjungtrading.example`, `lan@lumihome.example`.
 `farid@tanjungtrading.example` simulates an email delivery failure. OTP codes appear on
 screen in an **Email preview** card instead of being emailed.
+
+### Two-factor authentication (Batch 3)
+
+Every sign-in needs a password **and** a 6-digit code from an authenticator app. A correct
+password alone never creates a session.
+
+- **First sign-in (e.g. `123`):** mandatory setup that can't be skipped. You scan a QR code or type
+  the setup key, enter a code from the app, then save 2 single-use recovery codes and tick
+  "I've saved these" before you can continue.
+- **Later sign-ins (e.g. `TANJUNG-ADMIN`):** enter the current code. There's no "trusted device";
+  *Remember this device* only remembers the Global Account ID.
+- **Getting codes:** scan the QR code with Google Authenticator, Microsoft Authenticator or any
+  standard (RFC 6238) app. Or use the on-screen **Demo authenticator** card (dashed pink,
+  labelled *Prototype*), which shows the live code for whatever the screen is waiting for. Each
+  code works once, so after using one, wait for the next.
+- **Recovery code:** "Use a recovery code instead" signs in once, then you **must** register a new
+  authenticator before entering the portal. The old one stops working once the new one is verified.
+- **Blocked:** more than 3 consecutive wrong codes block that user (only that user) and raise a
+  Tech alert. The block stays until a Security Admin waives it.
+- **Account security** (sidebar user menu → Account security): replace your authenticator
+  (verify the current one, then the new one) and generate new recovery codes. Both send an
+  email to the Email preview where the PRD requires it.
+- **User security** (View as → *Mobi Support* or *Security Admin*): users' 2FA status, reset
+  requests, Tech alerts and the audit log. Support opens a reset request for a lost device. Security
+  Admin verifies identity and resets, or waives a block. Every admin action needs a reason, and
+  admins first confirm it's them with their own authenticator code. Admins never see secrets
+  or recovery codes. Support and Security Admin have no merchant pages.
+- **Rollout:** the first load of this build keeps all existing data but ends every session, so
+  everyone signs in again with 2FA (FR-09).
+
+`mobiDemo.clearAuthenticator('TANJUNG-ADMIN')` forgets a user's authenticator so setup can be
+tested again. See [`docs/mfa-batch-3.md`](docs/mfa-batch-3.md) for the full review document.
 
 ### Merchant onboarding (Batch 2)
 
@@ -182,6 +215,7 @@ mobiDemo.reactivateAccount('GA-1001')
 mobiDemo.disableUser('123')          // revokes only that user's sessions
 mobiDemo.enableUser('123')
 mobiDemo.expireSessions()            // simulate 30-minute idle timeout
+mobiDemo.clearAuthenticator('123')   // forget a user's authenticator so 2FA setup can be tested again
 mobiDemo.audit()                     // print audit events
 mobiDemo.reset()                     // restore all demo data (auth, merchants, country configuration)
 mobiDemo.resetMerchants()            // restore only the merchant data
@@ -203,3 +237,4 @@ repository → **Deploy**. No environment variables are needed.
 
 - [`docs/authentication-batch-1.md`](docs/authentication-batch-1.md): login workflows, rules, security controls, QA cases and open decisions.
 - [`docs/merchant-onboarding-batch-2.md`](docs/merchant-onboarding-batch-2.md): merchant data model, workflows, statuses, demo data, QA cases, limitations and open questions.
+- [`docs/mfa-batch-3.md`](docs/mfa-batch-3.md): two-factor authentication decisions, screens, rules, security controls, QA cases and open questions.

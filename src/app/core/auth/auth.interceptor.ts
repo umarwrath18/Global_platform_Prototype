@@ -5,7 +5,7 @@ import { ApiErrorBody } from '../api/models';
 import { AuthService } from './auth.service';
 
 /** Endpoints that are used before a session exists; a 401/403 there is a form error, not a sign-out. */
-const PUBLIC_ENDPOINTS = ['/api/auth/login', '/api/auth/password/'];
+const PUBLIC_ENDPOINTS = ['/api/auth/login', '/api/auth/password/', '/api/auth/mfa/'];
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const auth = inject(AuthService);
@@ -17,6 +17,10 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
     catchError((e: unknown) => {
       if (!isPublic && e instanceof HttpErrorResponse && e.status === 401) {
         auth.handleUnauthenticated((e.error as ApiErrorBody | null)?.code ?? 'SESSION_EXPIRED');
+      }
+      // Too many wrong codes during a signed-in check blocks the user and ends their sessions.
+      if (!isPublic && e instanceof HttpErrorResponse && e.status === 423) {
+        auth.handleUnauthenticated('MFA_BLOCKED');
       }
       return throwError(() => e);
     }),

@@ -2,14 +2,35 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
-import { ApiErrorCode, LoginResponse, SessionView, WorkspaceContext } from '../api/models';
+import {
+  ApiErrorCode,
+  AuthenticatorEnrolment,
+  LoginResponse,
+  MfaChallenge,
+  MfaRecoveryResponse,
+  MfaStage,
+  RecoveryCodesResponse,
+  SessionView,
+  SignedInResponse,
+  WorkspaceContext,
+} from '../api/models';
 
 const TOKEN_KEY = 'mobi.gp.session';
+const CHALLENGE_KEY = 'mobi.gp.mfaChallenge';
 const REMEMBERED_ID_KEY = 'mobi.gp.rememberedLoginId';
 const STATUS_POLL_MS = 30_000;
 const ACTIVITY_TOUCH_MS = 60_000;
 
-export type SignedOutReason = 'signed-out' | 'session-expired' | 'account-suspended' | 'account-inactive' | 'user-disabled' | 'signin-required';
+export type SignedOutReason =
+  | 'signed-out'
+  | 'session-expired'
+  | 'account-suspended'
+  | 'account-inactive'
+  | 'user-disabled'
+  | 'signin-required'
+  | 'mfa-required'
+  | 'mfa-blocked'
+  | 'mfa-reset';
 
 const REASON_BY_CODE: Partial<Record<ApiErrorCode, SignedOutReason>> = {
   SESSION_EXPIRED: 'session-expired',
@@ -17,7 +38,19 @@ const REASON_BY_CODE: Partial<Record<ApiErrorCode, SignedOutReason>> = {
   ACCOUNT_SUSPENDED: 'account-suspended',
   ACCOUNT_INACTIVE: 'account-inactive',
   USER_DISABLED: 'user-disabled',
+  MFA_REQUIRED: 'mfa-required',
+  MFA_BLOCKED: 'mfa-blocked',
+  MFA_RESET: 'mfa-reset',
 };
+
+/** The sign-in in progress between the password step and the second factor. */
+export interface PendingSignIn extends MfaChallenge {
+  /** Recovery codes from setup, kept in memory only until acknowledged. */
+  recoveryCodes?: string[];
+  /** True once a recovery code was used and a new authenticator must be registered. */
+  usedRecoveryCode?: boolean;
+  expiresAt: number;
+}
 
 function safeStorage<T>(fn: () => T, fallback: T): T {
   try {
@@ -48,14 +81,81 @@ export class AuthService {
     return safeStorage(() => localStorage.getItem(REMEMBERED_ID_KEY) ?? '', '');
   }
 
-  async login(loginId: string, password: string, rememberDevice: boolean): Promise<SessionView> {
+  private readonly pendingState = signal<PendingSignIn | null>(this.readPending());
+  /** Password verified, second factor not yet. Never grants access on its own. */
+  readonly pending = this.pendingState.asReadonly();
+
+  /**
+   * Step 1: checks the password. Returns the 2FA step the user must complete next.
+   * "Remember this device" only remembers the Global Account ID; it never skips 2FA.
+   */
+  async login(loginId: string, password: string, rememberDevice: boolean): Promise<PendingSignIn> {
     const res = await firstValueFrom(this.http.post<LoginResponse>('/api/auth/login', { loginId, password }));
-    safeStorage(() => sessionStorage.setItem(TOKEN_KEY, res.token), undefined);
     safeStorage(() => (rememberDevice ? localStorage.setItem(REMEMBERED_ID_KEY, loginId) : localStorage.removeItem(REMEMBERED_ID_KEY)), undefined);
+    const pending: PendingSignIn = { ...res, expiresAt: Date.now() + res.expiresInSec * 1000 };
+    this.setPending(pending);
+    return pending;
+  }
+
+  startSetup() {
+    return firstValueFrom(this.http.post<AuthenticatorEnrolment>('/api/auth/mfa/setup', { challengeToken: this.challengeToken() }));
+  }
+
+  async confirmSetup(code: string) {
+    const res = await firstValueFrom(this.http.post<RecoveryCodesResponse>('/api/auth/mfa/setup/verify', { challengeToken: this.challengeToken(), code }));
+    this.updatePending({ stage: 'acknowledge', recoveryCodes: res.recoveryCodes });
+    return res.recoveryCodes;
+  }
+
+  async completeSetup() {
+    const res = await firstValueFrom(this.http.post<SignedInResponse>('/api/auth/mfa/setup/complete', { challengeToken: this.challengeToken(), acknowledged: true }));
+    return this.signedIn(res);
+  }
+
+  async verifyCode(code: string) {
+    const res = await firstValueFrom(this.http.post<SignedInResponse>('/api/auth/mfa/verify', { challengeToken: this.challengeToken(), code }));
+    return this.signedIn(res);
+  }
+
+  async useRecoveryCode(code: string) {
+    const res = await firstValueFrom(this.http.post<MfaRecoveryResponse>('/api/auth/mfa/recovery', { challengeToken: this.challengeToken(), code }));
+    // A recovery code means the device is likely lost: a new authenticator is required before access.
+    this.updatePending({ stage: 'rebind', usedRecoveryCode: true, expiresAt: Date.now() + (this.pendingState()?.expiresInSec ?? 300) * 1000 });
+    return res;
+  }
+
+  /** Abandons the 2FA step (sign out before access was granted). */
+  cancelPending() {
+    this.setPending(null);
+  }
+
+  private challengeToken() {
+    return this.pendingState()?.challengeToken ?? '';
+  }
+
+  private signedIn(res: SignedInResponse): SessionView {
+    this.setPending(null);
+    safeStorage(() => sessionStorage.setItem(TOKEN_KEY, res.token), undefined);
     this.sessionState.set(res.session);
     this.restored = Promise.resolve();
     this.startMonitoring();
     return res.session;
+  }
+
+  private updatePending(patch: Partial<PendingSignIn> & { stage?: MfaStage }) {
+    const cur = this.pendingState();
+    if (cur) this.setPending({ ...cur, ...patch });
+  }
+
+  private setPending(p: PendingSignIn | null) {
+    this.pendingState.set(p);
+    // Recovery codes are never persisted; everything else survives a page refresh in this tab.
+    safeStorage(() => (p ? sessionStorage.setItem(CHALLENGE_KEY, JSON.stringify({ ...p, recoveryCodes: undefined })) : sessionStorage.removeItem(CHALLENGE_KEY)), undefined);
+  }
+
+  private readPending(): PendingSignIn | null {
+    const p = safeStorage(() => JSON.parse(sessionStorage.getItem(CHALLENGE_KEY) ?? 'null') as PendingSignIn | null, null);
+    return p && p.expiresAt > Date.now() ? p : null;
   }
 
   /** Restores the session for the stored token once per page load. */

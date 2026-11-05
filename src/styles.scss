@@ -75,7 +75,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
   color: inherit;
 }
@@ -413,6 +414,28 @@ a {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* 6-digit authenticator / one-time code entry. */
+.input.code-input {
+  text-align: center;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: 0.5em;
+  padding-left: calc(14px + 0.5em);
+  font-variant-numeric: tabular-nums;
+
+  &::placeholder {
+    color: #a7b0bd;
+    font-weight: 500;
+  }
+}
+
+.input.recovery-input {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 @media (prefers-reduced-motion: reduce) {
