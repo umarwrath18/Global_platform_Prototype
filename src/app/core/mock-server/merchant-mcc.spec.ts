@@ -237,7 +237,7 @@ describe('MCC management', () => {
       await call('GET', '/api/applications');
       await detail('GM-100101');
       expect(storage.getItem(KEY)).toBe(before);
-      expect(db().mids).toHaveLength(3); // Phase 1 MIDs untouched
+      expect(db().mids).toHaveLength(5); // seeded MIDs untouched
     });
 
     it('upgrades older (version 2) data exactly as before, without adding MCC fields', async () => {

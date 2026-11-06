@@ -35,7 +35,7 @@ import { regionForCountry } from '../merchants/regions';
 import { randomToken } from './crypto';
 import { entityOfApplication, GoLiveIntent, goLiveBlocker, isRuleError, issueMid, MerchantEntity, parentEntityOf, RegionalMid, toMidView } from './merchant-identity';
 import { MigrationFlag, migrationFlags, MigrationLogEntry, normaliseMerchantDb, SCHEMA_REVISION } from './merchant-migrations';
-import { buildMerchantSeed } from './merchant-seed';
+import { buildMerchantSeed, buildSeedAdditions, SEED_ADDITION_MERCHANT_IDS } from './merchant-seed';
 import { createSubMerchant, goLiveSubMerchant, reviewSubMerchant, setSubMerchantCheck, SubMerchantContext, subMerchantLifecycle, subMerchantsOf, submitSubMerchant } from './sub-merchants';
 import { approvalsFor, ChangeContext, decideChange, merchantRiskApproved, profileEvent, requestCountryChange, requestProfileChange, toChangeView, withdrawChange } from './change-requests';
 import { cancelPricing, decidePricing, DERIVED_CHECKLIST, onboardingGaps, ProductContext, productState, productView, saveProducts, setPricing, syncDerivedChecklist } from './product-pricing';
@@ -72,6 +72,8 @@ export interface MerchantDb {
   /** Change requests after Risk approval (profile identity and country details). */
   changeRequests?: ChangeRequestRecord[];
   profileEvents?: ProfileEvent[];
+  /** Demo merchants added to this data after its original seed (each is added at most once). */
+  seedAdditions?: string[];
 }
 
 export interface MerchantPortalProfile {
@@ -1225,8 +1227,13 @@ export class MerchantServer {
   // Re-read on every request so changes made in another tab apply immediately. Each read also
   // applies the data upgrade (merchant-migrations.ts); it is saved only after a backup exists.
   private load(): MerchantDb {
-    const raw = this.opts.storage.getItem(this.storageKey)!;
-    const stored = JSON.parse(raw) as MerchantDb;
+    let raw = this.opts.storage.getItem(this.storageKey)!;
+    let stored = JSON.parse(raw) as MerchantDb;
+    if (this.addSeedAdditions(stored)) {
+      raw = JSON.stringify(stored);
+      this.opts.storage.setItem(this.storageKey, raw);
+      stored = JSON.parse(raw) as MerchantDb;
+    }
     const { db, changed } = normaliseMerchantDb(stored, this.now());
     let current = db;
     if (!changed) this.upgradePending = false;
@@ -1234,6 +1241,29 @@ export class MerchantServer {
     current.lifecycleEvents ??= [];
     for (const merchant of current.merchants) merchant.lifecycleStatus ??= 'active';
     return current;
+  }
+
+  /**
+   * Adds demo merchants introduced after this data was seeded (e.g. Nusantara Home Retail), once.
+   * Existing records are never changed. A merchant is skipped if any of its IDs is already in use.
+   */
+  private addSeedAdditions(db: MerchantDb): boolean {
+    const done = new Set(db.seedAdditions ?? []);
+    const pending = SEED_ADDITION_MERCHANT_IDS.filter((id) => !done.has(id));
+    if (!pending.length) return false;
+    const extra = buildSeedAdditions(this.now());
+    for (const id of pending) {
+      const merchant = extra.merchants.find((m) => m.id === id)!;
+      const apps = extra.applications.filter((a) => a.merchantId === id);
+      const clash = db.merchants.some((m) => m.id === id) || apps.some((a) => db.applications.some((x) => x.id === a.id));
+      if (!clash) {
+        db.merchants.push(merchant);
+        db.applications.push(...apps);
+      }
+      done.add(id);
+    }
+    db.seedAdditions = [...done];
+    return true;
   }
 
   /**

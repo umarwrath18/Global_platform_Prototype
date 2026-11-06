@@ -70,14 +70,14 @@ describe('merchant data upgrade (schema revision 3)', () => {
     await get('/api/merchants');
     const db = stored();
     const byApp = new Map(db.mids!.map((m) => [m.applicationId, m]));
-    expect([...byApp.keys()].sort()).toEqual(['APP-2026-0001', 'APP-2026-0002', 'APP-2026-0003']);
+    expect([...byApp.keys()].sort()).toEqual(['APP-2026-0001', 'APP-2026-0002', 'APP-2026-0003', 'APP-2026-9001', 'APP-2026-9002']);
     for (const id of byApp.keys()) {
       const app = original.applications.find((a) => a.id === id)!;
       const evidence = app.history.find((h) => h.toStatus === 'operational')!;
       expect(byApp.get(id)).toMatchObject({ source: 'migrated', issuedAt: upgradeAt, issuedBy: UPGRADE_ACTOR, goLiveEvidenceAt: evidence.at, regionCode: app.country, country: app.country, environment: 'live', demo: true });
       expect(byApp.get(id)!.mid).toMatch(MID_PATTERN);
     }
-    expect(new Set(db.mids!.map((m) => m.mid)).size).toBe(3);
+    expect(new Set(db.mids!.map((m) => m.mid)).size).toBe(5);
     // No MID for anything that hasn't gone live.
     expect(db.applications.filter((a) => a.status !== 'operational').every((a) => !byApp.has(a.id))).toBe(true);
   });
@@ -193,7 +193,7 @@ describe('merchant data upgrade (schema revision 3)', () => {
     expect((await s.handle('GET', '/api/merchants', null, 'token', 'sales')).status).toBe(200);
     const db = JSON.parse(fresh.getItem(KEY)!) as MerchantDb;
     expect(db).toMatchObject({ version: 2, schemaRevision: 3 });
-    expect(db.mids!.map((m) => m.applicationId).sort()).toEqual(['APP-2026-0001', 'APP-2026-0002', 'APP-2026-0003']);
+    expect(db.mids!.map((m) => m.applicationId).sort()).toEqual(['APP-2026-0001', 'APP-2026-0002', 'APP-2026-0003', 'APP-2026-9001', 'APP-2026-9002']);
     expect(fresh.getItem(BACKUP)).toBeNull();
     expect(migrationFlags(db)).toEqual([]);
   });
@@ -212,6 +212,7 @@ describe('merchant data upgrade (schema revision 3)', () => {
     const b = normaliseMerchantDb(v2Fixture(), upgradeAt).db;
     expect(a).toEqual(b);
     const order = a.mids!.map((m) => (a.applications.find((x) => x.id === m.applicationId) as CountryApplication).id);
-    expect(order).toEqual(['APP-2026-0001', 'APP-2026-0002', 'APP-2026-0003']);
+    // By recorded go-live time: Tanjung MY, ID, Nusantara MY, Tanjung VN, Nusantara ID.
+    expect(order).toEqual(['APP-2026-0001', 'APP-2026-0002', 'APP-2026-9001', 'APP-2026-0003', 'APP-2026-9002']);
   });
 });

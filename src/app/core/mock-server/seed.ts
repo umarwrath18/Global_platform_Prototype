@@ -73,6 +73,15 @@ export const SEED_ACCOUNTS: SeedAccount[] = [
     countries: [{ code: 'ID', status: 'active' }],
   },
   {
+    id: 'GA-1005',
+    name: 'Nusantara Home Retail Sdn Bhd',
+    status: 'active',
+    countries: [
+      { code: 'MY', status: 'active' },
+      { code: 'ID', status: 'active' },
+    ],
+  },
+  {
     id: 'GA-4004',
     name: 'Lumi Home Living Sdn Bhd',
     status: 'active',
@@ -94,12 +103,14 @@ export const SEED_USERS: SeedUser[] = [
   { id: 'U-8', accountId: 'GA-1001', loginId: 'TANJUNG-KEVIN', name: 'Kevin Ong', email: 'kevin@tanjungtrading.example', roleId: 'role-admin', status: 'active', demo: 'service-outage' },
   { id: 'U-10', accountId: 'GA-1001', loginId: 'TANJUNG-MERCHANT', name: 'Farah Ismail', email: 'farah.ismail@tanjungtrading.example', roleId: 'role-merchant', status: 'active', portal: 'merchant', merchantId: 'GM-100101' },
   { id: 'U-11', accountId: 'GA-4004', loginId: 'LUMI-MERCHANT', name: 'Lumi Finance', email: 'finance@lumihome.example', roleId: 'role-merchant', status: 'active', portal: 'merchant', merchantId: 'GM-100102', mfaEnrolled: true },
+  { id: 'U-12', accountId: 'GA-1005', loginId: 'NUSANTARA-MERCHANT', name: 'Siti Aminah', email: 'siti@nusantarahome.example', roleId: 'role-merchant', status: 'active', portal: 'merchant', merchantId: 'GM-109001', mfaEnrolled: true },
   { id: 'U-9', accountId: 'GA-1001', loginId: 'TANJUNG-FARID', name: 'Farid Hassan', email: 'farid@tanjungtrading.example', roleId: 'role-admin', status: 'active', demo: 'otp-delivery-failure' },
 ];
 
 /** Shown in the login screen's "sample accounts" panel. */
 export const DEMO_ACCOUNT_GUIDE: { loginId: string; scenario: string; portal?: 'merchant' }[] = [
   { loginId: 'TANJUNG-MERCHANT', scenario: 'Tanjung Global Trading · 3 live countries · 2FA not set up yet', portal: 'merchant' },
+  { loginId: 'NUSANTARA-MERCHANT', scenario: 'Nusantara Home Retail · Malaysia & Indonesia live · 2FA on', portal: 'merchant' },
   { loginId: 'LUMI-MERCHANT', scenario: 'Lumi Home Living · no live countries yet · 2FA on', portal: 'merchant' },
   { loginId: '123', scenario: 'Administrator · 3 active countries · 2FA not set up yet' },
   { loginId: 'TANJUNG-ADMIN', scenario: 'Administrator · same account · 2FA on' },

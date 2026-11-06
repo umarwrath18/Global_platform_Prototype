@@ -8,6 +8,12 @@ Status: **Built on sample data. Needs Mobi's transaction and balance APIs before
 > Platform app). The merchant screens were removed from the Global Platform app. Sign-in sends the
 > app's portal, and the server refuses the other kind of user (`WRONG_PORTAL`, after the password
 > check). See the README section "Two apps in this repository".
+>
+> **Update: third merchant.** `NUSANTARA-MERCHANT` (Siti Aminah, Nusantara Home Retail Sdn Bhd,
+> `GM-109001` / `GA-1005`, 2FA on) is live in Malaysia (Visa / Mastercard, FPX, DuitNow QR, Touch 'n Go)
+> and Indonesia (QRIS, Bank virtual account, OVO), with sample transactions and MYR / IDR balances. It is
+> fully onboarded in the Global Platform (applications `APP-2026-9001` / `9002`, live MIDs). Browsers
+> that already have demo data get it added once (`seedAdditions`); nothing else changes.
 
 ## 1. Decisions confirmed before build
 

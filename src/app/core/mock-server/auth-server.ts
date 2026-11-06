@@ -82,7 +82,7 @@ export const MFA_POLICY = {
   recoveryCodeCount: 2,
 } as const;
 
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 interface AccountRec extends SeedAccount {
   /** GMID that created this account at go-live. Only on accounts created after this field existed. */
@@ -1299,7 +1299,7 @@ export class AuthServer {
           await this.addMissingSeedUsers();
           return;
         }
-        if (existing?.version === 5) {
+        if (existing?.version === 5 || existing?.version === 6) {
           await this.addMissingSeedUsers();
           return;
         }
@@ -1357,9 +1357,12 @@ export class AuthServer {
     this.save(db);
   }
 
-  /** Adds demo users introduced by later builds (e.g. merchant portal users). Existing data is kept. */
+  /** Adds demo accounts and users introduced by later builds (e.g. merchant portal users). Existing data is kept. */
   private async addMissingSeedUsers() {
     const db = this.load();
+    for (const a of SEED_ACCOUNTS) {
+      if (!db.accounts.some((x) => x.id === a.id)) db.accounts.push(structuredClone(a));
+    }
     const added: UserRec[] = [];
     for (const u of SEED_USERS) {
       if (db.users.some((x) => x.id === u.id)) continue;

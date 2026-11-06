@@ -377,7 +377,7 @@ describe('Two-factor authentication', () => {
       const upgraded = new AuthServer({ storage, now: () => now, pbkdf2Iterations: 1000, sendEmail: () => undefined });
       expect(((await upgraded.handle('POST', '/api/auth/login', { loginId: '123', password: DEMO_PASSWORD }, null)).body as any).stage).toBe('setup');
       const after = JSON.parse(storage.getItem(key)!);
-      expect(after.version).toBe(6);
+      expect(after.version).toBe(7);
       expect(after.sessions).toEqual([]);
       expect(after.revokedSessions.at(-1)).toMatchObject({ tokenHash: 'abc', reason: 'MFA_REQUIRED' });
       expect(after.users).toHaveLength(v4.users.length);

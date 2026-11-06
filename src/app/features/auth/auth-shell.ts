@@ -10,64 +10,12 @@ import { MobiLogo } from '../../shared/mobi-logo';
   template: `
     <div class="shell">
       <aside class="brand" aria-hidden="true">
-        <div class="glow"></div>
-
-        <!-- Decorative, generic wireframe of a dashboard (no product data). Hidden from assistive tech. -->
-        <div class="preview">
-          <div class="win">
-            <div class="win-side">
-              <span class="ws-logo"></span>
-              <span class="ws-item on"></span>
-              <span class="ws-item"></span>
-              <span class="ws-item"></span>
-              <span class="ws-item"></span>
-              <span class="ws-gap"></span>
-              <span class="ws-item dim"></span>
-              <span class="ws-item dim"></span>
-              <span class="ws-item dim"></span>
-            </div>
-            <div class="win-main">
-              <div class="win-top"><span></span><span></span><span></span><span class="grow"></span><span class="pill"></span></div>
-              <span class="wf-title"></span>
-              <div class="kpis">
-                @for (k of kpis; track $index) {
-                  <div class="kpi">
-                    <span class="wf-line short"></span>
-                    <span class="wf-num"></span>
-                    @if (k) {
-                      <svg viewBox="0 0 100 28" preserveAspectRatio="none"><path [attr.d]="k" /></svg>
-                    }
-                  </div>
-                }
-              </div>
-              <div class="panels">
-                <div class="panel-mock">
-                  <span class="wf-line title"></span>
-                  <div class="chart">
-                    @for (h of columns; track $index) {
-                      <i [style.height.%]="h"></i>
-                    }
-                  </div>
-                </div>
-                <div class="panel-mock">
-                  <span class="wf-line title"></span>
-                  @for (i of [1, 2, 3, 4]; track i) {
-                    <div class="att"><span class="att-ic"></span><span class="att-lines"><i></i><i></i></span></div>
-                  }
-                </div>
-              </div>
-              <div class="panel-mock table-mock">
-                @for (r of [1, 2, 3]; track r) {
-                  <div class="t-row"><i></i><i></i><i></i><i class="pill"></i></div>
-                }
-              </div>
-            </div>
-          </div>
-        </div>
+        <!-- Decorative brand photo (Mobi mark, Kuala Lumpur skyline). Hidden from assistive tech. -->
+        <div class="hero"></div>
 
         <app-mobi-logo class="brand-logo" [showProduct]="false" style="--logo-size: 40px" />
         <div class="copy">
-          <p class="tagline">Borderless Payments,<br />Built for Global Businesses.</p>
+          <p class="tagline">Borderless Payments,<br />Built for Global Businesses<span class="dot">.</span></p>
         </div>
       </aside>
 
@@ -97,7 +45,7 @@ import { MobiLogo } from '../../shared/mobi-logo';
       min-height: 100dvh;
     }
 
-    /* Dark brand panel: same navy as the signed-in sidebar, with a faded workspace preview. */
+    /* Brand panel: full-bleed brand photo, navy behind it while it loads. */
     .brand {
       position: relative;
       overflow: hidden;
@@ -106,15 +54,6 @@ import { MobiLogo } from '../../shared/mobi-logo';
       padding: 56px 64px 72px;
       background: var(--nav-bg);
       color: #fff;
-    }
-
-    .glow {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      background:
-        radial-gradient(60% 50% at 85% 25%, rgba(11, 92, 171, 0.45) 0%, rgba(11, 92, 171, 0) 70%),
-        radial-gradient(45% 40% at 10% 100%, rgba(1, 123, 139, 0.35) 0%, rgba(1, 123, 139, 0) 70%);
     }
 
     .brand-logo,
@@ -137,309 +76,27 @@ import { MobiLogo } from '../../shared/mobi-logo';
       letter-spacing: -0.02em;
     }
 
-    /* ---- Workspace preview ---- */
-    .preview {
+    /* ---- Brand photo ---- */
+    .hero {
       position: absolute;
+      inset: 0;
       z-index: 1;
-      top: 15%;
-      left: 22%;
-      width: 900px;
-      transform: perspective(1800px) rotateY(-14deg) rotateX(6deg) rotate(-2deg);
-      transform-origin: left top;
-      opacity: 0.55;
-      mask-image: linear-gradient(180deg, #000 0%, #000 45%, transparent 78%), linear-gradient(90deg, #000 55%, transparent 100%);
-      -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 45%, transparent 78%);
-      mask-composite: intersect;
+      background: url('/brand/login-hero.webp') 34% center / cover no-repeat;
       pointer-events: none;
     }
 
-    .win {
-      display: flex;
-      height: 560px;
-      overflow: hidden;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 14px;
-      background: #f6f8fb;
-      box-shadow: 0 40px 80px -30px rgba(0, 0, 0, 0.6);
+    /* Darkens the top (logo) and bottom (tagline) so the white text stays readable. */
+    .hero::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(180deg, rgba(5, 10, 14, 0.55) 0%, rgba(5, 10, 14, 0) 22%),
+        linear-gradient(0deg, rgba(5, 10, 14, 0.85) 0%, rgba(5, 10, 14, 0.35) 30%, rgba(5, 10, 14, 0) 50%);
     }
 
-    .win-side {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      width: 150px;
-      padding: 18px 12px;
-      background: #0e2036;
-    }
-
-    .ws-logo {
-      width: 54px;
-      height: 14px;
-      margin-bottom: 14px;
-      border-radius: 4px;
-      background: rgba(255, 255, 255, 0.85);
-    }
-
-    .ws-item {
-      height: 22px;
-      border-radius: 6px;
-      background: rgba(255, 255, 255, 0.1);
-
-      &.on {
-        background: #0b5cab;
-      }
-
-      &.dim {
-        background: rgba(255, 255, 255, 0.05);
-      }
-    }
-
-    .ws-gap {
-      height: 10px;
-    }
-
-    .win-main {
-      flex: 1;
-      padding: 14px 20px;
-      color: #101828;
-    }
-
-    .win-top {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 18px;
-
-      span {
-        width: 90px;
-        height: 22px;
-        border: 1px solid #e3e8ef;
-        border-radius: 6px;
-        background: #fff;
-      }
-
-      .grow {
-        flex: 1;
-        border: 0;
-        background: none;
-      }
-
-      .pill {
-        width: 130px;
-      }
-    }
-
-    /* Wireframe placeholders: grey bars instead of text and numbers. */
-    .wf-title {
-      display: block;
-      width: 120px;
-      height: 14px;
-      margin: 0 0 14px;
-      border-radius: 4px;
-      background: #c9d2de;
-    }
-
-    .wf-line {
-      display: block;
-      height: 7px;
-      border-radius: 4px;
-      background: #e3e8ef;
-
-      &.short {
-        width: 55%;
-      }
-
-      &.title {
-        width: 90px;
-        height: 8px;
-        background: #d5dce6;
-      }
-    }
-
-    .wf-num {
-      display: block;
-      width: 38%;
-      height: 16px;
-      margin-top: 6px;
-      border-radius: 4px;
-      background: #c9d2de;
-    }
-
-    .chart {
-      display: flex;
-      align-items: flex-end;
-      gap: 8px;
-      height: 110px;
-      padding-top: 6px;
-      border-bottom: 1px solid #e3e8ef;
-
-      i {
-        display: block;
-        flex: 1;
-        border-radius: 4px 4px 0 0;
-        background: #93c0ec;
-
-        &:nth-child(3n) {
-          background: #2e7bd1;
-        }
-      }
-    }
-
-    .table-mock {
-      margin-top: 10px;
-      gap: 12px;
-    }
-
-    .t-row {
-      display: grid;
-      grid-template-columns: 1.4fr 1fr 1fr 70px;
-      gap: 16px;
-      align-items: center;
-
-      i {
-        display: block;
-        height: 7px;
-        border-radius: 4px;
-        background: #e3e8ef;
-      }
-
-      .pill {
-        height: 14px;
-        border-radius: 7px;
-        background: #eaf3fc;
-      }
-    }
-
-    .kpis {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-
-    .kpi {
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      height: 78px;
-      padding: 10px 12px;
-      overflow: hidden;
-      border: 1px solid #e3e8ef;
-      border-radius: 10px;
-      background: #fff;
-
-      span {
-        font-size: 10px;
-        color: #5b6675;
-      }
-
-      strong {
-        font-size: 20px;
-      }
-
-      svg {
-        position: absolute;
-        right: 0;
-        bottom: 10px;
-        width: 55%;
-        height: 26px;
-      }
-
-      path {
-        fill: none;
-        stroke: #8ab6e4;
-        stroke-width: 2;
-        vector-effect: non-scaling-stroke;
-      }
-    }
-
-    .panels {
-      display: grid;
-      grid-template-columns: 1.5fr 1fr;
-      gap: 10px;
-    }
-
-    .panel-mock {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      padding: 12px;
-      border: 1px solid #e3e8ef;
-      border-radius: 10px;
-      background: #fff;
-    }
-
-    .pm-title {
-      font-size: 11px;
-      font-weight: 600;
-    }
-
-    .bar-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .bar-label {
-      width: 48px;
-      height: 7px;
-      border-radius: 4px;
-      background: #e3e8ef;
-    }
-
-    .bar {
-      display: flex;
-      flex: 1;
-      gap: 2px;
-      height: 7px;
-      overflow: hidden;
-      border-radius: 4px;
-      background: #eef1f5;
-
-      i {
-        display: block;
-      }
-
-      .g { background: #12a150; }
-      .b { background: #2e7bd1; }
-      .l { background: #93c0ec; }
-      .a { background: #f5a524; }
-      .r { background: #e5484d; }
-      .e { background: transparent; }
-    }
-
-    .att {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .att-ic {
-      width: 18px;
-      height: 18px;
-      border-radius: 5px;
-      background: #eaf3fc;
-
-      &.t2 { background: #fffaeb; }
-    }
-
-    .att-lines {
-      display: flex;
-      flex: 1;
-      flex-direction: column;
-      gap: 4px;
-
-      i {
-        display: block;
-        height: 6px;
-        border-radius: 3px;
-        background: #e3e8ef;
-
-        & + i {
-          width: 60%;
-          background: #eef1f5;
-        }
-      }
+    .tagline .dot {
+      color: var(--mobi-green);
     }
 
     /* ---- Form side ---- */
@@ -484,12 +141,6 @@ import { MobiLogo } from '../../shared/mobi-logo';
       }
     }
 
-    @media (max-width: 1280px) {
-      .preview {
-        left: 14%;
-      }
-    }
-
     @media (max-width: 960px) {
       .shell {
         grid-template-columns: minmax(0, 1fr);
@@ -516,21 +167,15 @@ import { MobiLogo } from '../../shared/mobi-logo';
     }
 
     @media (prefers-reduced-motion: no-preference) {
-      .preview {
-        animation: preview-in 0.8s ease-out both;
+      .hero {
+        animation: hero-in 0.8s ease-out both;
       }
-      @keyframes preview-in {
+      @keyframes hero-in {
         from {
           opacity: 0;
-          translate: 24px 12px;
         }
       }
     }
   `,
 })
-export class AuthShell {
-  /** Sparkline paths for the wireframe stat cards (null = no sparkline). */
-  protected readonly kpis = ['M0 24 L18 22 L36 22 L54 18 L72 18 L86 9 L100 4', 'M0 25 L20 23 L40 21 L60 20 L80 14 L100 6', null, 'M0 18 L25 20 L50 12 L75 14 L100 8'];
-  /** Bar heights (%) for the wireframe column chart. */
-  protected readonly columns = [42, 58, 50, 72, 64, 80, 68, 90, 76, 86];
-}
+export class AuthShell {}

@@ -69,6 +69,7 @@ them under "Use a test account".
 | `NUSAPANGAN-ADMIN`    | Account inactive (GA-3003)                            |
 | `TANJUNG-KEVIN`       | Sign-in service unavailable                           |
 | `TANJUNG-MERCHANT`    | **Merchant user** of Tanjung Global Trading (GM-100101): Merchant Portal only · 2FA not set up yet |
+| `NUSANTARA-MERCHANT`  | **Merchant user** of Nusantara Home Retail (GM-109001, GA-1005): live in Malaysia and Indonesia, sample transactions and MYR / IDR balances · 2FA on |
 | `LUMI-MERCHANT`       | **Merchant user** of Lumi Home Living (GM-100102, no live countries yet) · 2FA on |
 
 Registered emails for password recovery follow the user, e.g. `sarah.lim@tanjungtrading.example`

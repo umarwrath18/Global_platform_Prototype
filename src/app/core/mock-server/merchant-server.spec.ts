@@ -57,7 +57,7 @@ describe('MerchantServer', () => {
 
   it('seeds demo merchants consistent with the Batch 1 Global Accounts', async () => {
     const list = (await call<MerchantSummary[]>('GET', '/api/merchants')).body;
-    expect(list).toHaveLength(8);
+    expect(list).toHaveLength(9);
     const trading = list.find((m) => m.id === 'GM-100101')!;
     expect(trading.linkedAccountId).toBe('GA-1001');
     expect(trading.globalStatus).toBe('active');
@@ -111,7 +111,7 @@ describe('MerchantServer', () => {
     expect(th.data.bank).toEqual({ bankName: '', branch: '', accountName: '', accountNumber: '' });
     const detail = (await call<MerchantDetail>('GET', `/api/merchants/${m.id}`)).body;
     expect(detail.applications.map((a) => a.country)).toEqual(['MY', 'TH']);
-    expect((await call<MerchantSummary[]>('GET', '/api/merchants')).body).toHaveLength(9);
+    expect((await call<MerchantSummary[]>('GET', '/api/merchants')).body).toHaveLength(10);
   });
 
   it('copies directors from an existing application when expanding', async () => {

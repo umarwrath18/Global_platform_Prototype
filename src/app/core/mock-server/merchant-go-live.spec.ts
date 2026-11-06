@@ -47,7 +47,8 @@ describe('go-live and live MIDs', () => {
   });
 
   it('issues no MID before go-live', async () => {
-    const live = new Set(['APP-2026-0001', 'APP-2026-0002', 'APP-2026-0003']);
+    // Tanjung (MY/ID/VN) and Nusantara Home Retail (MY/ID) are live in the seed.
+    const live = new Set(['APP-2026-0001', 'APP-2026-0002', 'APP-2026-0003', 'APP-2026-9001', 'APP-2026-9002']);
     for (const a of db().applications) {
       const detail = (await call<ApplicationDetail>('GET', `/api/applications/${a.id}`)).body;
       expect(!!detail.mid).toBe(live.has(a.id));

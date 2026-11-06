@@ -146,6 +146,37 @@ describe('Merchant portal', () => {
     });
   });
 
+  describe('Nusantara Home Retail (live in Malaysia and Indonesia)', () => {
+    it('signs in with 2FA already on and sees MYR and IDR balances and both countries’ methods', async () => {
+      const t = await signIn(auth, 'NUSANTARA-MERCHANT');
+      const o = (await get<MerchantPortalOverview>('/api/merchant-portal/overview', t)).body;
+      expect(o.merchant).toEqual({ id: 'GM-109001', name: 'Nusantara Home Retail Sdn Bhd' });
+      expect(o.balances.map((b) => b.currency)).toEqual(['MYR', 'IDR']);
+      expect(o.paymentMethods.map((m) => m.code)).toEqual(['MY_CARDS', 'MY_FPX', 'MY_DUITNOW', 'MY_TNG', 'ID_QRIS', 'ID_VA', 'ID_OVO']);
+      const page = (await list('range=30d&pageSize=100', t)).body;
+      expect(page.total).toBeGreaterThan(0);
+      expect(new Set(page.items.map((x) => x.currency))).toEqual(new Set(['MYR', 'IDR']));
+      const e = (await get<TransactionExport>('/api/merchant-portal/transactions/export?range=30d', t)).body;
+      expect(e.filename).toBe('nusantara-home-retail-sdn-bhd-transactions-2026-11-05.csv');
+      expect(e.rows).toBe(page.total);
+    });
+
+    it('never sees Tanjung’s transactions, and Tanjung never sees Nusantara’s', async () => {
+      const t = await signIn(auth, 'NUSANTARA-MERCHANT');
+      const mine = new Set((await list('range=30d&pageSize=100', t)).body.items.map((x) => x.transactionId));
+      const theirs = (await list('range=30d&pageSize=100')).body.items.map((x) => x.transactionId);
+      expect(theirs.some((id) => mine.has(id))).toBe(false);
+      expect((await list(`range=30d&q=${theirs[0]}`, t)).body.total).toBe(0);
+    });
+
+    it('is fully onboarded in the internal app, with its own Global Account', async () => {
+      const internal = await signIn(auth, '123');
+      const detail = (await merchants.handle('GET', '/api/merchants/GM-109001', null, internal, 'sales')).body as any;
+      expect(detail.merchant.linkedAccountId).toBe('GA-1005');
+      expect(detail.applications.map((a: any) => `${a.country}:${a.status}`)).toEqual(['MY:operational', 'ID:operational']);
+    });
+  });
+
   describe('isolation and access control', () => {
     it('a merchant only ever sees its own data, whatever the request says', async () => {
       const lumi = await signIn(auth, 'LUMI-MERCHANT');

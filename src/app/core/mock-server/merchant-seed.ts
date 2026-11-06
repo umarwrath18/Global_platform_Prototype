@@ -49,6 +49,8 @@ interface AppSeed {
   steps: Step[];
   /** Leave sections empty to represent a partially completed draft. */
   incomplete?: ('bank' | 'documents' | 'pricing')[];
+  /** Payment methods switched on in the pricing section (default: the country's first three). */
+  enabledMethods?: string[];
   configDone?: number;
   integrationDone?: number;
   goLiveDone?: number;
@@ -171,7 +173,9 @@ export function buildMerchantSeed(now: number, version: number): MerchantDb {
   note(1, 'resubmitted', byId('APP-2026-0013'), fresh, ['risk', 'sales'], `Resubmitted: ${fresh.legalName} · Malaysia`, 'APP-2026-0013 is waiting for Risk review after correction.', ['risk-review@mobi.xyz']);
   notifications.sort((a, b) => b.at - a.at);
 
-  const merchants = [trading, lumi, kopi, saigon, bites, manila, fresh, pixel];
+  const extra = buildSeedAdditions(now);
+  applications.push(...extra.applications);
+  const merchants = [trading, lumi, kopi, saigon, bites, manila, fresh, pixel, ...extra.merchants];
   for (const m of merchants) {
     const own = applications.filter((a) => a.merchantId === m.id);
     if (own.length) m.updatedAt = Math.max(m.updatedAt, ...own.map((a) => a.updatedAt));
@@ -180,6 +184,7 @@ export function buildMerchantSeed(now: number, version: number): MerchantDb {
   return {
     version,
     seq: { merchant: 100109, application: 16, notification: nt },
+    seedAdditions: [...SEED_ADDITION_MERCHANT_IDS],
     merchants,
     applications,
     notifications,
@@ -212,7 +217,7 @@ function buildApplication(s: AppSeed, ago: (d: number) => number): CountryApplic
       .map((d, i) => ({ id: `${s.id}-d${i}`, type: d.type, fileName: `${d.type.replace(/_/g, '-')}.pdf`, sizeKb: 240 + i * 37, uploadedAt: ago(s.steps[0][0] - 1), sample: true }));
   }
   if (!s.incomplete?.includes('pricing')) {
-    data.pricing = cfg.paymentMethods.map((p, i) => ({ code: p.code, enabled: i < 3, mdr: p.defaultMdr }));
+    data.pricing = cfg.paymentMethods.map((p, i) => ({ code: p.code, enabled: s.enabledMethods ? s.enabledMethods.includes(p.code) : i < 3, mdr: p.defaultMdr }));
   }
 
   const history: HistoryEvent[] = [];
@@ -285,4 +290,51 @@ function newSeedReadiness(s: AppSeed, ago: (d: number) => number) {
     });
   }
   return r;
+}
+
+// ---------------------------------------------------------------- seed additions
+
+/** IDs of demo merchants added after the original seed. Fixed, outside the normal sequences. */
+export const SEED_ADDITION_MERCHANT_IDS = ['GM-109001'];
+
+/**
+ * Demo merchants added after the original seed: Nusantara Home Retail (GM-109001, linked to
+ * GA-1005), live in Malaysia and Indonesia with the Merchant Portal user NUSANTARA-MERCHANT.
+ * Used by the fresh seed and to add them to existing data (see MerchantServer).
+ */
+export function buildSeedAdditions(now: number): { merchants: MerchantRecord[]; applications: CountryApplication[] } {
+  const ago = (d: number) => now - d * DAY;
+  const nusantara: MerchantRecord = {
+    id: 'GM-109001',
+    legalName: 'Nusantara Home Retail Sdn Bhd',
+    registrationCountry: 'MY',
+    registrationNumber: '202001023456',
+    primaryContact: { name: 'Siti Aminah', email: 'siti@nusantarahome.example', phone: '+60 12 888 4321' },
+    linkedAccountId: 'GA-1005',
+    createdAt: ago(170),
+    updatedAt: ago(170),
+    createdBy: STAFF.sales,
+    demo: true,
+  };
+  const directors: Director[] = [
+    { id: 'seed90', name: 'Siti Aminah', nationality: 'Malaysian', idNumber: '880404-14-2468', role: 'director_and_owner', ownershipPct: 70 },
+    { id: 'seed91', name: 'Hendra Gunawan', nationality: 'Indonesian', idNumber: '3171234567890090', role: 'director_and_owner', ownershipPct: 30 },
+  ];
+  const live = (start: number): Step[] => [
+    [start, 'Application created', 'draft', 'sales'],
+    [start - 4, 'Submitted for Risk review', 'pending_risk_review', 'sales'],
+    [start - 8, 'Approved by Risk', 'risk_approved', 'risk', 'Documents and screening clear.'],
+    [start - 9, 'CS configuration started', 'cs_configuration', 'cs'],
+    [start - 12, 'Production keys generated', 'keys_generated', 'cs'],
+    [start - 13, 'Merchant integration started', 'integration', 'cs'],
+    [start - 20, 'Integration complete; go-live verification started', 'go_live_verification', 'cs'],
+    [start - 22, 'Go-live verified; country is operational', 'operational', 'cs'],
+  ];
+  const seeds: AppSeed[] = [
+    { id: 'APP-2026-9001', merchant: nusantara, country: 'MY', industry: 'Retail & e-commerce', website: 'https://nusantarahome.example', directors, steps: live(165), enabledMethods: ['MY_CARDS', 'MY_FPX', 'MY_DUITNOW', 'MY_TNG'] },
+    { id: 'APP-2026-9002', merchant: nusantara, country: 'ID', industry: 'Retail & e-commerce', website: 'https://nusantarahome.example', directors, steps: live(130), enabledMethods: ['ID_QRIS', 'ID_VA', 'ID_OVO'] },
+  ];
+  const applications = seeds.map((x) => buildApplication(x, ago));
+  nusantara.updatedAt = Math.max(...applications.map((a) => a.updatedAt));
+  return { merchants: [nusantara], applications };
 }
