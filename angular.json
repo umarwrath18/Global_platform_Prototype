@@ -83,6 +83,83 @@
           "builder": "@angular/build:unit-test"
         }
       }
+    },
+    "merchant-portal": {
+      "projectType": "application",
+      "schematics": {
+        "@schematics/angular:component": {
+          "style": "scss"
+        }
+      },
+      "root": "projects/merchant-portal",
+      "sourceRoot": "projects/merchant-portal/src",
+      "prefix": "app",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "projects/merchant-portal/src/main.ts",
+            "tsConfig": "projects/merchant-portal/tsconfig.app.json",
+            "inlineStyleLanguage": "scss",
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "public"
+              }
+            ],
+            "styles": [
+              "src/styles.scss"
+            ],
+            "allowedCommonJsDependencies": [
+              "qrcode"
+            ],
+            "index": "projects/merchant-portal/src/index.html",
+            "outputPath": "dist/merchant-portal"
+          },
+          "configurations": {
+            "production": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "500kB",
+                  "maximumError": "1MB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "12kB",
+                  "maximumError": "16kB"
+                }
+              ],
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "configurations": {
+            "production": {
+              "buildTarget": "merchant-portal:build:production"
+            },
+            "development": {
+              "buildTarget": "merchant-portal:build:development"
+            }
+          },
+          "defaultConfiguration": "development",
+          "options": {
+            "allowedHosts": [
+              ".app.github.dev",
+              ".githubpreview.dev"
+            ],
+            "port": 4201
+          }
+        }
+      }
     }
   }
 }

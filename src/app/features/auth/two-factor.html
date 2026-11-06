@@ -117,7 +117,7 @@
       <p class="eyebrow">You’re all set</p>
       <h1 class="screen-title" #heading tabindex="-1">Two-factor authentication is on</h1>
       <p class="screen-lead">From now on you’ll enter a code from your authenticator app each time you sign in. You can replace your authenticator or get new recovery codes from <strong>Account security</strong>.</p>
-      <button type="button" class="btn-primary" (click)="continue()">Continue to Global Platform</button>
+      <button type="button" class="btn-primary" (click)="continue()">Continue to {{ app.productName }}</button>
     }
 
     <!-- ------------------------------------------------ Sign-in: authenticator code -->
@@ -205,7 +205,7 @@
       <div class="icon-tile success"><app-icon name="check-circle" [size]="22" /></div>
       <p class="eyebrow">Verified</p>
       <h1 class="screen-title" #heading tabindex="-1">You’re signed in</h1>
-      <p class="screen-lead">Taking you to Global Platform…</p>
+      <p class="screen-lead">Taking you to {{ app.productName }}…</p>
       <button type="button" class="btn-primary" (click)="continue()">Continue</button>
     }
 

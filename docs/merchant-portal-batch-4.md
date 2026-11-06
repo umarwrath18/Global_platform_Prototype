@@ -2,6 +2,13 @@
 
 Status: **Built on sample data. Needs Mobi's transaction and balance APIs before it can show real figures.**
 
+> **Update: separate app.** The Merchant Portal is now its own app with its own URL
+> (`projects/merchant-portal`, local port 4201; Vercel project with `PORTAL=merchant`). Its routes are
+> `/dashboard`, `/transactions` and `/account-security` (previously `/merchant/...` inside the Global
+> Platform app). The merchant screens were removed from the Global Platform app. Sign-in sends the
+> app's portal, and the server refuses the other kind of user (`WRONG_PORTAL`, after the password
+> check). See the README section "Two apps in this repository".
+
 ## 1. Decisions confirmed before build
 
 | Question | Decision |

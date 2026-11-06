@@ -397,6 +397,14 @@ export class AuthServer {
       fail(403, denial);
     }
 
+    // Each app (Global Platform, Merchant Portal) only signs in its own kind of user.
+    const userPortal = u.portal === 'merchant' ? 'merchant' : 'internal';
+    if ((body?.portal === 'internal' || body?.portal === 'merchant') && body.portal !== userPortal) {
+      this.audit(db, 'LOGIN_WRONG_PORTAL', { userId: u.id, accountId: account.id, detail: `${userPortal}_user_at_${body.portal}_portal` });
+      this.save(db);
+      fail(403, 'WRONG_PORTAL');
+    }
+
     // FR-01/FR-03: a correct password never creates a session on its own.
     const mfa = db.mfa[u.id];
     if (mfa.blockedAt) {
@@ -937,7 +945,8 @@ export class AuthServer {
       permissions: role.permissions,
       countries: this.countriesFor(account),
       baseCurrency: BASE_CURRENCY,
-      landingPath: user.portal === 'merchant' ? '/merchant/dashboard' : '/dashboard',
+      // Each app has its own /dashboard (Global Platform or Merchant Portal).
+      landingPath: '/dashboard',
       portal: user.portal === 'merchant' ? 'merchant' : 'internal',
       merchant: user.portal === 'merchant' && user.merchantId ? { id: user.merchantId, name: this.opts.merchantName?.(user.merchantId) ?? account.name } : null,
       idleExpiresAt: session.lastSeenAt + AUTH_POLICY.sessionIdleMs,

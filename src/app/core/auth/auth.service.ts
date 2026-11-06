@@ -1,6 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
+import { APP_PORTAL } from '../app-portal';
 import { firstValueFrom } from 'rxjs';
 import {
   ApiErrorCode,
@@ -30,7 +31,8 @@ export type SignedOutReason =
   | 'signin-required'
   | 'mfa-required'
   | 'mfa-blocked'
-  | 'mfa-reset';
+  | 'mfa-reset'
+  | 'wrong-portal';
 
 const REASON_BY_CODE: Partial<Record<ApiErrorCode, SignedOutReason>> = {
   SESSION_EXPIRED: 'session-expired',
@@ -64,6 +66,7 @@ function safeStorage<T>(fn: () => T, fallback: T): T {
 export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly router = inject(Router);
+  private readonly app = inject(APP_PORTAL);
 
   private readonly sessionState = signal<SessionView | null>(null);
   private restored: Promise<void> | null = null;
@@ -90,7 +93,7 @@ export class AuthService {
    * "Remember this device" only remembers the Global Account ID; it never skips 2FA.
    */
   async login(loginId: string, password: string, rememberDevice: boolean): Promise<PendingSignIn> {
-    const res = await firstValueFrom(this.http.post<LoginResponse>('/api/auth/login', { loginId, password }));
+    const res = await firstValueFrom(this.http.post<LoginResponse>('/api/auth/login', { loginId, password, portal: this.app.portal }));
     safeStorage(() => (rememberDevice ? localStorage.setItem(REMEMBERED_ID_KEY, loginId) : localStorage.removeItem(REMEMBERED_ID_KEY)), undefined);
     const pending: PendingSignIn = { ...res, expiresAt: Date.now() + res.expiresInSec * 1000 };
     this.setPending(pending);
@@ -189,6 +192,12 @@ export class AuthService {
   /** Re-reads the session (e.g. after a country is activated) without extending it. */
   refresh() {
     return this.checkStatus(false);
+  }
+
+  /** Ends a session that belongs to the other portal (e.g. restored from an older build). */
+  signOutWrongPortal() {
+    void firstValueFrom(this.http.post('/api/auth/logout', {})).catch(() => undefined);
+    this.endSession('wrong-portal');
   }
 
   /** Called by the HTTP interceptor when a protected request is rejected as unauthenticated. */

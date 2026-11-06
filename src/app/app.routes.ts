@@ -23,32 +23,7 @@ export const routes: Routes = [
     loadComponent: () => import('./features/auth/forgot-password').then((m) => m.ForgotPassword),
   },
   {
-    // Merchant Portal: what a merchant's own users see (Dashboard and My Transactions only).
-    path: 'merchant',
-    canActivate: [authGuard, portalGuard('merchant')],
-    canActivateChild: [authGuard, portalGuard('merchant')],
-    loadComponent: () => import('./features/merchant-portal/merchant-shell').then((m) => m.MerchantShell),
-    children: [
-      { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
-      {
-        path: 'dashboard',
-        title: 'Dashboard · Mobi Merchant Portal',
-        loadComponent: () => import('./features/merchant-portal/merchant-dashboard').then((m) => m.MerchantDashboard),
-      },
-      {
-        path: 'transactions',
-        title: 'My Transactions · Mobi Merchant Portal',
-        loadComponent: () => import('./features/merchant-portal/merchant-transactions').then((m) => m.MerchantTransactions),
-      },
-      {
-        path: 'account-security',
-        title: 'Account security · Mobi Merchant Portal',
-        loadComponent: () => import('./features/security/account-security').then((m) => m.AccountSecurity),
-      },
-    ],
-  },
-  {
-    // Signed-in layout shared by the dashboard and Merchant Management (internal users only).
+    // Signed-in layout shared by the dashboard and Merchant Management (internal users only; merchant users use the separate Mobi Merchant Portal app).
     path: '',
     canActivate: [authGuard, portalGuard('internal')],
     canActivateChild: [authGuard, portalGuard('internal')],

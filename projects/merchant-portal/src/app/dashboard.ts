@@ -1,9 +1,9 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { DATE_PRESET_LABEL, DatePreset, formatAmount, MerchantPortalOverview, TransactionSummary } from '../../core/merchants/merchant-portal';
-import { MerchantPortalApi } from '../../core/merchants/merchant-portal-api.service';
-import { Icon } from '../../shared/icon';
-import { fmtDateTime } from '../../shared/merchant-ui';
+import { DATE_PRESET_LABEL, DatePreset, formatAmount, MerchantPortalOverview, TransactionSummary } from '@gp/core/merchants/merchant-portal';
+import { MerchantPortalApi } from '@gp/core/merchants/merchant-portal-api.service';
+import { Icon } from '@gp/shared/icon';
+import { fmtDateTime } from '@gp/shared/merchant-ui';
 
 /** Merchant Dashboard: available balance and a minimal transaction summary. Nothing else. */
 @Component({
@@ -84,7 +84,7 @@ import { fmtDateTime } from '../../shared/merchant-ui';
             @if (summary()?.total === 0) {
               <p class="empty-line">No transactions in this period.</p>
             }
-            <a class="link-button view-all" routerLink="/merchant/transactions">View my transactions <app-icon name="arrow-right" [size]="14" /></a>
+            <a class="link-button view-all" routerLink="/transactions">View my transactions <app-icon name="arrow-right" [size]="14" /></a>
           }
         </div>
       </section>

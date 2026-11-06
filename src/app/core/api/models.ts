@@ -32,6 +32,8 @@ export interface SessionView {
 export interface LoginRequest {
   loginId: string;
   password: string;
+  /** The app signing in; a user of the other kind is refused with WRONG_PORTAL. */
+  portal?: 'internal' | 'merchant';
 }
 
 /**
@@ -219,7 +221,8 @@ export type ApiErrorCode =
   | 'ROLE_NOT_PERMITTED'
   | 'RESET_REQUEST_REQUIRED'
   | 'RESET_REQUEST_EXISTS'
-  | 'NOT_BLOCKED';
+  | 'NOT_BLOCKED'
+  | 'WRONG_PORTAL';
 
 export interface ApiErrorBody {
   code: ApiErrorCode;

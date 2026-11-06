@@ -34,9 +34,19 @@ describe('Merchant portal', () => {
   describe('session', () => {
     it('marks merchant users and lands them on the merchant dashboard', async () => {
       const s = (await auth.handle('GET', '/api/auth/session', null, tanjung)).body as any;
-      expect(s).toMatchObject({ portal: 'merchant', landingPath: '/merchant/dashboard', merchant: { id: 'GM-100101', name: 'Tanjung Global Trading Sdn Bhd' } });
+      expect(s).toMatchObject({ portal: 'merchant', landingPath: '/dashboard', merchant: { id: 'GM-100101', name: 'Tanjung Global Trading Sdn Bhd' } });
       const internal = (await auth.handle('GET', '/api/auth/session', null, await signIn(auth, '123'))).body as any;
       expect(internal).toMatchObject({ portal: 'internal', landingPath: '/dashboard', merchant: null });
+    });
+
+    it('each app signs in only its own kind of user (checked after the password)', async () => {
+      const login = (loginId: string, portal: string, password = 'Mobi@123') => auth.handle('POST', '/api/auth/login', { loginId, password, portal }, null);
+      expect(await login('TANJUNG-MERCHANT', 'internal')).toEqual({ status: 403, body: { code: 'WRONG_PORTAL' } });
+      expect(await login('123', 'merchant')).toEqual({ status: 403, body: { code: 'WRONG_PORTAL' } });
+      // A wrong password gives the usual answer, so the check reveals nothing about the account.
+      expect((await login('TANJUNG-MERCHANT', 'internal', 'wrong')).body).toEqual({ code: 'INVALID_CREDENTIALS' });
+      expect((await login('TANJUNG-MERCHANT', 'merchant')).status).toBe(200);
+      expect((await login('123', 'internal')).status).toBe(200);
     });
 
     it('requires completed 2FA: a password alone gives no access', async () => {

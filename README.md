@@ -15,21 +15,43 @@ There is no real server or database. A simulated backend runs in the browser
 backend would, so it can later be replaced by Mobi's real API without changing the screens.
 Batch 2 merchant data is kept separately under `mobi.gp.merchantdb`.
 
+## Two apps in this repository
+
+| App | Who signs in | Code | Local URL |
+| --- | --- | --- | --- |
+| **Mobi Global Platform** (internal) | Mobi staff demo users (`123`, `TANJUNG-ADMIN`, …) | `src/` | http://localhost:4200 |
+| **Mobi Merchant Portal** | Merchant users (`TANJUNG-MERCHANT`, `LUMI-MERCHANT`) | `projects/merchant-portal/` | http://localhost:4201 |
+
+They share the sign-in screens, 2FA, design, API services and the simulated backend (in `src/app`,
+which the merchant app imports as `@gp/...`). Each app only lets in its own kind of user: a merchant
+account at the Global Platform, or an internal account at the Merchant Portal, gets "Use the other
+portal" after the password check. The server enforces this too.
+
 ## Run locally
 
 ```bash
 npm install
-npm start          # http://localhost:4200
-npm test           # unit tests for the auth and merchant onboarding rules
-npm run build      # production build → dist/global-platform/browser
+npm start                  # Global Platform  → http://localhost:4200
+npm run start:merchant     # Merchant Portal  → http://localhost:4201 (run in a second terminal)
+npm test                   # unit tests (auth, 2FA, merchant onboarding, merchant portal)
+npm run build              # Global Platform production build → dist/global-platform/browser
+npm run build:merchant     # Merchant Portal production build → dist/merchant-portal/browser
 ```
 
 ### Running in GitHub Codespaces
 
-Run `npm start`, then open the **Ports** tab and click the globe icon next to port **4200**.
-The dev server already allows `*.app.github.dev` addresses (see `allowedHosts` in
-`angular.json`). If you see a "page can't be found" or "Blocked request" page, pull the
-latest `main` and restart `npm start`.
+1. Terminal 1: `npm start`. Terminal 2 (the **+** in the terminal panel): `npm run start:merchant`.
+2. Open the **Ports** tab: click the globe icon next to **4200** for the Global Platform and next to
+   **4201** for the Merchant Portal.
+
+The dev servers already allow `*.app.github.dev` addresses (see `allowedHosts` in `angular.json`).
+If you see a "page can't be found" or "Blocked request" page, pull the latest `main` and restart.
+
+**Sample data is separate per app.** The simulated backend keeps its data in the browser, and the
+browser keeps data separate for each address. So the two apps don't share demo data: a change made
+in the Global Platform (for example switching a payment method on) doesn't show in the Merchant
+Portal. Each app starts from the same demo data. Once Mobi's real backend is connected, both apps
+read the same server and this goes away.
 
 ## Demo accounts
 
@@ -56,7 +78,8 @@ screen in an **Email preview** card instead of being emailed.
 
 ### Merchant Portal (Batch 4)
 
-Sign in as `TANJUNG-MERCHANT` (after 2FA) to see what a merchant sees. There are only two screens:
+Open the **Merchant Portal app** (http://localhost:4201 locally) and sign in as `TANJUNG-MERCHANT`
+(after 2FA). There are only two screens:
 - **Dashboard:** available balance (one figure per currency the merchant trades in, never converted),
   and total, successful and failed transaction counts for Today, Last 7 days or Last 30 days.
 - **My Transactions:** invoice ID, transaction ID, payment method, date and time, amount, currency and
@@ -248,10 +271,25 @@ mobiDemo.clearMccCatalogue()         // remove the catalogue; assigned merchant 
 mobiDemo.strictValidation(true)      // full production validation (reload after)
 ```
 
-## Deploy to Vercel
+## Deploy to Vercel (two projects, two URLs)
 
-`vercel.json` is included. In Vercel: **Add New → Project → Import** this
-repository → **Deploy**. No environment variables are needed.
+Both apps deploy from this one repository, as **two Vercel projects**. `vercel.json` runs
+`npm run vercel-build`, which builds the app named by the `PORTAL` environment variable and puts
+it in `dist/vercel`.
+
+| Vercel project | Environment variable | Result |
+| --- | --- | --- |
+| Global Platform (your existing project) | none needed (or `PORTAL` = `internal`) | internal portal, unchanged |
+| Merchant Portal (new project) | `PORTAL` = `merchant` | Mobi Merchant Portal |
+
+To create the Merchant Portal project:
+1. In Vercel: **Add New → Project → Import** this same repository.
+2. Give it a name, e.g. `mobi-merchant-portal`.
+3. Open **Environment Variables**, add `PORTAL` with value `merchant` (all environments), then **Deploy**.
+4. Optional: **Settings → Domains** to add a custom domain, e.g. `merchant.mobi.xyz`.
+
+Every push to `main` redeploys both projects. If you created the Merchant Portal project before
+adding `PORTAL`, add it and choose **Redeploy**.
 
 ## Documentation
 

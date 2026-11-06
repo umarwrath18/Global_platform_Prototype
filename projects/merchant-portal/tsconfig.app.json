@@ -1,0 +1,10 @@
+/* Mobi Merchant Portal app. Shared code is imported from the Global Platform app via @gp/*. */
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "../../out-tsc/merchant-portal",
+    "types": []
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.spec.ts"]
+}

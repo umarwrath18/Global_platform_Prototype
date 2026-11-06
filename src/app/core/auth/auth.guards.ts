@@ -31,7 +31,10 @@ export const portalGuard =
     await auth.restore();
     const session = auth.session();
     if (!session) return router.createUrlTree(['/login'], { queryParams: { reason: 'signin-required' } });
-    return session.portal === portal ? true : router.parseUrl(session.landingPath);
+    if (session.portal === portal) return true;
+    // Sign-in already refuses the other kind of user; this only catches an old, restored session.
+    auth.signOutWrongPortal();
+    return false;
   };
 
 /** The 2FA step is only reachable after a correct password, and never once signed in. */

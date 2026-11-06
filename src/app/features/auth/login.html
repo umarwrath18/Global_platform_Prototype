@@ -1,7 +1,7 @@
 <app-auth-shell>
   <div class="brand-mark" aria-hidden="true"><img src="brand/mobi-mark-white.svg" alt="" /></div>
   <p class="eyebrow">Welcome back</p>
-  <h1 class="screen-title">Sign in to Global Platform</h1>
+  <h1 class="screen-title">Sign in to {{ app.productName }}</h1>
   <p class="screen-lead">
     Enter your Global Account ID and password to continue.
     <button type="button" class="link-button samples-toggle" (click)="showSamples.set(!showSamples())" [attr.aria-expanded]="showSamples()" aria-controls="sample-accounts">

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
-import { toClientError } from '../../core/api/api-error';
+import { toClientError } from '@gp/core/api/api-error';
 import {
   DATE_PRESET_LABEL,
   DatePreset,
@@ -9,10 +9,10 @@ import {
   TransactionPage,
   TransactionQuery,
   TransactionStatus,
-} from '../../core/merchants/merchant-portal';
-import { MerchantPortalApi } from '../../core/merchants/merchant-portal-api.service';
-import { Icon } from '../../shared/icon';
-import { fmtDateTime } from '../../shared/merchant-ui';
+} from '@gp/core/merchants/merchant-portal';
+import { MerchantPortalApi } from '@gp/core/merchants/merchant-portal-api.service';
+import { Icon } from '@gp/shared/icon';
+import { fmtDateTime } from '@gp/shared/merchant-ui';
 
 const STATUS_TONE: Record<TransactionStatus, string> = { successful: 'success', failed: 'danger', pending: 'warning', refunded: 'info' };
 const PAGE_SIZE = 25;

@@ -1,13 +1,13 @@
 import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { AuthService } from '../../core/auth/auth.service';
-import { Icon, IconName } from '../../shared/icon';
-import { MobiLogo } from '../../shared/mobi-logo';
+import { AuthService } from '@gp/core/auth/auth.service';
+import { Icon, IconName } from '@gp/shared/icon';
+import { MobiLogo } from '@gp/shared/mobi-logo';
 
 /** Merchant navigation is exactly these two screens. */
 const NAV: { label: string; icon: IconName; link: string }[] = [
-  { label: 'Dashboard', icon: 'grid', link: '/merchant/dashboard' },
-  { label: 'My Transactions', icon: 'swap', link: '/merchant/transactions' },
+  { label: 'Dashboard', icon: 'grid', link: '/dashboard' },
+  { label: 'My Transactions', icon: 'swap', link: '/transactions' },
 ];
 
 /**
@@ -18,7 +18,7 @@ const NAV: { label: string; icon: IconName; link: string }[] = [
   selector: 'app-merchant-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterOutlet, RouterLink, RouterLinkActive, MobiLogo, Icon],
-  styleUrl: '../../shared/portal-shell.scss',
+  styleUrl: '../../../../src/app/shared/portal-shell.scss',
   host: {
     '[class.mobile-open]': 'mobileOpen()',
     '(document:click)': 'onDocumentClick($event)',
@@ -28,7 +28,7 @@ const NAV: { label: string; icon: IconName; link: string }[] = [
     @if (session(); as s) {
       <aside class="sidebar" aria-label="Main navigation">
         <div class="brand">
-          <a routerLink="/merchant/dashboard" class="home-link" aria-label="Mobi Merchant Portal home" (click)="mobileOpen.set(false)">
+          <a routerLink="/dashboard" class="home-link" aria-label="Mobi Merchant Portal home" (click)="mobileOpen.set(false)">
             <img class="mini-logo" src="brand/mobi-mark-white.svg" alt="" aria-hidden="true" />
             <app-mobi-logo class="full-logo" [showProduct]="false" style="--logo-size: 34px" />
           </a>
@@ -71,7 +71,7 @@ const NAV: { label: string; icon: IconName; link: string }[] = [
                 <strong>{{ s.user.name }}</strong>
                 <span>{{ s.user.email }}</span>
               </div>
-              <a role="menuitem" routerLink="/merchant/account-security" (click)="menuOpen.set(false); mobileOpen.set(false)"><app-icon name="shield" [size]="16" />Account security</a>
+              <a role="menuitem" routerLink="/account-security" (click)="menuOpen.set(false); mobileOpen.set(false)"><app-icon name="shield" [size]="16" />Account security</a>
               <button type="button" role="menuitem" (click)="logout()"><app-icon name="logout" [size]="16" />Sign out</button>
             </div>
           }

@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, i
 import { ActivatedRoute, Router } from '@angular/router';
 import { ClientError, formatClock, toClientError } from '../../core/api/api-error';
 import { AuthenticatorEnrolment } from '../../core/api/models';
+import { APP_PORTAL } from '../../core/app-portal';
 import { safeReturnUrl } from '../../core/auth/auth.guards';
 import { AuthService } from '../../core/auth/auth.service';
 import { AuthenticatorQr } from '../../shared/authenticator-qr';
@@ -43,6 +44,7 @@ export class TwoFactor {
   private readonly codeInput = viewChild<ElementRef<HTMLInputElement>>('codeInput');
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
 
+  protected readonly app = inject(APP_PORTAL);
   protected readonly pending = this.auth.pending;
   protected readonly view = signal<View>(this.initialView());
   protected readonly busy = signal(false);

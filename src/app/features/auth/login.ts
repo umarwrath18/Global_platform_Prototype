@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, i
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ClientError, formatDuration, toClientError } from '../../core/api/api-error';
+import { APP_PORTAL } from '../../core/app-portal';
 import { safeReturnUrl } from '../../core/auth/auth.guards';
 import { AuthService, SignedOutReason } from '../../core/auth/auth.service';
 import { DEMO_ACCOUNT_GUIDE, DEMO_PASSWORD } from '../../core/mock-server/seed';
@@ -24,6 +25,7 @@ const REASON_NOTICES: Record<SignedOutReason | 'password-reset', Notice> = {
   'password-reset': { tone: 'success', text: 'Password updated. Sign in with your new password.' },
   'mfa-required': { tone: 'info', title: 'Two-factor authentication is now required', text: 'For your security, please sign in again and set up an authenticator app to continue.' },
   'mfa-blocked': { tone: 'danger', title: 'Sign-in blocked', text: 'Too many incorrect authentication codes. Mobi’s security team has been alerted. Please contact Mobi Support to restore access.' },
+  'wrong-portal': { tone: 'warning', text: 'You were signed out because this account belongs to the other Mobi portal.' },
   'mfa-reset': { tone: 'warning', title: 'Two-factor authentication was reset', text: 'Sign in again and register a new authenticator app to continue.' },
 };
 
@@ -56,7 +58,9 @@ export class Login {
   protected readonly now = signal(Date.now());
   protected readonly notice = signal<Notice | null>(null);
 
-  protected readonly demoAccounts = DEMO_ACCOUNT_GUIDE;
+  protected readonly app = inject(APP_PORTAL);
+  // Each app lists only the test accounts that can sign in to it.
+  protected readonly demoAccounts = DEMO_ACCOUNT_GUIDE.filter((a) => (a.portal ?? 'internal') === this.app.portal);
   protected readonly demoPassword = DEMO_PASSWORD;
 
   protected readonly lockRemainingSec = computed(() => Math.max(0, (this.lockedUntil() - this.now()) / 1000));
@@ -81,6 +85,10 @@ export class Login {
         return { tone: 'danger', title: 'Account inactive', text: 'This Global Account is not active. Please contact Mobi Support for assistance.' };
       case 'USER_DISABLED':
         return { tone: 'danger', title: 'Access disabled', text: 'Your user access has been disabled. Please contact Mobi Support for assistance.' };
+      case 'WRONG_PORTAL':
+        return this.app.portal === 'merchant'
+          ? { tone: 'warning', title: 'Use the Global Platform', text: 'This account is for Mobi’s Global Platform, not the Merchant Portal. Sign in there instead.' }
+          : { tone: 'warning', title: 'Use the Merchant Portal', text: 'This is a merchant account. Sign in at the Mobi Merchant Portal instead.' };
       case 'MFA_BLOCKED':
         return { tone: 'danger', title: 'Sign-in blocked', text: 'Too many incorrect authentication codes were entered. Mobi’s security team has been alerted. Please contact Mobi Support to restore access.' };
       case 'NETWORK_ERROR':
