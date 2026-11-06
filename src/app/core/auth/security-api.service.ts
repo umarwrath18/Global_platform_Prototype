@@ -3,7 +3,6 @@ import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import {
   AccountSecurityView,
-  RecoveryCodesResponse,
   ReplaceAuthenticatorStart,
   SecurityAuditView,
   SecurityOverview,
@@ -29,10 +28,6 @@ export class SecurityApi {
 
   confirmReplacement(replaceToken: string, code: string) {
     return firstValueFrom(this.http.post<void>('/api/account/security/authenticator/replace/confirm', { replaceToken, code }));
-  }
-
-  regenerateRecoveryCodes(code: string) {
-    return firstValueFrom(this.http.post<RecoveryCodesResponse>('/api/account/security/recovery-codes', { code }));
   }
 
   // ---- Administration ----

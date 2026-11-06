@@ -28,17 +28,6 @@
           <div><dt>Method</dt><dd>Authenticator app (time-based code)</dd></div>
           <div><dt>Registered</dt><dd>{{ v.enrolledAt ? dateTime(v.enrolledAt) : '—' }}</dd></div>
           <div><dt>Last used</dt><dd>{{ v.lastUsedAt ? rel(v.lastUsedAt) : '—' }}</dd></div>
-          <div>
-            <dt>Recovery codes</dt>
-            <dd>
-              {{ v.recoveryCodesRemaining }} of {{ v.recoveryCodesTotal || 2 }} left
-              @if (v.recoveryCodesRemaining === 0) {
-                <span class="status danger">None left</span>
-              } @else if (v.recoveryCodesRemaining < (v.recoveryCodesTotal || 2)) {
-                <span class="status warning">Running low</span>
-              }
-            </dd>
-          </div>
         </dl>
       </div>
     </section>
@@ -82,7 +71,7 @@
               <app-icon name="info" />
               <div>
                 <strong>Lost your current authenticator?</strong>
-                Sign out and use a recovery code at sign-in: you’ll then register a new authenticator straight away. No recovery codes left? Contact Mobi Support. They’ll open a reset request, and an authorised administrator will verify your identity before resetting 2FA.
+                Contact Mobi Support. They’ll open a reset request, and an authorised administrator will verify your identity before resetting 2FA. You’ll then set up your new phone the next time you sign in.
               </div>
             </div>
             <div class="flow-foot">
@@ -124,42 +113,6 @@
       }
     </section>
 
-    <!-- ---------------------------------------------- Recovery codes -->
-    <section class="panel-card">
-      <div class="panel-head">
-        <div>
-          <h2>Recovery codes</h2>
-          <p>Single-use codes for signing in if you lose your phone. Generating new codes cancels the old ones.</p>
-        </div>
-        @if (codesStep() === 'idle') {
-          <button type="button" class="btn" (click)="startCodes()"><app-icon name="rotate" [size]="16" />Generate new codes</button>
-        }
-      </div>
-      @switch (codesStep()) {
-        @case ('current') {
-          <div class="panel-body flow">
-            <p class="lead">Enter the current code from your authenticator to generate {{ 2 }} new recovery codes.</p>
-            @if (errorText(); as msg) {
-              <div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ msg }}</div></div>
-            }
-            <form class="code-form" (submit)="$event.preventDefault(); regenerate()" novalidate>
-              <label class="f-label" for="codes-current">Authenticator code</label>
-              <div class="code-row">
-                <input id="codes-current" class="input code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" (input)="onCode($any($event.target).value, $any($event.target))" />
-                <button type="submit" class="btn primary" [disabled]="code().length !== 6 || busy()">@if (busy()) {<span class="spinner" aria-hidden="true"></span>}Generate</button>
-              </div>
-            </form>
-            <div class="flow-foot"><span></span><button type="button" class="btn sm" (click)="cancelCodes()">Cancel</button></div>
-          </div>
-        }
-        @case ('show') {
-          <div class="panel-body flow">
-            <app-recovery-codes [codes]="newCodes()" [accountLabel]="session()?.user?.loginId ?? ''" [(acknowledged)]="codesSaved" />
-            <div class="flow-foot"><span></span><button type="button" class="btn primary" [disabled]="!codesSaved()" (click)="doneCodes()">Done</button></div>
-          </div>
-        }
-      }
-    </section>
   } @else if (!loadError()) {
     <section class="panel-card"><div class="skeleton-rows"><span></span><span></span><span></span></div></section>
   }

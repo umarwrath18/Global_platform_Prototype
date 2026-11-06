@@ -48,13 +48,12 @@ describe('Two-factor authentication', () => {
   const demoCode = async (kind: 'challenge' | 'session' | 'replace', token: string) => (await server.demoAuthenticator(kind, token))!.code;
   const wrong = (code: string) => String((Number(code) + 500_000) % 1_000_000).padStart(6, '0');
 
-  /** First-time setup for a user without 2FA; returns the secret and recovery codes. */
+  /** First-time setup for a user without 2FA; returns the secret and the new session. */
   async function enrol(loginId: string) {
     const token = await challenge(loginId);
     const enrol = (await call('POST', '/api/auth/mfa/setup', { challengeToken: token })).body as any;
-    const verified = await call('POST', '/api/auth/mfa/setup/verify', { challengeToken: token, code: await totpAt(enrol.secret, now) });
-    const done = await call('POST', '/api/auth/mfa/setup/complete', { challengeToken: token, acknowledged: true });
-    return { secret: enrol.secret as string, codes: (verified.body as any).recoveryCodes as string[], session: (done.body as any).token as string };
+    const done = await call('POST', '/api/auth/mfa/setup/verify', { challengeToken: token, code: await totpAt(enrol.secret, now) });
+    return { secret: enrol.secret as string, session: (done.body as any).token as string };
   }
 
   beforeEach(() => {
@@ -79,28 +78,21 @@ describe('Two-factor authentication', () => {
       const e = (await call('POST', '/api/auth/mfa/setup', { challengeToken: token })).body as any;
       const bad = await call('POST', '/api/auth/mfa/setup/verify', { challengeToken: token, code: wrong(await totpAt(e.secret, now)) });
       expect(bad).toEqual({ status: 400, body: { code: 'MFA_CODE_INVALID', attemptsRemaining: MFA_POLICY.setupMaxAttempts - 1 } });
-      expect((await call('POST', '/api/auth/mfa/setup/complete', { challengeToken: token, acknowledged: true })).body).toEqual({ code: 'MFA_STAGE_INVALID' });
       // Still not enrolled on the next sign-in.
       expect(((await login('123')).body as any).stage).toBe('setup');
     });
 
-    it('cannot be skipped: verify and recovery are refused during setup', async () => {
+    it('cannot be skipped: entering a sign-in code is refused during setup', async () => {
       const token = await challenge('123');
       expect((await call('POST', '/api/auth/mfa/verify', { challengeToken: token, code: '123456' })).body).toEqual({ code: 'MFA_STAGE_INVALID' });
-      expect((await call('POST', '/api/auth/mfa/recovery', { challengeToken: token, code: 'AAAA-BBBB-CCCC' })).body).toEqual({ code: 'MFA_STAGE_INVALID' });
     });
 
-    it('activates on a valid code, issues 2 unique recovery codes, and needs acknowledgement before a session', async () => {
+    it('activates on a valid code and signs the user in, with no recovery codes', async () => {
       const token = await challenge('123');
       const e = (await call('POST', '/api/auth/mfa/setup', { challengeToken: token })).body as any;
-      const res = await call('POST', '/api/auth/mfa/setup/verify', { challengeToken: token, code: await totpAt(e.secret, now) });
-      const codes = (res.body as any).recoveryCodes as string[];
-      expect(codes).toHaveLength(2);
-      expect(new Set(codes).size).toBe(2);
-      codes.forEach((c) => expect(c).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/));
-      expect((await call('POST', '/api/auth/mfa/setup/complete', { challengeToken: token })).body).toEqual({ code: 'ACK_REQUIRED' });
-      const done = await call('POST', '/api/auth/mfa/setup/complete', { challengeToken: token, acknowledged: true });
+      const done = await call('POST', '/api/auth/mfa/setup/verify', { challengeToken: token, code: await totpAt(e.secret, now) });
       expect(done.status).toBe(200);
+      expect(done.body).not.toHaveProperty('recoveryCodes');
       expect((await call('GET', '/api/auth/session', null, (done.body as any).token)).status).toBe(200);
       // Next sign-in asks for a code instead.
       expect(((await login('123')).body as any).stage).toBe('verify');
@@ -114,14 +106,10 @@ describe('Two-factor authentication', () => {
       expect((await call('POST', '/api/auth/mfa/setup', { challengeToken: token })).body).toEqual({ code: 'MFA_CHALLENGE_EXPIRED' });
     });
 
-    it('stores the secret encrypted and recovery codes only as hashes', async () => {
-      const { secret, codes } = await enrol('123');
+    it('stores the secret encrypted', async () => {
+      const { secret } = await enrol('123');
       const raw = [...storage.data.values()].join('\n');
       expect(raw).not.toContain(secret);
-      codes.forEach((c) => {
-        expect(raw).not.toContain(c);
-        expect(raw).not.toContain(c.replace(/-/g, ''));
-      });
     });
   });
 
@@ -203,55 +191,32 @@ describe('Two-factor authentication', () => {
     });
   });
 
-  describe('FR-04 recovery codes', () => {
-    it('lets a code replace the TOTP once, then forces a new authenticator before access', async () => {
-      const { secret: oldSecret, codes } = await enrol('123');
+  describe('FR-04 no recovery codes: lost device goes through Mobi Support', () => {
+    it('has no recovery-code sign-in or regeneration', async () => {
+      const { session } = await enrol('123');
       nextStep();
-      const token = await challenge('123');
-      const used = await call('POST', '/api/auth/mfa/recovery', { challengeToken: token, code: codes[0].toLowerCase() });
-      expect(used.body).toEqual({ stage: 'rebind', recoveryCodesRemaining: 1 });
-      // No session yet: a new authenticator must be registered.
-      expect((await call('POST', '/api/auth/mfa/setup/complete', { challengeToken: token, acknowledged: true })).body).toEqual({ code: 'MFA_STAGE_INVALID' });
-      const e = (await call('POST', '/api/auth/mfa/setup', { challengeToken: token })).body as any;
-      expect(e.secret).not.toBe(oldSecret);
-      const verified = await call('POST', '/api/auth/mfa/setup/verify', { challengeToken: token, code: await totpAt(e.secret, now) });
-      const fresh = (verified.body as any).recoveryCodes as string[];
-      expect(fresh).toHaveLength(2);
-      expect((await call('POST', '/api/auth/mfa/setup/complete', { challengeToken: token, acknowledged: true })).status).toBe(200);
-      expect(emails.at(-1)).toMatchObject({ subject: 'Your Mobi authenticator was replaced' });
-
-      // The old authenticator and old recovery codes no longer work.
-      nextStep();
-      const t2 = await challenge('123');
-      expect(((await call('POST', '/api/auth/mfa/verify', { challengeToken: t2, code: await totpAt(oldSecret, now) })).body as any).code).toBe('MFA_CODE_INVALID');
-      expect(((await call('POST', '/api/auth/mfa/recovery', { challengeToken: t2, code: codes[1] })).body as any).code).toBe('MFA_CODE_INVALID');
-    });
-
-    it('rejects a used recovery code', async () => {
-      const { codes } = await enrol('123');
       const t = await challenge('123');
-      await call('POST', '/api/auth/mfa/recovery', { challengeToken: t, code: codes[0] });
-      // Abandon the rebind (no new authenticator) and try the same code again.
-      const t2 = await challenge('123');
-      expect((await call('POST', '/api/auth/mfa/recovery', { challengeToken: t2, code: codes[0] })).body).toEqual({ code: 'RECOVERY_CODE_USED', attemptsRemaining: 3 });
+      expect((await call('POST', '/api/auth/mfa/recovery', { challengeToken: t, code: 'AAAA-BBBB-CCCC' })).status).toBe(404);
+      expect((await call('POST', '/api/account/security/recovery-codes', { code: await demoCode('session', session) }, session)).status).toBe(404);
+      expect((await call('GET', '/api/account/security', null, session)).body).not.toHaveProperty('recoveryCodesRemaining');
     });
 
-    it('reports when all recovery codes are used', async () => {
-      const { codes } = await enrol('123');
-      for (const c of codes) await call('POST', '/api/auth/mfa/recovery', { challengeToken: await challenge('123'), code: c });
-      expect((await call('POST', '/api/auth/mfa/recovery', { challengeToken: await challenge('123'), code: 'AAAA-BBBB-CCCC' })).body).toEqual({ code: 'RECOVERY_CODES_EXHAUSTED' });
-    });
-
-    it('regenerating codes requires the current code and invalidates the old ones', async () => {
-      const { codes, session } = await enrol('123');
-      nextStep();
-      expect((await call('POST', '/api/account/security/recovery-codes', { code: '000000' }, session)).body).toEqual({ code: 'MFA_CODE_INVALID', attemptsRemaining: 3 });
-      const res = await call('POST', '/api/account/security/recovery-codes', { code: await demoCode('session', session) }, session);
-      const fresh = (res.body as any).recoveryCodes as string[];
-      expect(fresh).toHaveLength(2);
-      expect(fresh).not.toContain(codes[0]);
-      const t = await challenge('123');
-      expect(((await call('POST', '/api/auth/mfa/recovery', { challengeToken: t, code: codes[0] })).body as any).code).toBe('MFA_CODE_INVALID');
+    it('removes recovery codes stored by the previous build, keeping everything else', async () => {
+      await server.resetAll();
+      const key = 'mobi.gp.mockdb';
+      const db = JSON.parse(storage.getItem(key)!);
+      db.version = 7;
+      db.mfa['U-2'].recovery = [{ hash: 'abc', usedAt: null }];
+      db.mfa['U-2'].recoveryGeneratedAt = now;
+      db.challenges.push({ tokenHash: 'x', userId: 'U-2', stage: 'rebind', expiresAt: now + 60_000, pendingSecretEnc: null, setupAttempts: 0 });
+      storage.setItem(key, JSON.stringify(db));
+      const upgraded = new AuthServer({ storage, now: () => now, pbkdf2Iterations: 1000, sendEmail: () => undefined });
+      expect(((await upgraded.handle('POST', '/api/auth/login', { loginId: 'TANJUNG-ADMIN', password: DEMO_PASSWORD }, null)).body as any).stage).toBe('verify');
+      const after = JSON.parse(storage.getItem(key)!);
+      expect(after.version).toBe(8);
+      expect(after.mfa['U-2']).not.toHaveProperty('recovery');
+      expect(after.mfa['U-2'].status).toBe('active');
+      expect(after.challenges.some((c: any) => c.stage === 'rebind')).toBe(false);
     });
   });
 
@@ -306,12 +271,11 @@ describe('Two-factor authentication', () => {
       expect((await call('POST', '/api/security/reset-requests', { userId: 'U-2', reason: 'Lost phone', reference: 'CS-1', stepUpToken: step }, t, 'support')).body).toEqual({ code: 'STEP_UP_REQUIRED' });
     });
 
-    it('never shows secrets or recovery codes to admins', async () => {
-      const { secret, codes } = await enrol('123');
+    it('never shows authenticator secrets to admins', async () => {
+      const { secret } = await enrol('123');
       const t = await staff();
       const raw = JSON.stringify((await call('GET', '/api/security/overview', null, t, 'security')).body) + JSON.stringify((await call('GET', '/api/security/audit', null, t, 'security')).body);
       expect(raw).not.toContain(secret);
-      codes.forEach((c) => expect(raw).not.toContain(c));
       expect(raw).not.toMatch(/secret/i);
     });
 
@@ -377,7 +341,7 @@ describe('Two-factor authentication', () => {
       const upgraded = new AuthServer({ storage, now: () => now, pbkdf2Iterations: 1000, sendEmail: () => undefined });
       expect(((await upgraded.handle('POST', '/api/auth/login', { loginId: '123', password: DEMO_PASSWORD }, null)).body as any).stage).toBe('setup');
       const after = JSON.parse(storage.getItem(key)!);
-      expect(after.version).toBe(7);
+      expect(after.version).toBe(8);
       expect(after.sessions).toEqual([]);
       expect(after.revokedSessions.at(-1)).toMatchObject({ tokenHash: 'abc', reason: 'MFA_REQUIRED' });
       expect(after.users).toHaveLength(v4.users.length);

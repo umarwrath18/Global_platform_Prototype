@@ -14,9 +14,7 @@ export async function signIn(server: AuthServer, loginId: string, password = DEM
   let res;
   if (stage === 'setup') {
     await server.handle('POST', '/api/auth/mfa/setup', { challengeToken }, null);
-    const verified = await server.handle('POST', '/api/auth/mfa/setup/verify', { challengeToken, code: await code() }, null);
-    if (verified.status !== 200) throw new Error(`2FA setup failed: ${JSON.stringify(verified.body)}`);
-    res = await server.handle('POST', '/api/auth/mfa/setup/complete', { challengeToken, acknowledged: true }, null);
+    res = await server.handle('POST', '/api/auth/mfa/setup/verify', { challengeToken, code: await code() }, null);
   } else {
     res = await server.handle('POST', '/api/auth/mfa/verify', { challengeToken, code: await code() }, null);
   }

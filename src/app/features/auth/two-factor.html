@@ -3,23 +3,14 @@
     <!-- ------------------------------------------------ Setup: why 2FA (mandatory, no skip) -->
     @case ('intro') {
       <div class="icon-tile"><app-icon name="shield" [size]="22" /></div>
-      @if (rebinding()) {
-        <p class="eyebrow">Recovery code accepted</p>
-        <h1 class="screen-title" #heading tabindex="-1">Set up a new authenticator</h1>
-        <p class="screen-lead">
-          You signed in with a recovery code, so we’ll assume you no longer have your authenticator app. Register a new one to continue.
-          Your old authenticator will stop working once the new one is verified.
-        </p>
-      } @else {
-        <p class="eyebrow">Hi {{ firstName() }}, one more step</p>
-        <h1 class="screen-title" #heading tabindex="-1">Protect your account with two-factor authentication</h1>
-        <p class="screen-lead">Mobi now requires a code from an authenticator app every time you sign in, so a password alone can’t open your account.</p>
-      }
+      <p class="eyebrow">Hi {{ firstName() }}, one more step</p>
+      <h1 class="screen-title" #heading tabindex="-1">Protect your account with two-factor authentication</h1>
+      <p class="screen-lead">Mobi now requires a code from an authenticator app every time you sign in, so a password alone can’t open your account.</p>
 
       <ul class="benefits">
         <li><app-icon name="smartphone" [size]="18" /><span><strong>Use an authenticator app</strong> such as Google Authenticator or Microsoft Authenticator.</span></li>
         <li><app-icon name="clock" [size]="18" /><span><strong>Takes about 2 minutes.</strong> You’ll scan a QR code, then enter a 6-digit code.</span></li>
-        <li><app-icon name="key" [size]="18" /><span><strong>Get 2 recovery codes</strong> to use if you ever lose your phone.</span></li>
+        <li><app-icon name="help" [size]="18" /><span><strong>Lost your phone later?</strong> Contact Mobi Support. They’ll verify your identity and help you set up a new one.</span></li>
       </ul>
 
       <div class="alert" role="note">
@@ -43,7 +34,7 @@
 
     <!-- ------------------------------------------------ Setup: QR code and manual key -->
     @case ('scan') {
-      <p class="eyebrow">Step 1 of 3</p>
+      <p class="eyebrow">Step 1 of 2</p>
       <h1 class="screen-title" #heading tabindex="-1">Scan with your authenticator app</h1>
       <p class="screen-lead">Add your Mobi account to the app, then continue to enter the code it shows.</p>
       @if (enrolment(); as e) {
@@ -56,7 +47,7 @@
     <!-- ------------------------------------------------ Setup: verify the new authenticator -->
     @case ('confirm') {
       <button type="button" class="back-link" (click)="go('scan')"><app-icon name="arrow-left" [size]="16" />Back to QR code</button>
-      <p class="eyebrow">Step 2 of 3</p>
+      <p class="eyebrow">Step 2 of 2</p>
       <h1 class="screen-title" #heading tabindex="-1">Enter the code from your app</h1>
       <p class="screen-lead">Type the 6-digit code shown for <strong>Mobi Global Platform</strong> in your authenticator app.</p>
       @if (notice(); as n) {
@@ -81,42 +72,12 @@
       }
     }
 
-    <!-- ------------------------------------------------ Setup: recovery codes + acknowledgement -->
-    @case ('codes') {
-      <div class="icon-tile success"><app-icon name="check-circle" [size]="22" /></div>
-      <p class="eyebrow">Step 3 of 3 · Authenticator verified</p>
-      <h1 class="screen-title" #heading tabindex="-1">Save your recovery codes</h1>
-      <p class="screen-lead">If you lose your phone, you can sign in once with one of these codes instead of a code from your app.</p>
-      @if (recoveryCodes(); as codes) {
-        <app-recovery-codes [codes]="codes" [accountLabel]="pending()?.user?.loginId ?? ''" [(acknowledged)]="acknowledged" />
-      } @else {
-        <div class="alert warning" role="status">
-          <app-icon name="alert-circle" />
-          <div><strong>Your recovery codes are hidden</strong>They were shown once and disappear if the page is refreshed. After you finish, generate new codes from <strong>Account security</strong>.</div>
-        </div>
-        <label class="ack">
-          <input type="checkbox" [checked]="acknowledged()" (change)="acknowledged.set($any($event.target).checked)" />
-          <span>I’ll generate new recovery codes from Account security</span>
-        </label>
-      }
-      @if (notice(); as n) {
-        <div class="alert" [class]="n.tone" role="alert"><app-icon name="alert-circle" /><div>{{ n.text }}</div></div>
-      }
-      <button type="button" class="btn-primary" (click)="finishSetup()" [disabled]="!acknowledged() || busy()" [class.busy]="busy()">
-        @if (busy()) {
-          <span class="spinner" aria-hidden="true"></span>Finishing…
-        } @else {
-          Finish setup
-        }
-      </button>
-    }
-
     <!-- ------------------------------------------------ Setup complete -->
     @case ('enabled') {
       <div class="icon-tile success"><app-icon name="check-circle" [size]="22" /></div>
       <p class="eyebrow">You’re all set</p>
       <h1 class="screen-title" #heading tabindex="-1">Two-factor authentication is on</h1>
-      <p class="screen-lead">From now on you’ll enter a code from your authenticator app each time you sign in. You can replace your authenticator or get new recovery codes from <strong>Account security</strong>.</p>
+      <p class="screen-lead">From now on you’ll enter a code from your authenticator app each time you sign in. Moving to a new phone? Replace your authenticator from <strong>Account security</strong>.</p>
       <button type="button" class="btn-primary" (click)="continue()">Continue to {{ app.productName }}</button>
     }
 
@@ -144,38 +105,9 @@
         </button>
       </form>
       <div class="alt-links">
-        <button type="button" class="link-button" (click)="go('recovery')">Use a recovery code instead</button>
         <button type="button" class="link-button" (click)="go('lost')">Lost your device?</button>
       </div>
       <p class="foot"><button type="button" class="link-button muted" (click)="backToLogin()">Sign in as someone else</button></p>
-    }
-
-    <!-- ------------------------------------------------ Sign-in: recovery code -->
-    @case ('recovery') {
-      <button type="button" class="back-link" (click)="go('code')"><app-icon name="arrow-left" [size]="16" />Use authenticator code</button>
-      <div class="icon-tile"><app-icon name="key" [size]="22" /></div>
-      <p class="eyebrow">Two-factor authentication</p>
-      <h1 class="screen-title" #heading tabindex="-1">Enter a recovery code</h1>
-      <p class="screen-lead">Use one of the recovery codes you saved when you set up two-factor authentication. Each code works once, and you’ll then set up a new authenticator.</p>
-      @if (notice(); as n) {
-        <div class="alert" [class]="n.tone" role="alert"><app-icon name="alert-circle" /><div>@if (n.title) {<strong>{{ n.title }}</strong>}{{ n.text }}</div></div>
-      }
-      <form (submit)="$event.preventDefault(); useRecovery()" novalidate>
-        <div class="field">
-          <label class="field-label" for="recovery">Recovery code</label>
-          <input #codeInput id="recovery" class="input recovery-input" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="16" placeholder="XXXX-XXXX-XXXX" (input)="onRecoveryInput($any($event.target).value)" [attr.aria-invalid]="!!error()" [class.invalid]="!!error()" />
-        </div>
-        <button type="submit" class="btn-primary" [disabled]="!recoveryComplete() || busy()" [class.busy]="busy()">
-          @if (busy()) {
-            <span class="spinner" aria-hidden="true"></span>Checking…
-          } @else {
-            Continue
-          }
-        </button>
-      </form>
-      <div class="alt-links">
-        <button type="button" class="link-button" (click)="go('lost')">I don’t have my recovery codes</button>
-      </div>
     }
 
     <!-- ------------------------------------------------ Lost device: admin-assisted recovery (FR-05) -->
@@ -184,18 +116,8 @@
       <div class="icon-tile"><app-icon name="smartphone" [size]="22" /></div>
       <p class="eyebrow">Account recovery</p>
       <h1 class="screen-title" #heading tabindex="-1">Lost access to your authenticator?</h1>
-      <ol class="route">
-        <li>
-          <strong>Have a recovery code?</strong>
-          <span>Use it to sign in once, then set up a new authenticator.</span>
-          <button type="button" class="link-button" (click)="go('recovery')">Use a recovery code</button>
-        </li>
-        <li>
-          <strong>No recovery codes?</strong>
-          <span>Contact Mobi Support. They’ll open a reset request, and an authorised administrator will verify your identity before resetting two-factor authentication. You’ll then set up a new authenticator the next time you sign in.</span>
-          <a class="link-button" href="mailto:support@mobi.xyz?subject=Two-factor%20authentication%20reset">Contact Mobi Support</a>
-        </li>
-      </ol>
+      <p class="screen-lead">Contact Mobi Support. They’ll open a reset request, and an authorised administrator will verify your identity before resetting two-factor authentication. The next time you sign in, you’ll set up your authenticator app again.</p>
+      <a class="btn-primary support" href="mailto:support@mobi.xyz?subject=Two-factor%20authentication%20reset">Contact Mobi Support</a>
       <p class="fineprint">For your security, Mobi Support can’t turn off two-factor authentication or tell you a code.</p>
       <p class="foot"><button type="button" class="link-button muted" (click)="backToLogin()">Back to sign in</button></p>
     }

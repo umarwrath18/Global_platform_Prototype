@@ -38,12 +38,11 @@ export interface LoginRequest {
 
 /**
  * A password-only sign-in never creates a session. It returns a short-lived 2FA challenge:
- * - `verify`: the user has an authenticator and must enter a code (or a recovery code).
+ * - `verify`: the user has an authenticator and must enter a code.
  * - `setup`: the user has no authenticator yet and must register one (mandatory).
- * - `rebind`: a recovery code was used, so a new authenticator must be registered.
- * - `acknowledge`: setup is done; the user must confirm they saved their recovery codes.
+ * There are no recovery codes: a user who loses their authenticator contacts Mobi Support.
  */
-export type MfaStage = 'verify' | 'setup' | 'rebind' | 'acknowledge';
+export type MfaStage = 'verify' | 'setup';
 
 export interface MfaChallenge {
   challengeToken: string;
@@ -69,24 +68,12 @@ export interface AuthenticatorEnrolment {
   accountLabel: string;
 }
 
-export interface RecoveryCodesResponse {
-  recoveryCodes: string[];
-}
-
-export interface MfaRecoveryResponse {
-  stage: 'rebind';
-  recoveryCodesRemaining: number;
-}
-
 export type MfaStatus = 'not_enrolled' | 'active' | 'blocked';
 
 export interface AccountSecurityView {
   status: MfaStatus;
   enrolledAt: number | null;
   lastUsedAt: number | null;
-  recoveryCodesRemaining: number;
-  recoveryCodesTotal: number;
-  recoveryCodesGeneratedAt: number | null;
 }
 
 export interface ReplaceAuthenticatorStart extends AuthenticatorEnrolment {
@@ -109,7 +96,6 @@ export interface SecurityUserRow {
   mfaStatus: MfaStatus;
   enrolledAt: number | null;
   lastUsedAt: number | null;
-  recoveryCodesRemaining: number;
   failedAttempts: number;
   blockedAt: number | null;
   openRequestId: string | null;
@@ -214,9 +200,6 @@ export type ApiErrorCode =
   | 'MFA_BLOCKED'
   | 'MFA_RESET'
   | 'MFA_SETUP_ATTEMPTS_EXCEEDED'
-  | 'RECOVERY_CODE_USED'
-  | 'RECOVERY_CODES_EXHAUSTED'
-  | 'ACK_REQUIRED'
   | 'STEP_UP_REQUIRED'
   | 'ROLE_NOT_PERMITTED'
   | 'RESET_REQUEST_REQUIRED'

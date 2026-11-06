@@ -1,6 +1,5 @@
 // RFC 6238 TOTP (HMAC-SHA1, 6 digits, 30-second period) and the helpers the simulated
-// backend needs around it: Base32 secrets, otpauth:// URIs, recovery codes and
-// encryption of secrets at rest. Uses only the Web Crypto API.
+// backend needs around it: Base32 secrets, otpauth:// URIs and encryption of secrets at rest. Uses only the Web Crypto API.
 
 export const TOTP = {
   digits: 6,
@@ -104,27 +103,6 @@ export function otpauthUri(secretBase32: string, accountLabel: string): string {
 /** Groups a Base32 secret in fours so it is easier to type by hand. */
 export function formatSecret(secretBase32: string): string {
   return secretBase32.replace(/(.{4})/g, '$1 ').trim();
-}
-
-// ------------------------------------------------------------ recovery codes
-
-// No 0/O, 1/I/L, so codes can be read and typed without ambiguity.
-const RECOVERY_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-
-/** A recovery code like "K7QM-2XRP-H9WD" (60 bits of entropy). */
-export function generateRecoveryCode(): string {
-  const chars: string[] = [];
-  const buf = new Uint8Array(1);
-  while (chars.length < 12) {
-    crypto.getRandomValues(buf);
-    // Rejection sampling keeps every character equally likely.
-    if (buf[0] < 248) chars.push(RECOVERY_ALPHABET[buf[0] % RECOVERY_ALPHABET.length]);
-  }
-  return [chars.slice(0, 4), chars.slice(4, 8), chars.slice(8)].map((g) => g.join('')).join('-');
-}
-
-export function normaliseRecoveryCode(input: string): string {
-  return input.replace(/[\s-]/g, '').toUpperCase();
 }
 
 // ------------------------------------------------------ secrets at rest

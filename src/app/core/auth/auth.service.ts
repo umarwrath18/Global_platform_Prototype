@@ -8,9 +8,6 @@ import {
   AuthenticatorEnrolment,
   LoginResponse,
   MfaChallenge,
-  MfaRecoveryResponse,
-  MfaStage,
-  RecoveryCodesResponse,
   SessionView,
   SignedInResponse,
   WorkspaceContext,
@@ -47,10 +44,6 @@ const REASON_BY_CODE: Partial<Record<ApiErrorCode, SignedOutReason>> = {
 
 /** The sign-in in progress between the password step and the second factor. */
 export interface PendingSignIn extends MfaChallenge {
-  /** Recovery codes from setup, kept in memory only until acknowledged. */
-  recoveryCodes?: string[];
-  /** True once a recovery code was used and a new authenticator must be registered. */
-  usedRecoveryCode?: boolean;
   expiresAt: number;
 }
 
@@ -104,27 +97,15 @@ export class AuthService {
     return firstValueFrom(this.http.post<AuthenticatorEnrolment>('/api/auth/mfa/setup', { challengeToken: this.challengeToken() }));
   }
 
+  /** Verifies the first code from the new authenticator; this turns 2FA on and completes sign-in. */
   async confirmSetup(code: string) {
-    const res = await firstValueFrom(this.http.post<RecoveryCodesResponse>('/api/auth/mfa/setup/verify', { challengeToken: this.challengeToken(), code }));
-    this.updatePending({ stage: 'acknowledge', recoveryCodes: res.recoveryCodes });
-    return res.recoveryCodes;
-  }
-
-  async completeSetup() {
-    const res = await firstValueFrom(this.http.post<SignedInResponse>('/api/auth/mfa/setup/complete', { challengeToken: this.challengeToken(), acknowledged: true }));
+    const res = await firstValueFrom(this.http.post<SignedInResponse>('/api/auth/mfa/setup/verify', { challengeToken: this.challengeToken(), code }));
     return this.signedIn(res);
   }
 
   async verifyCode(code: string) {
     const res = await firstValueFrom(this.http.post<SignedInResponse>('/api/auth/mfa/verify', { challengeToken: this.challengeToken(), code }));
     return this.signedIn(res);
-  }
-
-  async useRecoveryCode(code: string) {
-    const res = await firstValueFrom(this.http.post<MfaRecoveryResponse>('/api/auth/mfa/recovery', { challengeToken: this.challengeToken(), code }));
-    // A recovery code means the device is likely lost: a new authenticator is required before access.
-    this.updatePending({ stage: 'rebind', usedRecoveryCode: true, expiresAt: Date.now() + (this.pendingState()?.expiresInSec ?? 300) * 1000 });
-    return res;
   }
 
   /** Abandons the 2FA step (sign out before access was granted). */
@@ -145,15 +126,10 @@ export class AuthService {
     return res.session;
   }
 
-  private updatePending(patch: Partial<PendingSignIn> & { stage?: MfaStage }) {
-    const cur = this.pendingState();
-    if (cur) this.setPending({ ...cur, ...patch });
-  }
-
   private setPending(p: PendingSignIn | null) {
     this.pendingState.set(p);
-    // Recovery codes are never persisted; everything else survives a page refresh in this tab.
-    safeStorage(() => (p ? sessionStorage.setItem(CHALLENGE_KEY, JSON.stringify({ ...p, recoveryCodes: undefined })) : sessionStorage.removeItem(CHALLENGE_KEY)), undefined);
+    // Survives a page refresh in this tab; the challenge itself expires on the server.
+    safeStorage(() => (p ? sessionStorage.setItem(CHALLENGE_KEY, JSON.stringify(p)) : sessionStorage.removeItem(CHALLENGE_KEY)), undefined);
   }
 
   private readPending(): PendingSignIn | null {

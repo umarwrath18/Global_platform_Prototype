@@ -7,13 +7,24 @@ lost-device recovery, authenticator replacement, admin reset and block waive-off
 ending existing sessions at rollout. Also: the left-hand picture on the sign-in screens is now a
 neutral, generic dashboard wireframe with no merchant data.
 
+> **Update: recovery codes removed.** Product decided to use **admin-assisted recovery only**
+> (PRD FR-04 option 2). There are no recovery codes anywhere:
+> - Setup is 2 steps: scan the QR code, then enter a code. A valid code turns 2FA on and signs the user in.
+> - "Use a recovery code" and "Generate new codes" are gone, along with their APIs.
+> - A user who loses their authenticator contacts Mobi Support. Support opens a reset request, a
+>   Security Admin verifies identity and resets, and the user sets up a new authenticator at next sign-in.
+> - Existing demo data has stored recovery-code hashes deleted (auth data version 8).
+>
+> Sections below that mention recovery codes, the "rebind" or "acknowledge" steps, QA cases M-04
+> and M-13 to M-16, and open question 7 no longer apply.
+
 ---
 
 ## 1. Decisions confirmed before build
 
 | Question | Decision |
 | --- | --- |
-| Recovery method (FR-04, "take a call") | **2 single-use recovery codes, with admin-assisted recovery as the fallback.** |
+| Recovery method (FR-04, "take a call") | ~~2 single-use recovery codes~~ → **Admin-assisted recovery only** (updated decision): lost device → contact Mobi Support. |
 | After signing in with a recovery code | **A new authenticator must be registered before portal access** (OWASP MFA / NIST 800-63B best practice). The old one is revoked when the new one is verified, 2 new codes are issued, and the user is emailed. |
 | More than 3 wrong codes (FR-03) | **Blocked until a Security Admin waives it.** No time-based unlock. Only that user is blocked, not the merchant or the Global Account. A Tech alert is raised. |
 | Who is the admin / Tech team | Two new prototype **View as** roles: **Mobi Support** (opens reset requests) and **Security Admin (Tech)** (verifies identity, resets, waives blocks). Both use the new **User security** page. They grant no merchant permissions. |

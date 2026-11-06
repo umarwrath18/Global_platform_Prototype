@@ -7,19 +7,16 @@ import { safeReturnUrl } from '../../core/auth/auth.guards';
 import { AuthService } from '../../core/auth/auth.service';
 import { AuthenticatorQr } from '../../shared/authenticator-qr';
 import { Icon } from '../../shared/icon';
-import { RecoveryCodes } from '../../shared/recovery-codes';
 import { AuthShell } from './auth-shell';
 
 /** What is on screen. The server's challenge stage decides which of these are reachable. */
 type View =
-  | 'intro' // setup/rebind: why 2FA is required
-  | 'scan' // setup/rebind: QR code and setup key
-  | 'confirm' // setup/rebind: enter a code from the new authenticator
-  | 'codes' // acknowledge: recovery codes
+  | 'intro' // setup: why 2FA is required
+  | 'scan' // setup: QR code and setup key
+  | 'confirm' // setup: enter a code from the new authenticator
   | 'enabled' // setup done, signed in
   | 'code' // verify: enter authenticator code
-  | 'recovery' // verify: enter a recovery code
-  | 'lost' // verify: lost device help
+  | 'lost' // verify: lost device → contact Mobi Support
   | 'signed-in' // verify done
   | 'blocked'
   | 'expired';
@@ -33,7 +30,7 @@ interface Notice {
 @Component({
   selector: 'app-two-factor',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [AuthShell, Icon, AuthenticatorQr, RecoveryCodes],
+  imports: [AuthShell, Icon, AuthenticatorQr],
   templateUrl: './two-factor.html',
   styleUrl: './two-factor.scss',
 })
@@ -50,18 +47,13 @@ export class TwoFactor {
   protected readonly busy = signal(false);
   protected readonly error = signal<ClientError | null>(null);
   protected readonly code = signal('');
-  protected readonly recoveryCode = signal('');
   protected readonly enrolment = signal<AuthenticatorEnrolment | null>(null);
-  protected readonly acknowledged = signal(false);
   protected readonly now = signal(Date.now());
   protected readonly landing = signal('/dashboard');
 
   protected readonly firstName = computed(() => this.pending()?.user.name.split(' ')[0] ?? '');
-  protected readonly rebinding = computed(() => this.pending()?.stage === 'rebind' || !!this.pending()?.usedRecoveryCode);
-  protected readonly recoveryCodes = computed(() => this.pending()?.recoveryCodes ?? null);
   protected readonly expiresIn = computed(() => Math.max(0, ((this.pending()?.expiresAt ?? 0) - this.now()) / 1000));
   protected readonly codeComplete = computed(() => /^\d{6}$/.test(this.code()));
-  protected readonly recoveryComplete = computed(() => this.recoveryCode().replace(/[\s-]/g, '').length === 12);
   protected readonly formatClock = formatClock;
 
   protected readonly notice = computed<Notice | null>(() => {
@@ -71,19 +63,13 @@ export class TwoFactor {
     const tail = left ? ` ${left} attempt${left === 1 ? '' : 's'} left.` : '';
     switch (e.code) {
       case 'MFA_CODE_INVALID':
-        return this.view() === 'recovery'
-          ? { tone: 'danger', text: `That recovery code isn’t valid.${tail}` }
-          : { tone: 'danger', text: `That code is incorrect or has expired. Enter the current code from your app.${tail}` };
+        return { tone: 'danger', text: `That code is incorrect or has expired. Enter the current code from your app.${tail}` };
       case 'MFA_CODE_REUSED':
         return { tone: 'warning', text: 'That code was already used. Wait for your app to show a new code, then enter it.' };
-      case 'RECOVERY_CODE_USED':
-        return { tone: 'danger', text: `That recovery code has already been used. Each code works once.${tail}` };
-      case 'RECOVERY_CODES_EXHAUSTED':
-        return { tone: 'danger', title: 'No recovery codes left', text: 'All your recovery codes have been used. Contact Mobi Support to verify your identity and reset two-factor authentication.' };
       case 'MFA_SETUP_ATTEMPTS_EXCEEDED':
         return { tone: 'danger', title: 'Too many incorrect codes', text: 'For your security, please sign in again to restart setup.' };
       case 'VALIDATION_FAILED':
-        return { tone: 'danger', text: this.view() === 'recovery' ? 'Enter the 12-character recovery code, e.g. K7QM-2XRP-H9WD.' : 'Enter the 6-digit code.' };
+        return { tone: 'danger', text: 'Enter the 6-digit code.' };
       case 'NETWORK_ERROR':
         return { tone: 'warning', title: 'No connection', text: 'You appear to be offline. Check your internet connection and try again.' };
       case 'SERVICE_UNAVAILABLE':
@@ -109,9 +95,7 @@ export class TwoFactor {
   private initialView(): View {
     const p = this.auth.pending();
     if (!p) return 'expired';
-    if (p.stage === 'verify') return 'code';
-    if (p.stage === 'acknowledge') return 'codes';
-    return 'intro';
+    return p.stage === 'verify' ? 'code' : 'intro';
   }
 
   // ------------------------------------------------------------ navigation
@@ -119,9 +103,8 @@ export class TwoFactor {
   protected go(view: View) {
     this.error.set(null);
     this.code.set('');
-    this.recoveryCode.set('');
     this.view.set(view);
-    setTimeout(() => (view === 'code' || view === 'confirm' || view === 'recovery' ? this.codeInput() : this.heading())?.nativeElement.focus());
+    setTimeout(() => (view === 'code' || view === 'confirm' ? this.codeInput() : this.heading())?.nativeElement.focus());
   }
 
   protected async startScan() {
@@ -144,30 +127,12 @@ export class TwoFactor {
     if (this.error()) this.error.set(null);
   }
 
-  protected onRecoveryInput(value: string) {
-    this.recoveryCode.set(value);
-    if (this.error()) this.error.set(null);
-  }
-
+  /** Verifying the first code turns 2FA on and completes sign-in. */
   protected async confirmSetup() {
     if (!this.codeComplete() || this.busy()) return;
     this.busy.set(true);
     try {
-      await this.auth.confirmSetup(this.code());
-      this.acknowledged.set(false);
-      this.go('codes');
-    } catch (e) {
-      this.handle(e);
-    } finally {
-      this.busy.set(false);
-    }
-  }
-
-  protected async finishSetup() {
-    if (!this.acknowledged() || this.busy()) return;
-    this.busy.set(true);
-    try {
-      const session = await this.auth.completeSetup();
+      const session = await this.auth.confirmSetup(this.code());
       this.landing.set(this.target(session.landingPath));
       this.go('enabled');
     } catch (e) {
@@ -185,20 +150,6 @@ export class TwoFactor {
       this.landing.set(this.target(session.landingPath));
       this.go('signed-in');
       setTimeout(() => this.continue(), 1200);
-    } catch (e) {
-      this.handle(e);
-    } finally {
-      this.busy.set(false);
-    }
-  }
-
-  protected async useRecovery() {
-    if (!this.recoveryComplete() || this.busy()) return;
-    this.busy.set(true);
-    try {
-      await this.auth.useRecoveryCode(this.recoveryCode());
-      this.enrolment.set(null);
-      this.go('intro');
     } catch (e) {
       this.handle(e);
     } finally {

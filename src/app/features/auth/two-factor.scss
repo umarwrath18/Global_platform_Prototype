@@ -62,28 +62,9 @@
   font-weight: 500;
 }
 
-.route {
-  display: grid;
-  gap: 14px;
-  margin: 8px 0 20px;
-  padding: 0;
-  list-style: none;
-
-  li {
-    display: grid;
-    gap: 4px;
-    padding: 14px 16px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    font-size: 14px;
-    line-height: 1.5;
-    color: var(--text-muted);
-    justify-items: start;
-  }
-
-  strong {
-    color: var(--text);
-  }
+.support {
+  margin-bottom: 16px;
+  text-decoration: none;
 }
 
 .fineprint {
@@ -92,22 +73,6 @@
   color: var(--text-subtle);
 }
 
-.ack {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin-bottom: 20px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-
-  input {
-    width: 18px;
-    height: 18px;
-    margin: 1px 0 0;
-    accent-color: var(--mobi-blue);
-  }
-}
 
 .wide {
   display: flex;

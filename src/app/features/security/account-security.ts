@@ -7,16 +7,14 @@ import { AuthenticatorQr } from '../../shared/authenticator-qr';
 import { DemoAuthenticatorService } from '../../shared/demo-authenticator';
 import { Icon } from '../../shared/icon';
 import { fmtDateTime, fmtRelative } from '../../shared/merchant-ui';
-import { RecoveryCodes } from '../../shared/recovery-codes';
 
 type ReplaceStep = 'idle' | 'current' | 'new' | 'done' | 'unavailable';
-type CodesStep = 'idle' | 'current' | 'show';
 
-/** A signed-in user's own two-factor settings: replace the authenticator (FR-06), new recovery codes. */
+/** A signed-in user's own two-factor settings: status and authenticator replacement (FR-06). */
 @Component({
   selector: 'app-account-security',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, AuthenticatorQr, RecoveryCodes],
+  imports: [Icon, AuthenticatorQr],
   templateUrl: './account-security.html',
   styleUrl: './security.scss',
 })
@@ -31,9 +29,6 @@ export class AccountSecurity {
 
   protected readonly replaceStep = signal<ReplaceStep>('idle');
   protected readonly replacement = signal<ReplaceAuthenticatorStart | null>(null);
-  protected readonly codesStep = signal<CodesStep>('idle');
-  protected readonly newCodes = signal<string[]>([]);
-  protected readonly codesSaved = signal(false);
 
   protected readonly code = signal('');
   protected readonly busy = signal(false);
@@ -98,7 +93,6 @@ export class AccountSecurity {
   // ---- Replace authenticator ----
 
   protected startReplace() {
-    this.codesStep.set('idle');
     this.reset();
     this.replaceStep.set('current');
   }
@@ -150,43 +144,6 @@ export class AccountSecurity {
     } finally {
       this.busy.set(false);
     }
-  }
-
-  // ---- Recovery codes ----
-
-  protected startCodes() {
-    this.cancelReplace();
-    this.reset();
-    this.codesSaved.set(false);
-    this.codesStep.set('current');
-  }
-
-  protected cancelCodes() {
-    this.reset();
-    this.codesStep.set('idle');
-  }
-
-  protected async regenerate() {
-    if (this.code().length !== 6 || this.busy()) return;
-    this.busy.set(true);
-    try {
-      const res = await this.api.regenerateRecoveryCodes(this.code());
-      this.newCodes.set(res.recoveryCodes);
-      this.reset();
-      this.codesStep.set('show');
-      void this.load();
-    } catch (e) {
-      this.error.set(toClientError(e));
-      this.code.set('');
-    } finally {
-      this.busy.set(false);
-    }
-  }
-
-  protected doneCodes() {
-    this.newCodes.set([]);
-    this.codesStep.set('idle');
-    this.flash('New recovery codes saved. Your previous codes no longer work.');
   }
 
   private flash(text: string) {

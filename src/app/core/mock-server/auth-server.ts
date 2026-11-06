@@ -6,11 +6,9 @@ import {
   AuthenticatorEnrolment,
   CountryAccess,
   LoginResponse,
-  MfaRecoveryResponse,
   MfaStage,
   OtpRequestResponse,
   OtpVerifyResponse,
-  RecoveryCodesResponse,
   ReplaceAuthenticatorStart,
   SecurityAuditView,
   SecurityOverview,
@@ -24,7 +22,7 @@ import {
 import { checkPassword } from '../api/password-policy';
 import { constantTimeEqual, DEFAULT_PBKDF2_ITERATIONS, hashPassword, randomOtp, randomToken, sha256Hex, verifyPassword } from './crypto';
 import { BASE_CURRENCY, COUNTRY_CATALOGUE, DEMO_PASSWORD, ROLES, SEED_ACCOUNTS, SEED_USERS, SeedAccount, SeedUser } from './seed';
-import { generateRecoveryCode, generateTotpSecret, normaliseRecoveryCode, otpauthUri, SecretVault, secondsLeftInStep, TOTP, totpAt, verifyTotp } from './totp';
+import { generateTotpSecret, otpauthUri, SecretVault, secondsLeftInStep, TOTP, totpAt, verifyTotp } from './totp';
 
 /** FR-08 events shown in the security audit log. */
 const SECURITY_EVENT_TYPES = new Set([
@@ -39,8 +37,6 @@ const SECURITY_EVENT_TYPES = new Set([
   'TECH_ALERT_RAISED',
   'MFA_BLOCK_WAIVED',
   'LOGIN_BLOCKED_MFA',
-  'RECOVERY_CODE_USED',
-  'RECOVERY_CODES_REGENERATED',
   'AUTHENTICATOR_REPLACEMENT_STARTED',
   'AUTHENTICATOR_REPLACED',
   'ADMIN_STEP_UP_VERIFIED',
@@ -78,11 +74,9 @@ export const MFA_POLICY = {
   setupMaxAttempts: 5,
   /** How long an admin's "confirm it's you" check, or a started replacement, stays valid. */
   stepUpTtlMs: 5 * 60_000,
-  /** FR-04: no more than two single-use recovery codes. */
-  recoveryCodeCount: 2,
 } as const;
 
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 
 interface AccountRec extends SeedAccount {
   /** GMID that created this account at go-live. Only on accounts created after this field existed. */
@@ -126,7 +120,10 @@ interface ThrottleRec {
   failures: number;
   lockedUntil: number;
 }
-/** A user's second factor. The secret is only ever stored encrypted; recovery codes only as hashes. */
+/**
+ * A user's second factor. The secret is only ever stored encrypted. There are no recovery codes:
+ * a user who loses their authenticator contacts Mobi Support for an admin-assisted reset (FR-04/FR-05).
+ */
 interface MfaRec {
   status: 'not_enrolled' | 'active';
   secretEnc: string | null;
@@ -134,11 +131,9 @@ interface MfaRec {
   lastUsedAt: number | null;
   /** Last accepted TOTP time step, so each code works only once. */
   lastStep: number;
-  /** Consecutive failed second-factor checks (codes and recovery codes). */
+  /** Consecutive failed second-factor checks. */
   failures: number;
   blockedAt: number | null;
-  recovery: { hash: string; usedAt: number | null }[];
-  recoveryGeneratedAt: number | null;
 }
 /** Password verified, second factor pending. No session exists yet. */
 interface ChallengeRec {
@@ -146,7 +141,7 @@ interface ChallengeRec {
   userId: string;
   stage: MfaStage;
   expiresAt: number;
-  /** New authenticator being registered (setup / rebind), encrypted. */
+  /** New authenticator being registered during setup, encrypted. */
   pendingSecretEnc: string | null;
   setupAttempts: number;
 }
@@ -255,8 +250,6 @@ const emptyMfa = (): MfaRec => ({
   lastStep: -1,
   failures: 0,
   blockedAt: null,
-  recovery: [],
-  recoveryGeneratedAt: null,
 });
 
 const normaliseLoginId = (v: unknown) => (typeof v === 'string' ? v.trim().toUpperCase() : '');
@@ -300,20 +293,14 @@ export class AuthServer {
           return { status: 200, body: await this.setupStart(body) };
         case 'POST /api/auth/mfa/setup/verify':
           return { status: 200, body: await this.setupVerify(body) };
-        case 'POST /api/auth/mfa/setup/complete':
-          return { status: 200, body: await this.setupComplete(body) };
         case 'POST /api/auth/mfa/verify':
           return { status: 200, body: await this.verifyLoginCode(body) };
-        case 'POST /api/auth/mfa/recovery':
-          return { status: 200, body: await this.useRecoveryCode(body) };
         case 'GET /api/account/security':
           return { status: 200, body: await this.accountSecurity(token) };
         case 'POST /api/account/security/authenticator/replace':
           return { status: 200, body: await this.replaceStart(token, body) };
         case 'POST /api/account/security/authenticator/replace/confirm':
           return { status: 204, body: await this.replaceConfirm(token, body) };
-        case 'POST /api/account/security/recovery-codes':
-          return { status: 200, body: await this.regenerateRecoveryCodes(token, body) };
         case 'GET /api/security/overview':
           return { status: 200, body: await this.securityOverview(token, roleHeader) };
         case 'GET /api/security/audit':
@@ -451,24 +438,27 @@ export class AuthServer {
     return { rec: r, user, account, mfa };
   }
 
-  /** Starts (or re-shows) registration of a new authenticator: first-time setup, or after a recovery code. */
+  /** Starts (or re-shows) first-time registration of an authenticator. */
   private async setupStart(body: any): Promise<AuthenticatorEnrolment> {
     const db = this.load();
-    const { rec, user, account } = await this.requireChallenge(db, body?.challengeToken, ['setup', 'rebind']);
+    const { rec, user, account } = await this.requireChallenge(db, body?.challengeToken, ['setup']);
     if (!rec.pendingSecretEnc) {
       rec.pendingSecretEnc = await this.vault.encrypt(generateTotpSecret());
-      this.audit(db, rec.stage === 'setup' ? 'MFA_REGISTRATION_STARTED' : 'AUTHENTICATOR_REPLACEMENT_STARTED', { userId: user.id, accountId: account.id, detail: rec.stage === 'rebind' ? 'after_recovery_code' : undefined });
+      this.audit(db, 'MFA_REGISTRATION_STARTED', { userId: user.id, accountId: account.id });
       this.save(db);
     }
     return this.enrolment(await this.vault.decrypt(rec.pendingSecretEnc), user);
   }
 
-  /** FR-02: 2FA is activated only when a valid code from the new authenticator is verified here. */
-  private async setupVerify(body: any): Promise<RecoveryCodesResponse> {
+  /**
+   * FR-02: 2FA is activated only when a valid code from the new authenticator is verified here.
+   * Activation completes sign-in: the session is created now.
+   */
+  private async setupVerify(body: any): Promise<SignedInResponse> {
     const code = typeof body?.code === 'string' ? body.code.trim() : '';
     if (!/^\d{6}$/.test(code)) fail(400, 'VALIDATION_FAILED');
     const db = this.load();
-    const { rec, user, account, mfa } = await this.requireChallenge(db, body?.challengeToken, ['setup', 'rebind']);
+    const { rec, user, account, mfa } = await this.requireChallenge(db, body?.challengeToken, ['setup']);
     if (!rec.pendingSecretEnc) fail(409, 'MFA_STAGE_INVALID');
     const secret = await this.vault.decrypt(rec.pendingSecretEnc!);
     const { step } = await verifyTotp(secret, code, this.now(), -1);
@@ -484,32 +474,14 @@ export class AuthServer {
       fail(400, 'MFA_CODE_INVALID', { attemptsRemaining: MFA_POLICY.setupMaxAttempts - rec.setupAttempts });
     }
 
-    const replacing = rec.stage === 'rebind';
     mfa.status = 'active';
     mfa.secretEnc = rec.pendingSecretEnc;
     mfa.enrolledAt = this.now();
     mfa.lastUsedAt = this.now();
     mfa.lastStep = step!;
     mfa.failures = 0;
-    const codes = await this.issueRecoveryCodes(mfa, user.id);
-    rec.pendingSecretEnc = null;
-    rec.stage = 'acknowledge';
-    if (replacing) {
-      this.audit(db, 'AUTHENTICATOR_REPLACED', { userId: user.id, accountId: account.id, detail: 'after_recovery_code; previous authenticator revoked' });
-      this.notify(db, user, 'Your Mobi authenticator was replaced', `A new authenticator app was registered for ${user.loginId} after a recovery code was used, and the previous one no longer works. New recovery codes were issued. If this wasn't you, contact Mobi Support immediately.`);
-    } else {
-      this.audit(db, 'MFA_REGISTRATION_COMPLETED', { userId: user.id, accountId: account.id });
-    }
-    this.save(db);
-    return { recoveryCodes: codes };
-  }
-
-  /** PRD §8 Q8: codes are shown once and must be acknowledged before setup completes and a session starts. */
-  private async setupComplete(body: any): Promise<SignedInResponse> {
-    const db = this.load();
-    const { rec, user, account } = await this.requireChallenge(db, body?.challengeToken, ['acknowledge']);
-    if (body?.acknowledged !== true) fail(400, 'ACK_REQUIRED');
     db.challenges = db.challenges.filter((c) => c !== rec);
+    this.audit(db, 'MFA_REGISTRATION_COMPLETED', { userId: user.id, accountId: account.id });
     this.audit(db, 'LOGIN_SUCCESS', { userId: user.id, accountId: account.id, detail: 'after_2fa_setup' });
     return this.createSession(db, user);
   }
@@ -524,29 +496,6 @@ export class AuthServer {
     db.challenges = db.challenges.filter((c) => c !== rec);
     this.audit(db, 'LOGIN_SUCCESS', { userId: user.id, accountId: account.id });
     return this.createSession(db, user);
-  }
-
-  /** FR-04: a single-use recovery code replaces the TOTP once, then a new authenticator must be registered. */
-  private async useRecoveryCode(body: any): Promise<MfaRecoveryResponse> {
-    const code = normaliseRecoveryCode(typeof body?.code === 'string' ? body.code : '');
-    if (!/^[A-Z0-9]{12}$/.test(code)) fail(400, 'VALIDATION_FAILED');
-    const db = this.load();
-    const { rec, user, account, mfa } = await this.requireChallenge(db, body?.challengeToken, ['verify']);
-    if (!mfa.recovery.some((c) => c.usedAt === null)) fail(400, 'RECOVERY_CODES_EXHAUSTED');
-    const hash = await this.recoveryHash(user.id, code);
-    const entry = mfa.recovery.find((c) => constantTimeEqual(c.hash, hash));
-    if (!entry || entry.usedAt !== null) this.registerFailure(db, user, 'recovery_code', entry ? 'RECOVERY_CODE_USED' : 'MFA_CODE_INVALID');
-    entry!.usedAt = this.now();
-    mfa.failures = 0;
-    mfa.lastUsedAt = this.now();
-    rec.stage = 'rebind';
-    rec.pendingSecretEnc = null;
-    rec.setupAttempts = 0;
-    rec.expiresAt = this.now() + MFA_POLICY.challengeTtlMs;
-    const remaining = mfa.recovery.filter((c) => c.usedAt === null).length;
-    this.audit(db, 'RECOVERY_CODE_USED', { userId: user.id, accountId: account.id, detail: `remaining=${remaining}` });
-    this.save(db);
-    return { stage: 'rebind', recoveryCodesRemaining: remaining };
   }
 
   /**
@@ -564,7 +513,7 @@ export class AuthServer {
         this.save(db);
         fail(400, 'MFA_CODE_REUSED');
       }
-      this.registerFailure(db, user, context, 'MFA_CODE_INVALID');
+      this.registerFailure(db, user, context);
     }
     mfa.lastStep = step!;
     mfa.lastUsedAt = this.now();
@@ -573,7 +522,7 @@ export class AuthServer {
   }
 
   /** Counts a failed second-factor check; on the 4th consecutive failure blocks the user and alerts Tech. */
-  private registerFailure(db: Db, user: UserRec, context: string, code: 'MFA_CODE_INVALID' | 'RECOVERY_CODE_USED'): never {
+  private registerFailure(db: Db, user: UserRec, context: string): never {
     const mfa = db.mfa[user.id];
     mfa.failures += 1;
     this.audit(db, 'MFA_CODE_FAILED', { userId: user.id, accountId: user.accountId, detail: `${context}; consecutive=${mfa.failures}` });
@@ -590,7 +539,7 @@ export class AuthServer {
       fail(423, 'MFA_BLOCKED');
     }
     this.save(db);
-    return fail(400, code, { attemptsRemaining: MFA_POLICY.maxConsecutiveFailures + 1 - mfa.failures });
+    return fail(400, 'MFA_CODE_INVALID', { attemptsRemaining: MFA_POLICY.maxConsecutiveFailures + 1 - mfa.failures });
   }
 
   private async createSession(db: Db, user: UserRec): Promise<SignedInResponse> {
@@ -604,18 +553,6 @@ export class AuthServer {
 
   private enrolment(secret: string, user: UserRec): AuthenticatorEnrolment {
     return { secret, otpauthUri: otpauthUri(secret, user.loginId), issuer: TOTP.issuer, accountLabel: user.loginId };
-  }
-
-  private recoveryHash(userId: string, normalisedCode: string) {
-    return sha256Hex(`recovery:${userId}:${normalisedCode}`);
-  }
-
-  /** Replaces all recovery codes. Plaintext is returned once and never stored. */
-  private async issueRecoveryCodes(mfa: MfaRec, userId: string): Promise<string[]> {
-    const codes = Array.from({ length: MFA_POLICY.recoveryCodeCount }, () => generateRecoveryCode());
-    mfa.recovery = await Promise.all(codes.map(async (c) => ({ hash: await this.recoveryHash(userId, normaliseRecoveryCode(c)), usedAt: null })));
-    mfa.recoveryGeneratedAt = this.now();
-    return codes;
   }
 
   /** Sends a security notification through the (simulated) approved channel: email. */
@@ -634,9 +571,6 @@ export class AuthServer {
       status: m.blockedAt ? 'blocked' : m.status,
       enrolledAt: m.enrolledAt,
       lastUsedAt: m.lastUsedAt,
-      recoveryCodesRemaining: m.recovery.filter((c) => c.usedAt === null).length,
-      recoveryCodesTotal: m.recovery.length,
-      recoveryCodesGeneratedAt: m.recoveryGeneratedAt,
     };
   }
 
@@ -686,18 +620,6 @@ export class AuthServer {
     return null;
   }
 
-  private async regenerateRecoveryCodes(token: string | null, body: any): Promise<RecoveryCodesResponse> {
-    const code = typeof body?.code === 'string' ? body.code.trim() : '';
-    if (!/^\d{6}$/.test(code)) fail(400, 'VALIDATION_FAILED');
-    const db = this.load();
-    const { user } = await this.requireSession(db, token, true);
-    await this.checkCurrentCode(db, user, code, 'step_up');
-    const codes = await this.issueRecoveryCodes(db.mfa[user.id], user.id);
-    this.audit(db, 'RECOVERY_CODES_REGENERATED', { userId: user.id, accountId: user.accountId, detail: 'previous codes invalidated' });
-    this.save(db);
-    return { recoveryCodes: codes };
-  }
-
   private async findStepUp(db: Db, userId: string, purpose: StepUpRec['purpose'], token: unknown): Promise<StepUpRec> {
     const hash = typeof token === 'string' && token ? await sha256Hex(token) : '';
     const rec = db.stepUps.find((s) => s.tokenHash === hash && s.userId === userId && s.purpose === purpose);
@@ -729,7 +651,7 @@ export class AuthServer {
     await this.requireStaff(db, token, roleHeader, ['support', 'security']);
     const users = new Map(db.users.map((u) => [u.id, u]));
     return {
-      // Admins see status only, never secrets or recovery codes (FR-07).
+      // Admins see status only, never authenticator secrets (FR-07).
       users: db.users.map((u) => {
         const m = db.mfa[u.id];
         const account = db.accounts.find((a) => a.id === u.accountId)!;
@@ -745,7 +667,6 @@ export class AuthServer {
           mfaStatus: m.blockedAt ? 'blocked' : m.status,
           enrolledAt: m.enrolledAt,
           lastUsedAt: m.lastUsedAt,
-          recoveryCodesRemaining: m.recovery.filter((c) => c.usedAt === null).length,
           failedAttempts: m.failures,
           blockedAt: m.blockedAt,
           openRequestId: db.resetRequests.find((r) => r.userId === u.id && r.status === 'open')?.id ?? null,
@@ -830,7 +751,7 @@ export class AuthServer {
     const request = db.resetRequests.find((r) => r.userId === target.id && r.status === 'open' && r.id === body?.requestId);
     if (!request) fail(409, 'RESET_REQUEST_REQUIRED');
 
-    // The old secret and recovery codes are deleted; the user must register a new authenticator.
+    // The old secret is deleted; the user must register a new authenticator.
     db.mfa[target.id] = emptyMfa();
     db.challenges = db.challenges.filter((c) => c.userId !== target.id);
     db.stepUps = db.stepUps.filter((s) => s.userId !== target.id);
@@ -1256,9 +1177,9 @@ export class AuthServer {
     let isNew = false;
     if (kind === 'challenge') {
       const c = db.challenges.find((x) => x.tokenHash === hash && x.expiresAt > now);
-      if (!c || c.stage === 'acknowledge') return null;
+      if (!c) return null;
       userId = c.userId;
-      isNew = c.stage !== 'verify';
+      isNew = c.stage === 'setup';
       secretEnc = isNew ? c.pendingSecretEnc : db.mfa[c.userId]?.secretEnc;
     } else if (kind === 'session') {
       userId = db.sessions.find((s) => s.tokenHash === hash)?.userId;
@@ -1297,10 +1218,12 @@ export class AuthServer {
         if (existing?.version === 4) {
           await this.migrateToMfa(existing);
           await this.addMissingSeedUsers();
+          this.removeRecoveryCodes();
           return;
         }
-        if (existing?.version === 5 || existing?.version === 6) {
+        if (existing?.version === 5 || existing?.version === 6 || existing?.version === 7) {
           await this.addMissingSeedUsers();
+          this.removeRecoveryCodes();
           return;
         }
         const users: UserRec[] = [];
@@ -1340,7 +1263,6 @@ export class AuthServer {
         m.status = 'active';
         m.secretEnc = await this.vault.encrypt(generateTotpSecret());
         m.enrolledAt = this.now();
-        await this.issueRecoveryCodes(m, u.id);
       }
     }
     return out;
@@ -1372,6 +1294,23 @@ export class AuthServer {
     Object.assign(db.mfa, await this.seedMfa(added));
     db.version = DB_VERSION;
     if (added.length) this.audit(db, 'SEED_USERS_ADDED', { detail: added.map((u) => u.loginId).join(',') });
+    this.save(db);
+  }
+
+  /**
+   * Recovery codes were removed (lost authenticator → contact Mobi Support). Deletes stored code
+   * hashes and any sign-in step that was waiting on them. Everything else is kept.
+   */
+  private removeRecoveryCodes() {
+    const db = this.load() as Db & { mfa: Record<string, MfaRec & { recovery?: unknown; recoveryGeneratedAt?: unknown }> };
+    let removed = 0;
+    for (const m of Object.values(db.mfa)) {
+      if (Array.isArray(m.recovery) && m.recovery.length) removed++;
+      delete m.recovery;
+      delete m.recoveryGeneratedAt;
+    }
+    db.challenges = db.challenges.filter((c) => c.stage === 'verify' || c.stage === 'setup');
+    this.audit(db, 'RECOVERY_CODES_REMOVED', { detail: `users=${removed}` });
     this.save(db);
   }
 

@@ -101,26 +101,25 @@ Every sign-in needs a password **and** a 6-digit code from an authenticator app.
 password alone never creates a session.
 
 - **First sign-in (e.g. `123`):** mandatory setup that can't be skipped. You scan a QR code or type
-  the setup key, enter a code from the app, then save 2 single-use recovery codes and tick
-  "I've saved these" before you can continue.
+  the setup key, then enter a code from the app. That turns 2FA on and signs you in.
 - **Later sign-ins (e.g. `TANJUNG-ADMIN`):** enter the current code. There's no "trusted device";
   *Remember this device* only remembers the Global Account ID.
 - **Getting codes:** scan the QR code with Google Authenticator, Microsoft Authenticator or any
   standard (RFC 6238) app. Or use the on-screen **Demo authenticator** card (dashed pink,
   labelled *Prototype*), which shows the live code for whatever the screen is waiting for. Each
   code works once, so after using one, wait for the next.
-- **Recovery code:** "Use a recovery code instead" signs in once, then you **must** register a new
-  authenticator before entering the portal. The old one stops working once the new one is verified.
+- **Lost phone:** there are **no recovery codes**. "Lost your device?" tells the user to contact
+  Mobi Support: Support opens a reset request, a Security Admin verifies identity and resets 2FA,
+  and the user sets up a new authenticator at their next sign-in.
 - **Blocked:** more than 3 consecutive wrong codes block that user (only that user) and raise a
   Tech alert. The block stays until a Security Admin waives it.
 - **Account security** (sidebar user menu → Account security): replace your authenticator
-  (verify the current one, then the new one) and generate new recovery codes. Both send an
-  email to the Email preview where the PRD requires it.
+  (verify the current one, then the new one). This sends a confirmation email to the Email preview.
 - **User security** (View as → *Mobi Support* or *Security Admin*): users' 2FA status, reset
   requests, Tech alerts and the audit log. Support opens a reset request for a lost device. Security
   Admin verifies identity and resets, or waives a block. Every admin action needs a reason, and
-  admins first confirm it's them with their own authenticator code. Admins never see secrets
-  or recovery codes. Support and Security Admin have no merchant pages.
+  admins first confirm it's them with their own authenticator code. Admins never see authenticator
+  secrets. Support and Security Admin have no merchant pages.
 - **Rollout:** the first load of this build keeps all existing data but ends every session, so
   everyone signs in again with 2FA (FR-09).
 

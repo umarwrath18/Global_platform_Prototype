@@ -34,8 +34,6 @@ const EVENT_LABEL: Record<string, string> = {
   TECH_ALERT_RAISED: 'Tech alert raised',
   MFA_BLOCK_WAIVED: 'Block waived',
   LOGIN_BLOCKED_MFA: 'Sign-in refused (blocked)',
-  RECOVERY_CODE_USED: 'Recovery code used',
-  RECOVERY_CODES_REGENERATED: 'Recovery codes regenerated',
   AUTHENTICATOR_REPLACEMENT_STARTED: 'Replacement started',
   AUTHENTICATOR_REPLACED: 'Authenticator replaced',
   ADMIN_STEP_UP_VERIFIED: 'Admin identity confirmed',

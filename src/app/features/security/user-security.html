@@ -26,7 +26,7 @@
         } @else {
           <strong>Acting as Security Admin.</strong> You can complete reset requests after verifying the user’s identity, and waive security blocks. Every action needs a reason and is audited.
         }
-        Admins never see authenticator secrets or recovery codes.
+        Admins never see authenticator secrets.
       </div>
     </div>
 
@@ -55,7 +55,7 @@
             <div class="table-wrap">
               <table class="data-table">
                 <thead>
-                  <tr><th>User</th><th>Global Account</th><th>2FA</th><th>Last used</th><th>Recovery codes</th><th>Reset request</th><th><span class="sr-only">Actions</span></th></tr>
+                  <tr><th>User</th><th>Global Account</th><th>2FA</th><th>Last used</th><th>Reset request</th><th><span class="sr-only">Actions</span></th></tr>
                 </thead>
                 <tbody>
                   @for (u of users(); track u.userId) {
@@ -67,7 +67,6 @@
                         @if (u.blockedAt) {<span class="muted" style="display: block; margin-top: 4px">since {{ dateTime(u.blockedAt) }}</span>}
                       </td>
                       <td class="muted">{{ u.lastUsedAt ? rel(u.lastUsedAt) : '—' }}</td>
-                      <td class="muted">{{ u.mfaStatus === 'not_enrolled' ? '—' : u.recoveryCodesRemaining + ' of 2' }}</td>
                       <td class="muted">{{ u.openRequestId ?? '—' }}</td>
                       <td>
                         <div class="row-actions">
@@ -89,7 +88,7 @@
                       </td>
                     </tr>
                   } @empty {
-                    <tr><td colspan="7" class="muted">No users match “{{ query() }}”.</td></tr>
+                    <tr><td colspan="6" class="muted">No users match “{{ query() }}”.</td></tr>
                   }
                 </tbody>
               </table>
@@ -127,7 +126,7 @@
                 </table>
               </div>
             } @else {
-              <div class="empty-state"><div class="icon-tile"><app-icon name="file" /></div><h3>No reset requests</h3><p>Mobi Support opens a request when a user has lost their authenticator and recovery codes.</p></div>
+              <div class="empty-state"><div class="icon-tile"><app-icon name="file" /></div><h3>No reset requests</h3><p>Mobi Support opens a request when a user has lost their authenticator.</p></div>
             }
           </section>
         }
@@ -169,7 +168,7 @@
         <!-- ------------------------------------------ Audit log (FR-08) -->
         @case ('audit') {
           <section class="panel-card">
-            <div class="panel-head"><div><h2>Audit log</h2><p>Two-factor registration, verification, recovery, replacement, blocks, alerts, resets and waive-offs. Newest first.</p></div></div>
+            <div class="panel-head"><div><h2>Audit log</h2><p>Two-factor registration, verification, replacement, blocks, alerts, resets and waive-offs. Newest first.</p></div></div>
             @if (auditRows().length) {
               <div class="table-wrap">
                 <table class="data-table">
@@ -225,7 +224,7 @@
           } @else {
             @switch (a.kind) {
               @case ('request') {
-                <div class="alert compact" role="note"><app-icon name="info" /><div>Use this when the user has lost their authenticator and can’t use a recovery code. A Security Admin must verify their identity before the reset happens.</div></div>
+                <div class="alert compact" role="note"><app-icon name="info" /><div>Use this when the user has lost access to their authenticator app. A Security Admin must verify their identity before the reset happens.</div></div>
                 <div class="f-field"><label for="ref">Support ticket reference <span class="req">*</span></label><input id="ref" class="f-input" maxlength="64" placeholder="e.g. CS-48213" (input)="reference.set($any($event.target).value)" /></div>
                 <div class="f-field"><label for="reason">Reason <span class="req">*</span></label><textarea id="reason" class="f-input" maxlength="500" placeholder="What did the user report?" (input)="reason.set($any($event.target).value)"></textarea></div>
               }
@@ -234,7 +233,7 @@
                   <app-icon name="alert-circle" />
                   <div>
                     <strong>Request {{ a.user.openRequestId }}</strong>
-                    Resetting deletes this user’s authenticator and recovery codes, and signs them out everywhere. They must register a new authenticator at next sign-in, and we’ll email them.
+                    Resetting deletes this user’s authenticator and signs them out everywhere. They must register a new authenticator at next sign-in, and we’ll email them.
                   </div>
                 </div>
                 <div class="f-field">
