@@ -360,7 +360,12 @@ describe('MerchantServer', () => {
         for (const key of keys) expect((await ready({ action: 'set_item', stage, key, done: true })).status).toBe(200);
       };
       expect((await ready({ action: 'start_configuration' })).body.status).toBe('cs_configuration');
+      // Pricing is read-only while the MID is suspended (Pricing Engine §2.2).
+      const products = (await call<any>('GET', `/api/applications/${vn}/products`, null, 'cs')).body;
+      expect(products).toMatchObject({ mode: 'read_only', notice: 'This MID is suspended. Pricing cannot change until it is reactivated.' });
+      await lifecycle('GM-109001', 'reactivate', 'risk', 'Reviewed and cleared');
       await completeProductConfig(call, vn);
+      await lifecycle('GM-109001', 'suspend', 'risk');
       await tick('configuration', ['settlement_account', 'merchant_portal']);
       expect((await ready({ action: 'generate_keys' })).body.status).toBe('keys_generated');
       expect((await ready({ action: 'start_integration' })).body.status).toBe('integration');

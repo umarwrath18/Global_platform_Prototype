@@ -2,80 +2,330 @@
   <div class="editor-done" role="status">
     <app-icon name="check-circle" [size]="18" />
     <div>
-      <strong>{{ d.state === 'pending_approval' ? 'Sent to FinOps for approval' : 'Pricing saved' }}</strong>
-      {{ method()?.name }} · {{ d.mdrPct }}% from {{ date() }}
+      @if (d.status === 'pending_approval') {
+        <strong>Submitted for FinOps approval</strong> The current pricing stays in effect until FinOps approves the change.
+      } @else {
+        <strong>Pricing saved</strong> The pricing is set for this MID and shows in the table above.
+      }
     </div>
     <button type="button" class="btn sm" (click)="closed.emit()">Done</button>
   </div>
 } @else {
   <section class="editor" aria-labelledby="editor-title">
     <header class="editor-head">
-      <h3 id="editor-title">{{ preset().methodCode ? 'Set pricing' : 'Add pricing' }}</h3>
-      <ol class="step-bar" aria-label="Pricing steps">
-        @for (s of steps; track s; let i = $index) {
-          <li [class.current]="i === step()" [class.done]="i < step()" [attr.aria-current]="i === step() ? 'step' : null"><span class="n">{{ i + 1 }}</span>{{ s }}</li>
-        }
-      </ol>
+      <div class="editor-title">
+        <h3 id="editor-title">{{ title() }}</h3>
+        <p>{{ subtitle() }}</p>
+      </div>
+      @if (phase() === 'primary') {
+        <ol class="step-bar" aria-label="Pricing steps">
+          @for (s of steps; track s; let i = $index) {
+            <li [class.current]="i === step()" [class.done]="i < step()" [attr.aria-current]="i === step() ? 'step' : null">
+              <span class="n">@if (i < step()) {<app-icon name="check" [size]="11" />} @else { {{ i + 1 }} }</span>{{ s }}
+            </li>
+          }
+        </ol>
+      }
       <button type="button" class="btn sm ghost" (click)="cancel()">Cancel</button>
     </header>
 
     <div class="editor-body">
-      @switch (step()) {
-        @case (0) {
-          <div class="f-row">
-            <div class="f-field">
-              <span class="f-label" id="flow-label">Flow</span>
-              <div class="seg" role="radiogroup" aria-labelledby="flow-label">
-                @for (f of flowOptions(); track f.flow) {
-                  <button type="button" role="radio" [attr.aria-checked]="flow() === f.flow" [class.on]="flow() === f.flow" [disabled]="!f.enabled" (click)="setFlow(f.flow)" [title]="f.enabled ? '' : 'No ' + flowLabel[f.flow] + ' products are switched on'">{{ flowLabel[f.flow] }}</button>
-                }
-              </div>
+      @if (editing(); as e) {
+        @if (phase() === 'primary') {
+          <div class="alert info compact" role="note">
+            <app-icon name="info" />
+            <div>
+              Editing pricing for {{ method()?.name }} … Changes will create v{{ e.version + 1 }} effective from the new date. The pricing method ({{ techniqueLabel(e.technique) }}) cannot be changed.
+              <div class="existing">Existing Configuration: {{ techniqueLabel(e.technique) }} · {{ method()?.name }}@if (showVa()) { · VA Banks: {{ vaSummary() }}} · Effective: {{ slash(e.startDate) }} – {{ e.endDate ? slash(e.endDate) : 'Ongoing' }}</div>
             </div>
-            <div class="f-field">
-              <label for="pe-method">Payment method</label>
-              <select id="pe-method" class="f-input" (change)="methodCode.set($any($event.target).value)">
-                <option value="" [selected]="!methodCode()">Select a switched-on product</option>
-                @for (m of methodsInFlow(); track m.code) {<option [value]="m.code" [selected]="m.code === methodCode()">{{ m.name }}</option>}
-              </select>
-            </div>
-          </div>
-        }
-        @case (1) {
-          <div class="f-row">
-            <div class="f-field">
-              <label for="pe-mdr">MDR (%) for {{ method()?.name }}</label>
-              <input id="pe-mdr" class="f-input" type="number" inputmode="decimal" step="0.01" [min]="method()?.minMdr ?? 0" [max]="method()?.maxMdr ?? 100" [value]="mdr()" (input)="mdr.set($any($event.target).value)" [class.invalid]="mdr() !== '' && mdrError()" aria-describedby="pe-mdr-hint" />
-              <p class="f-hint" id="pe-mdr-hint">Allowed range {{ method()?.minMdr }}–{{ method()?.maxMdr }}%. MDR only; no fees or tiers.</p>
-              @if (mdr() !== '' && mdrError(); as e) {<p class="f-error" role="alert"><app-icon name="alert-circle" [size]="16" />{{ e }}</p>}
-            </div>
-          </div>
-        }
-        @case (2) {
-          <div class="f-row">
-            <div class="f-field">
-              <label for="pe-date">Effective from</label>
-              <input id="pe-date" class="f-input" type="date" [min]="today()" [value]="date()" (input)="date.set($any($event.target).value)" />
-              <p class="f-hint">Today means immediately{{ needsApproval() ? ' once FinOps approves' : '' }}.</p>
-            </div>
-            <dl class="editor-sum">
-              <div><dt>Product</dt><dd>{{ flowLabel[flow()] }} · {{ method()?.name }}</dd></div>
-              <div><dt>MDR</dt><dd>{{ mdrNumber() }}%</dd></div>
-              <div><dt>Settlement</dt><dd>{{ settlement() ?? 'Not set' }} <span class="muted">(set on the product)</span></dd></div>
-              <div><dt>Approval</dt><dd>{{ needsApproval() ? 'Needs FinOps approval' : 'Applies when saved (onboarding)' }}</dd></div>
-            </dl>
           </div>
         }
       }
-      @if (error(); as e) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
+
+      @if (errors().length) {
+        <div class="alert danger compact" role="alert">
+          <app-icon name="alert-circle" />
+          <div>
+            <strong>Please fix the following errors:</strong>
+            <ul class="err-list">@for (m of errors(); track m) {<li>{{ m }}</li>}</ul>
+          </div>
+        </div>
+      }
+
+      @if (phase() === 'primary') {
+        @switch (step()) {
+          @case (0) {
+            <p class="scope-strip">Corridor: {{ flag() }} {{ cname() }} | Currency: {{ local() }}</p>
+            <div class="f-row">
+              <div class="f-field">
+                <span class="f-label" id="flow-label">Flow Type</span>
+                <div class="seg" role="radiogroup" aria-labelledby="flow-label">
+                  @for (f of flowOptions(); track f.flow) {
+                    <button type="button" role="radio" [attr.aria-checked]="flow() === f.flow" [class.on]="flow() === f.flow" [disabled]="!f.enabled" (click)="setFlow(f.flow)" [title]="f.enabled ? '' : 'No ' + flowLabel[f.flow] + ' products are switched on'">{{ flowLabel[f.flow] }}</button>
+                  }
+                </div>
+              </div>
+              <div class="f-field">
+                <label for="pe-method">Payment Method <span class="req">*</span></label>
+                <select id="pe-method" class="f-input" (change)="setMethod($any($event.target).value)">
+                  <option value="" [selected]="!methodCode()">Select payment method</option>
+                  @for (m of methodsInFlow(); track m.code) {<option [value]="m.code" [selected]="m.code === methodCode()">{{ m.name }}</option>}
+                </select>
+              </div>
+              @if (showVa()) {
+                <div class="f-field va">
+                  <span class="f-label" id="va-label">VA Banks</span>
+                  <button type="button" class="f-input va-button" [attr.aria-expanded]="vaOpen()" aria-controls="va-list" aria-labelledby="va-label" (click)="vaOpen.set(!vaOpen())">{{ vaButton() }}<app-icon name="chevron-down" [size]="14" /></button>
+                  @if (vaOpen()) {
+                    <div class="va-list" id="va-list" role="group" aria-label="VA banks">
+                      <label class="va-item all"><input type="checkbox" [checked]="vaBanks().length === vaBankList.length" (change)="selectAllBanks($any($event.target).checked)" />Select All</label>
+                      @for (b of vaBankList; track b.code) {
+                        <label class="va-item"><input type="checkbox" [checked]="vaBanks().includes(b.code)" (change)="toggleBank(b.code)" />{{ b.name }}</label>
+                      }
+                    </div>
+                  }
+                  <p class="f-hint">No selection = all banks.</p>
+                </div>
+              }
+            </div>
+            <p class="scope-sum">{{ scopeText() }}</p>
+          }
+
+          @case (1) {
+            <div class="t-grid" role="radiogroup" aria-label="Pricing technique">
+              @for (t of techniques; track t.id) {
+                <button type="button" class="t-card" role="radio" [attr.aria-checked]="technique() === t.id" [class.on]="technique() === t.id" (click)="setTechnique(t.id)">
+                  <strong>{{ t.label }}</strong>
+                  <span>{{ t.description }}</span>
+                </button>
+              }
+            </div>
+            <label class="check-line">
+              <input type="checkbox" [checked]="technique() === null" (change)="setTechnique($any($event.target).checked ? null : 'variable_rate')" />
+              No primary pricing method – charge a subscription fee only
+            </label>
+            @if (technique() === null) {
+              <p class="f-hint">If the Primary Pricing Method is not configured, Subscription Fees must be configured.</p>
+            }
+          }
+
+          @case (2) {
+            @let t = technique();
+            <div class="f-row">
+              @if (t === 'variable_rate' || t === 'variable_plus_fixed' || t === 'higher_of') {
+                <div class="f-field"><label for="pe-mdr">MDR %</label><input id="pe-mdr" class="f-input" type="number" step="0.01" min="0" max="10" [value]="mdr()" (input)="mdr.set($any($event.target).value)" /></div>
+              }
+              @if (t === 'variable_plus_fixed') {
+                <div class="f-field"><label for="pe-fixed">Fixed Fee per Transaction</label><input id="pe-fixed" class="f-input" type="number" step="0.01" min="0" [value]="fixedFee()" (input)="fixedFee.set($any($event.target).value)" /></div>
+              }
+              @if (t === 'fixed_fee') {
+                <div class="f-field"><label for="pe-fixed">Fixed Fee per Transaction{{ usd() ? ' (USD)' : '' }}</label><input id="pe-fixed" class="f-input" type="number" step="0.01" min="0" [value]="fixedFee()" (input)="fixedFee.set($any($event.target).value)" /></div>
+              }
+              @if (t === 'variable_rate') {
+                <div class="f-field"><label for="pe-min">Minimum Fee (optional)</label><input id="pe-min" class="f-input" type="number" step="0.01" min="0" [value]="minimumFee()" (input)="minimumFee.set($any($event.target).value)" /><p class="f-hint">Applied as a floor: the fee is never lower.</p></div>
+              }
+              @if (t === 'higher_of') {
+                <div class="f-field"><label for="pe-min">Minimum Fee</label><input id="pe-min" class="f-input" type="number" step="0.01" min="0" [value]="minimumFee()" (input)="minimumFee.set($any($event.target).value)" /></div>
+              }
+              @if (t !== null && t !== 'volume_based' && t !== 'historical_volume') {
+                <div class="f-field">
+                  <label for="pe-cur">Currency</label>
+                  <select id="pe-cur" class="f-input" (change)="currency.set($any($event.target).value)">
+                    <option [value]="local()" [selected]="currency() !== 'USD'">{{ local() }}</option>
+                    @if (t === 'fixed_fee') {<option value="USD" [selected]="currency() === 'USD'">USD</option>}
+                  </select>
+                </div>
+              }
+            </div>
+
+            @if (usd()) {
+              <div class="f-row">
+                <div class="f-field"><span class="f-label">{{ local() }} Equivalent</span><p class="f-static">{{ localEquivalent() | number: '1.2-2' }} {{ local() }}</p><p class="f-hint">Auto-calculated: USD × {{ view().usdRate | number }} {{ local() }}/USD</p></div>
+                <div class="f-field"><span class="f-label">Exchange Rate Used</span><p class="f-static">{{ view().usdRate | number }} {{ local() }}/USD</p><p class="f-hint">Indicative. Each day uses the previous day's closing rate.</p></div>
+              </div>
+            }
+
+            @if (t === 'volume_based') {
+              <div class="f-row">
+                <div class="f-field">
+                  <label for="pe-vp">Volume Period</label>
+                  <select id="pe-vp" class="f-input" (change)="volumePeriod.set($any($event.target).value)">
+                    @for (p of volumePeriods; track p[0]) {<option [value]="p[0]" [selected]="p[0] === volumePeriod()">{{ p[1] }}</option>}
+                  </select>
+                </div>
+                <div class="f-field"><span class="f-label">Currency</span><p class="f-static">{{ local() }}</p></div>
+              </div>
+              <fieldset class="tiers">
+                <legend>Volume Tiers</legend>
+                @for (tier of tiers(); track $index; let i = $index) {
+                  <div class="tier">
+                    <span class="tier-n">Tier {{ i + 1 }}</span>
+                    <label>Min Volume<input class="f-input" type="number" min="0" [value]="tier.min" (input)="setTier(i, 'min', $any($event.target).value)" /></label>
+                    <label>Max Volume<input class="f-input" type="number" min="0" placeholder="No limit" [value]="tier.max" (input)="setTier(i, 'max', $any($event.target).value)" /></label>
+                    <label>MDR %<input class="f-input" type="number" step="0.01" min="0" [value]="tier.mdr" (input)="setTier(i, 'mdr', $any($event.target).value)" /></label>
+                    <label>Fixed Fee<input class="f-input" type="number" step="0.01" min="0" [value]="tier.fee" (input)="setTier(i, 'fee', $any($event.target).value)" /></label>
+                    @if (tiers().length > 1) {<button type="button" class="btn sm ghost" (click)="removeTier(i)" [attr.aria-label]="'Remove tier ' + (i + 1)"><app-icon name="trash" [size]="14" /></button>}
+                  </div>
+                }
+                <button type="button" class="btn sm" (click)="addTier()" [disabled]="!canAddTier()"><app-icon name="plus" [size]="13" />Add Tier</button>
+              </fieldset>
+            }
+
+            @if (t === 'historical_volume') {
+              <div class="alert info compact" role="note"><app-icon name="info" /><div>Pricing is determined by the previous period's transaction volume. If the threshold is met, the configured MDR applies; otherwise, the default MDR applies.</div></div>
+              <div class="f-row">
+                <div class="f-field"><label for="pe-ref">Reference Period</label><select id="pe-ref" class="f-input" (change)="refPeriod.set($any($event.target).value)">@for (p of referencePeriods; track p[0]) {<option [value]="p[0]" [selected]="p[0] === refPeriod()">{{ p[1] }}</option>}</select></div>
+                <div class="f-field"><label for="pe-metric">Evaluation Metric</label><select id="pe-metric" class="f-input" (change)="metric.set($any($event.target).value)">@for (p of metrics; track p[0]) {<option [value]="p[0]" [selected]="p[0] === metric()">{{ p[1] }}</option>}</select></div>
+                <div class="f-field"><label for="pe-thr">Volume Threshold ({{ local() }})</label><input id="pe-thr" class="f-input" type="number" step="1" min="0" [value]="threshold()" (input)="threshold.set($any($event.target).value)" /></div>
+                <div class="f-field"><label for="pe-dir">When Threshold Met</label>
+                  <select id="pe-dir" class="f-input" (change)="direction.set($any($event.target).value)">
+                    <option value=">=" [selected]="direction() === '>='">Volume &gt;= Threshold → Resulting MDR</option>
+                    <option value="<" [selected]="direction() === '<'">Volume &lt; Threshold → Default MDR</option>
+                  </select>
+                </div>
+                <div class="f-field"><label for="pe-res">Resulting MDR % (when met)</label><input id="pe-res" class="f-input" type="number" step="0.01" min="0" [value]="resultingMdr()" (input)="resultingMdr.set($any($event.target).value)" /></div>
+                <div class="f-field"><label for="pe-def">Default MDR % (when not met)</label><input id="pe-def" class="f-input" type="number" step="0.01" min="0" [value]="defaultMdr()" (input)="defaultMdr.set($any($event.target).value)" /><p class="f-hint">Also applies when there is no previous-period data.</p></div>
+                <div class="f-field"><span class="f-label">Currency</span><p class="f-static">{{ local() }}</p></div>
+              </div>
+            }
+
+            @if (t === null) {
+              <p class="f-hint">No per-transaction fee. Set the subscription fee under Secondary Charges.</p>
+            }
+
+            <div class="f-row dates">
+              <div class="f-field"><label for="pe-start">Start Date <span class="req">*</span></label><input id="pe-start" class="f-input" type="date" [min]="view().today" [value]="startDate()" (input)="startDate.set($any($event.target).value)" /></div>
+              <div class="f-field">
+                <label class="check-line"><input type="checkbox" [checked]="endChecked()" (change)="setEndChecked($any($event.target).checked)" />Set End Date</label>
+                <label for="pe-end" class="sr-only">End Date</label>
+                <input id="pe-end" class="f-input" type="date" [disabled]="!endChecked()" [min]="startDate()" [value]="endDate()" (input)="endDate.set($any($event.target).value)" aria-label="End Date" />
+              </div>
+            </div>
+            @if (!endChecked()) {
+              <p class="f-hint">No end date = open-ended pricing (applies indefinitely until superseded or deactivated).</p>
+            } @else if (effectiveSentence(); as e) {
+              <p class="f-hint">{{ e }}</p>
+            }
+            @if (supersession(); as s) {
+              <div class="alert info compact" role="status"><app-icon name="info" /><div>{{ s }}</div></div>
+            }
+            @for (w of warnings(); track w) {
+              <p class="f-hint warn"><app-icon name="alert-circle" [size]="14" />{{ w }}</p>
+            }
+            @if (overlap(); as o) {
+              <div class="alert danger compact" role="alert">
+                <app-icon name="alert-circle" />
+                <div>
+                  <strong>Pricing period overlaps with an existing configuration.</strong> {{ o }}
+                  <div><button type="button" class="link-button" (click)="editDates()">← Edit Effective Dates</button></div>
+                </div>
+              </div>
+            }
+          }
+
+          @case (3) {
+            <dl class="editor-sum">
+              <div><dt>Merchant</dt><dd>{{ view().merchantName }}</dd></div>
+              <div><dt>Corridor</dt><dd>{{ cname() }}</dd></div>
+              <div><dt>Sub-Merchant</dt><dd>Merchant Level</dd></div>
+              <div><dt>Flow</dt><dd>{{ flowLabel[flow()] }}</dd></div>
+              <div><dt>Payment Method</dt><dd>{{ method()?.name }}</dd></div>
+              @if (showVa()) {<div><dt>VA Banks</dt><dd>{{ vaSummary() }}</dd></div>}
+              <div><dt>Pricing Technique</dt><dd>{{ techniqueLabel(technique()) }}</dd></div>
+              <div class="wide"><dt>Configuration</dt><dd>{{ summary() }}</dd></div>
+              <div><dt>Effective</dt><dd>{{ period() }}</dd></div>
+              @if (flow() === 'payin') {<div><dt>Settlement Cycle</dt><dd>{{ settlement() ?? 'Not set' }} <span class="muted">(set on the product)</span></dd></div>}
+              <div><dt>Status</dt><dd><span class="status" [class.warning]="!onboarding()" [class.success]="onboarding()">{{ onboarding() ? 'Applies when saved' : 'Pending FinOps approval' }}</span></dd></div>
+            </dl>
+
+            <section class="calc" aria-labelledby="calc-title">
+              <h4 id="calc-title">Test Pricing Calculator</h4>
+              <div class="f-row">
+                <div class="f-field"><label for="calc-amt">Transaction Amount ({{ local() }})</label><input id="calc-amt" class="f-input" type="number" step="1" min="0" [value]="calcAmount()" (input)="calcAmount.set($any($event.target).value)" /></div>
+                @if (needsVolume()) {
+                  <div class="f-field"><label for="calc-vol">{{ technique() === 'historical_volume' ? 'Previous Period Volume' : 'Monthly Transaction Volume' }} ({{ local() }})</label><input id="calc-vol" class="f-input" type="number" step="1" min="0" [value]="calcVolume()" (input)="calcVolume.set($any($event.target).value)" /></div>
+                }
+              </div>
+              @let c = calc();
+              <p class="calc-fee"><span>Calculated Fee</span><strong>{{ money(c.fee, c.currency) }}</strong></p>
+              <p class="f-hint">{{ c.explanation }}</p>
+              <dl class="calc-rows">@for (r of c.breakdown; track r[0]) {<div><dt>{{ r[0] }}</dt><dd>{{ r[1] }}</dd></div>}</dl>
+            </section>
+          }
+        }
+      } @else {
+        <p class="f-hint">Secondary charges are applied in addition to, or as an override to, the primary pricing. You can skip this step if no secondary charges are needed.</p>
+
+        <section class="sec-card">
+          <label class="toggle-line big"><input type="checkbox" role="switch" [checked]="subOn()" (change)="subOn.set($any($event.target).checked)" /><span><strong>Subscription Fee</strong><span class="muted">Recurring monthly fee for this payment method</span></span></label>
+          @if (subOn()) {
+            <div class="f-row">
+              <div class="f-field"><label for="pe-sub">Monthly Subscription Fee ({{ local() }})</label><input id="pe-sub" class="f-input" type="number" step="0.01" min="0" [value]="subFee()" (input)="subFee.set($any($event.target).value)" /></div>
+            </div>
+            <p class="f-hint">Charged on the 1st of each month for the previous month.</p>
+          }
+        </section>
+
+        <section class="sec-card">
+          <label class="toggle-line big"><input type="checkbox" role="switch" [checked]="promoOn()" (change)="promoOn.set($any($event.target).checked)" [disabled]="technique() === null" /><span><strong>Promotional Pricing</strong><span class="muted">Override primary pricing during promotional period</span></span></label>
+          @if (promoOn()) {
+            <div class="f-row">
+              <div class="f-field wide">
+                <label for="pe-ptype">Promotion Type</label>
+                <select id="pe-ptype" class="f-input" (change)="promoType.set($any($event.target).value)">
+                  <option value="unconditional" [selected]="promoType() === 'unconditional'">Unconditional – flat promotional MDR for a period</option>
+                  <option value="conditional" [selected]="promoType() === 'conditional'">Conditional – promotional MDR when volume condition is met</option>
+                </select>
+              </div>
+              @if (promoType() === 'unconditional') {
+                <div class="f-field"><label for="pe-pmdr">Promotional MDR %</label><input id="pe-pmdr" class="f-input" type="number" step="0.01" min="0" [value]="promoMdr()" (input)="promoMdr.set($any($event.target).value)" /></div>
+              }
+              <div class="f-field"><label for="pe-pstart">Start Date</label><input id="pe-pstart" class="f-input" type="date" [value]="promoStart()" (input)="promoStart.set($any($event.target).value)" /></div>
+              <div class="f-field"><label for="pe-pend">End Date</label><input id="pe-pend" class="f-input" type="date" [value]="promoEnd()" (input)="promoEnd.set($any($event.target).value)" /><p class="f-hint">Optional; empty = no end.</p></div>
+            </div>
+            @if (promoType() === 'conditional') {
+              <div class="f-row">
+                <div class="f-field"><label for="pe-pper">Evaluation Period</label><select id="pe-pper" class="f-input" (change)="promoPeriod.set($any($event.target).value)"><option value="monthly" [selected]="promoPeriod() === 'monthly'">Monthly</option><option value="weekly" [selected]="promoPeriod() === 'weekly'">Weekly</option></select></div>
+                <div class="f-field"><label for="pe-pmet">Volume Metric</label><select id="pe-pmet" class="f-input" (change)="promoMetric.set($any($event.target).value)">@for (m of promoMetrics; track m[0]) {<option [value]="m[0]" [selected]="m[0] === promoMetric()">{{ m[1] }}</option>}</select></div>
+              </div>
+              <fieldset class="tiers">
+                <legend>Conditions</legend>
+                @for (c of conditions(); track $index; let i = $index) {
+                  <div class="tier cond">
+                    <span class="tier-n">IF</span>
+                    <select class="f-input sm" [attr.aria-label]="'Condition ' + (i + 1) + ' operator'" (change)="setCondition(i, 'op', $any($event.target).value)"><option value=">=" [selected]="c.op === '>='">&gt;=</option><option value=">" [selected]="c.op === '>'">&gt;</option></select>
+                    <input class="f-input" type="number" min="0" [attr.aria-label]="'Condition ' + (i + 1) + ' value'" [value]="c.value" (input)="setCondition(i, 'value', $any($event.target).value)" />
+                    <span class="tier-n">THEN MDR</span>
+                    <input class="f-input" type="number" step="0.01" min="0" [attr.aria-label]="'Condition ' + (i + 1) + ' MDR'" [value]="c.mdr" (input)="setCondition(i, 'mdr', $any($event.target).value)" />
+                    <span>%</span>
+                    @if (conditions().length > 1) {<button type="button" class="btn sm ghost" (click)="removeCondition(i)" [attr.aria-label]="'Remove condition ' + (i + 1)"><app-icon name="trash" [size]="14" /></button>}
+                  </div>
+                }
+                <button type="button" class="btn sm" (click)="addCondition()"><app-icon name="plus" [size]="13" />Add condition</button>
+                <p class="f-hint">Applies to transactions after the condition is met in the evaluation period; the highest matching threshold wins.</p>
+              </fieldset>
+            }
+          }
+        </section>
+      }
+
+      @if (serverError(); as e) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
     </div>
 
     <footer class="editor-foot">
-      @if (step() > 0) {<button type="button" class="btn sm" (click)="back()" [disabled]="saving()">Back</button>}
-      @if (step() < steps.length - 1) {
-        <button type="button" class="btn sm primary" (click)="next()" [disabled]="!canNext()">Next</button>
+      @if (phase() === 'primary') {
+        @if (step() > (editing() ? 2 : 0)) {<button type="button" class="btn sm" (click)="back()">Back</button>}
+        @if (step() < 3) {
+          <button type="button" class="btn sm primary" (click)="next()" [disabled]="!canNext()">Next</button>
+        } @else {
+          <button type="button" class="btn sm primary" (click)="toSecondary()">Next: Secondary Charges</button>
+        }
       } @else {
-        <button type="button" class="btn sm primary" (click)="save()" [disabled]="saving() || !!mdrError()">
-          @if (saving()) {<span class="spinner" aria-hidden="true"></span>}{{ needsApproval() ? 'Send for approval' : 'Save pricing' }}
+        <button type="button" class="btn sm" (click)="backToPrimary()" [disabled]="saving()">Back to Primary</button>
+        <span class="spacer"></span>
+        @if (technique() !== null) {<button type="button" class="btn sm" (click)="submit(true)" [disabled]="saving()">Skip – No Secondary Charges</button>}
+        <button type="button" class="btn sm primary" (click)="submit()" [disabled]="saving()">
+          @if (saving()) {<span class="spinner" aria-hidden="true"></span>}{{ onboarding() ? 'Save Pricing' : 'Submit for Approval' }}
         </button>
       }
     </footer>

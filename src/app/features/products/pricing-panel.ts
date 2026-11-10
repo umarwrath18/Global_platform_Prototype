@@ -1,17 +1,31 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal, viewChild } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { MerchantApi, toMerchantError } from '../../core/merchants/merchant-api.service';
-import { FLOW_LABEL, PRICING_STATUS_LABEL, PricingStatus, PricingVersionView, ProductMethod, ProductPricingView } from '../../core/merchants/products';
+import {
+  FLOW_LABEL,
+  money,
+  nextSubscriptionCharge,
+  periodText,
+  pricingInEffect,
+  pricingShort,
+  PRICING_STATUS_LABEL,
+  PRICING_STATUS_TONE,
+  PricingVersion,
+  ProductFlow,
+  ProductMethod,
+  ProductPricingView,
+  fmtDay,
+  techniqueLabel,
+  VA_BANKS,
+} from '../../core/merchants/products';
 import { Icon } from '../../shared/icon';
-import { fmtDate } from '../../shared/merchant-ui';
 import { PricingEditor, PricingPreset } from './pricing-editor';
 
-const TONE: Record<PricingStatus, string> = { active: 'success', scheduled: 'info', pending_approval: 'warning', superseded: '', rejected: 'danger', cancelled: '' };
-
-/** Step 2: pricing versions for the application's switched-on products, with an inline editor. */
+/** Step 2 (§8.4): pricing versions for the MID's switched-on products, with an inline editor. */
 @Component({
   selector: 'app-pricing-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, PricingEditor],
+  imports: [Icon, PricingEditor, RouterLink],
   templateUrl: './pricing-panel.html',
   styleUrl: './products.scss',
 })
@@ -27,30 +41,31 @@ export class PricingPanel {
 
   protected readonly flowLabel = FLOW_LABEL;
   protected readonly statusLabel = PRICING_STATUS_LABEL;
-  protected readonly tone = TONE;
-  protected readonly date = fmtDate;
+  protected readonly tone = PRICING_STATUS_TONE;
+  protected readonly technique = techniqueLabel;
+  protected readonly short = pricingShort;
+  protected readonly period = periodText;
   protected readonly history = signal(false);
   protected readonly editor = signal<PricingPreset | null>(null);
   protected readonly busy = signal<string | null>(null);
   protected readonly error = signal<string | null>(null);
-  /** Row whose reject comment box is open (FinOps). */
-  protected readonly rejecting = signal<string | null>(null);
-  protected readonly comment = signal('');
+  protected readonly note = signal<string | null>(null);
 
-  private readonly enabledSaved = computed(() => new Set(this.view().config.products.filter((p) => p.enabled).map((p) => p.methodCode)));
+  private readonly enabledSaved = computed(() => this.view().config.products.filter((p) => p.enabled));
   protected readonly rows = computed(() => {
     const v = this.view();
-    const shown = this.history() ? v.versions : v.versions.filter((x) => x.status === 'active' || x.status === 'scheduled' || x.status === 'pending_approval');
-    return shown.map((x) => ({ ...x, method: this.method(x.methodCode) }));
+    return (this.history() ? v.versions : v.versions.filter((x) => x.status === 'active' || x.status === 'scheduled' || x.status === 'pending_approval')).map((x) => ({ ...x, method: this.method(x.methodCode) }));
   });
-  /** Switched-on products with no pricing in effect. */
-  protected readonly unpriced = computed(() =>
-    this.view()
-      .methods.filter((m) => this.enabledSaved().has(m.code) && !this.view().versions.some((x) => x.methodCode === m.code && x.status === 'active'))
-      .map((m) => ({ ...m, pending: this.view().versions.find((x) => x.methodCode === m.code && x.status === 'pending_approval') ?? null })),
-  );
-  protected readonly anyEnabled = computed(() => this.enabledSaved().size > 0);
+  /** Switched-on products with no pricing in effect today (§8.4: light amber rows). */
+  protected readonly unpriced = computed(() => {
+    const v = this.view();
+    return this.enabledSaved()
+      .filter((p) => !pricingInEffect(v.versions, p.methodCode, v.today, p.flow))
+      .map((p) => ({ ...this.method(p.methodCode)!, pending: v.versions.some((x) => x.methodCode === p.methodCode && x.status === 'pending_approval') }));
+  });
+  protected readonly anyEnabled = computed(() => this.enabledSaved().length > 0);
   protected readonly open = computed(() => this.editor() !== null);
+  protected readonly maker = computed(() => this.view().can.editPricing);
 
   hasUnsavedChanges() {
     return this.editorRef()?.hasProgress() ?? false;
@@ -60,11 +75,33 @@ export class PricingPanel {
     return this.view().methods.find((m) => m.code === code);
   }
 
-  protected range(x: PricingVersionView) {
-    return x.effectiveTo ? `${this.date(x.effectiveFrom)} – ${this.date(x.effectiveTo)}` : `From ${this.date(x.effectiveFrom)}`;
+  protected vaText(x: PricingVersion) {
+    if (!(this.view().country === 'ID' && x.methodCode === 'va')) return '';
+    return x.vaBanks.length ? x.vaBanks.map((b) => VA_BANKS.find((v) => v.code === b)?.name ?? b).join(', ') : 'All VA Banks';
+  }
+
+  protected subscriptionText(x: PricingVersion) {
+    if (!x.subscription || !x.subscription.monthlyFee) return '';
+    const next = nextSubscriptionCharge(x, this.view().today);
+    return `+ ${money(x.subscription.monthlyFee, x.subscription.currency)}/month subscription${next && (x.status === 'active' || x.status === 'scheduled') ? ` · next charge ${fmtDay(next.date)} for ${next.forMonth}` : ''}`;
+  }
+
+  /** Edit: active / scheduled versions with no pending version in the same scope. */
+  protected canEditRow(x: PricingVersion) {
+    return (x.status === 'active' || x.status === 'scheduled') && !this.view().versions.some((o) => o.methodCode === x.methodCode && o.flow === x.flow && o.status === 'pending_approval');
+  }
+
+  /** Cancel: onboarding – active, scheduled or pending; change – scheduled or pending only. */
+  protected canCancelRow(x: PricingVersion) {
+    return this.view().mode === 'onboarding' ? ['active', 'scheduled', 'pending_approval'].includes(x.status) : ['scheduled', 'pending_approval'].includes(x.status);
   }
 
   protected openEditor(preset: PricingPreset) {
+    if (this.open()) {
+      this.note.set('Pricing editor already open – Save or cancel the pricing below first.');
+      return;
+    }
+    this.note.set(null);
     this.error.set(null);
     this.editor.set(preset);
     this.editing.emit(true);
@@ -72,6 +109,7 @@ export class PricingPanel {
 
   protected closeEditor() {
     this.editor.set(null);
+    this.note.set(null);
     this.editing.emit(false);
   }
 
@@ -79,31 +117,21 @@ export class PricingPanel {
     this.changed.emit({ view: res.view, message: '' });
   }
 
-  protected async cancelVersion(x: PricingVersionView & { method?: ProductMethod }) {
-    if (!confirm(`Cancel ${x.method?.name ?? x.methodCode} pricing ${x.mdrPct}% (${this.statusLabel[x.status].toLowerCase()})?`)) return;
-    await this.act(x.id, () => this.api.cancelPricing(this.view().applicationId, x.id), 'Pricing cancelled');
-  }
-
-  protected async decide(x: PricingVersionView, decision: 'approve' | 'reject') {
-    if (decision === 'reject' && this.comment().trim().length < 10) {
-      this.error.set('Give the reason for rejecting (at least 10 characters).');
-      return;
-    }
-    await this.act(x.id, () => this.api.decidePricing(this.view().applicationId, x.id, decision, this.comment().trim()), decision === 'approve' ? 'Pricing approved' : 'Pricing rejected');
-    this.rejecting.set(null);
-    this.comment.set('');
-  }
-
-  private async act(id: string, run: () => Promise<{ view: ProductPricingView }>, message: string) {
-    this.busy.set(id);
+  protected async cancelVersion(x: PricingVersion & { method?: ProductMethod }) {
+    if (!confirm(`Cancel ${techniqueLabel(x.technique)} pricing for ${x.method?.name ?? x.methodCode}?`)) return;
+    this.busy.set(x.id);
     this.error.set(null);
     try {
-      const res = await run();
-      this.changed.emit({ view: res.view, message });
+      const res = await this.api.cancelPricing(this.view().applicationId, x.id);
+      this.changed.emit({ view: res.view, message: `Cancelled pricing v${x.version}` });
     } catch (e) {
-      this.error.set(toMerchantError(e).message ?? "We couldn't update the pricing.");
+      this.error.set(toMerchantError(e).message ?? "We couldn't cancel the pricing.");
     } finally {
       this.busy.set(null);
     }
+  }
+
+  protected presetFor(flow: ProductFlow, methodCode: string | null): PricingPreset {
+    return { flow, methodCode, editOf: null };
   }
 }

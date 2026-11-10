@@ -1,12 +1,8 @@
 @if (view(); as v) {
   <div class="ppc">
-    <div class="ppc-notice" role="note">
+    <div class="ppc-notice" [class.warn]="v.suspended" role="note">
       <app-icon name="info" [size]="16" />
-      <div>
-        Switch on the products this MID will offer, then set pricing for each one.
-        @if (v.readOnlyReason) {<span class="muted"> {{ v.readOnlyReason }}</span>}
-        @if (v.inferred && v.phase !== 'proposal') {<span class="muted"> Shown from the approved application until products are saved.</span>}
-      </div>
+      <div>{{ v.notice }}</div>
     </div>
 
     <app-products-card [view]="v" [locked]="editorOpen()" (saved)="onChanged($event)" (dirtyChange)="productsDirty.set($event)" />

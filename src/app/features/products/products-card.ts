@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
 import { MerchantApi, toMerchantError } from '../../core/merchants/merchant-api.service';
-import { activePricing, ProductPricingView, SETTLEMENT_CYCLES, SettlementCycle } from '../../core/merchants/products';
+import { FLOW_ROW_LABEL, pricingInEffect, ProductFlow, ProductPricingView, SETTLEMENT_CYCLES, SettlementCycle } from '../../core/merchants/products';
 import { Icon } from '../../shared/icon';
 
 /** Step 1: switch products on or off and set each PayIn product's settlement cycle. Drafts until saved. */
@@ -22,6 +22,8 @@ export class ProductsCard {
   readonly dirtyChange = output<boolean>();
 
   protected readonly cycles = SETTLEMENT_CYCLES;
+  protected readonly flowRow = FLOW_ROW_LABEL;
+  protected readonly flows: ProductFlow[] = ['payin', 'payout'];
   protected readonly enabled = signal<Record<string, boolean>>({});
   protected readonly settlement = signal<Record<string, string>>({});
   /** Products the user agreed to switch off although they have pricing (onboarding). */
@@ -30,7 +32,9 @@ export class ProductsCard {
   protected readonly error = signal<string | null>(null);
 
   protected readonly payin = computed(() => this.view().methods.filter((m) => m.flow === 'payin'));
-  protected readonly payout = computed(() => this.view().methods.filter((m) => m.flow === 'payout'));
+  protected methodsOf(flow: ProductFlow) {
+    return this.view().methods.filter((m) => m.flow === flow);
+  }
   protected readonly savedOn = computed(() => new Set(this.view().config.products.filter((p) => p.enabled).map((p) => p.methodCode)));
   protected readonly onCount = computed(() => this.view().methods.filter((m) => this.enabled()[m.code]).length);
   protected readonly productChanges = computed(() => this.view().methods.filter((m) => !!this.enabled()[m.code] !== this.savedOn().has(m.code)).length);
@@ -39,6 +43,9 @@ export class ProductsCard {
   protected readonly settlementChanges = computed(() => this.settled().filter((m) => (this.settlement()[m.code] ?? '') !== (this.view().config.settlement[m.code] ?? '')).length);
   protected readonly dirty = computed(() => this.productChanges() + this.settlementChanges() > 0);
   protected readonly saveLabel = computed(() => (this.productChanges() && this.settlementChanges() ? 'Save changes' : this.productChanges() ? 'Save products' : 'Save settlement'));
+  protected readonly footText = computed(() =>
+    this.productChanges() ? 'Save products before setting their settlement and pricing.' : `${this.settlementChanges()} settlement change(s) not saved.`,
+  );
 
   constructor() {
     effect(() => this.reset(this.view()));
@@ -57,31 +64,26 @@ export class ProductsCard {
   }
 
   protected priced(code: string) {
-    return this.savedOn().has(code) && !!activePricing(this.view().versions, code, this.view().now);
-  }
-
-  /** Pricing that would be cancelled by switching the product off: anything not yet ended. */
-  private openPricing(code: string) {
-    return this.view().versions.filter((v) => v.methodCode === code && (v.status === 'active' || v.status === 'scheduled' || v.status === 'pending_approval'));
+    return this.savedOn().has(code) && !!pricingInEffect(this.view().versions, code, this.view().today);
   }
 
   /** After onboarding a product with active pricing can't be switched off. */
   protected lockedOn(code: string) {
-    return this.view().phase === 'post_handoff' && this.savedOn().has(code) && this.priced(code);
+    return this.view().mode === 'change' && this.savedOn().has(code) && this.view().versions.some((v) => v.methodCode === code && v.status === 'active');
   }
 
-  protected chipTitle(code: string, name: string) {
-    if (this.lockedOn(code)) return `${name} has active pricing, so it can't be switched off after onboarding.`;
-    return '';
+  protected chipTitle(code: string) {
+    return this.lockedOn(code) ? 'Has active pricing – cannot be switched off after onboarding.' : '';
   }
 
-  protected toggle(code: string, name: string) {
-    const on = !this.enabled()[code];
-    if (!on && this.view().phase === 'onboarding' && this.savedOn().has(code) && this.openPricing(code).length) {
-      if (!confirm(`Switch off ${name}? Its pricing will be cancelled when you save.`)) return;
-      this.confirmedOff.update((s) => new Set(s).add(code));
-    }
-    this.enabled.update((e) => ({ ...e, [code]: on }));
+  /** Pricing that switching off cancels: onboarding – active, scheduled, pending; change – scheduled, pending. */
+  private cancelledBySwitchOff(code: string) {
+    const statuses = this.view().mode === 'onboarding' ? ['active', 'scheduled', 'pending_approval'] : ['scheduled', 'pending_approval'];
+    return this.view().versions.some((v) => v.methodCode === code && statuses.includes(v.status));
+  }
+
+  protected toggle(code: string) {
+    this.enabled.update((e) => ({ ...e, [code]: !e[code] }));
   }
 
   protected setCycle(code: string, cycle: string) {
@@ -98,6 +100,9 @@ export class ProductsCard {
 
   protected async save() {
     const v = this.view();
+    const off = v.methods.filter((m) => this.savedOn().has(m.code) && !this.enabled()[m.code] && this.cancelledBySwitchOff(m.code));
+    if (off.length && !confirm(`Switching off ${off.map((m) => m.name).join(', ')} will cancel its pricing. Continue?`)) return;
+    this.confirmedOff.set(new Set(off.map((m) => m.code)));
     this.saving.set(true);
     this.error.set(null);
     try {

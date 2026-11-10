@@ -82,6 +82,16 @@ export const routes: Routes = [
         loadComponent: () => import('./features/approvals/approvals').then((m) => m.Approvals),
       },
       {
+        path: 'pricing-approvals',
+        title: 'Pricing Approvals · Mobi Global Platform',
+        loadComponent: () => import('./features/pricing/pricing-approvals').then((m) => m.PricingApprovals),
+      },
+      {
+        path: 'pricing-audit',
+        title: 'MDR audit log · Mobi Global Platform',
+        loadComponent: () => import('./features/pricing/pricing-audit').then((m) => m.PricingAudit),
+      },
+      {
         path: 'configuration/mcc',
         title: 'MCC catalogue · Mobi Global Platform',
         loadComponent: () => import('./features/configuration/mcc-catalogue').then((m) => m.MccCataloguePage),

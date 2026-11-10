@@ -14,6 +14,7 @@ import {
 import { mccLabel } from '../merchants/mcc';
 import { ApplicationData, CountryApplication, FieldIssue, READINESS_STATUSES, StaffRole } from '../merchants/merchant-models';
 import { countryName, ONBOARDING_COUNTRIES, REGISTRATION_COUNTRIES } from '../merchants/onboarding-config';
+import { fmtDay, pricingSummary } from '../merchants/products';
 import type { Caller, MerchantDb, MerchantRecord } from './merchant-server';
 import { fail } from './server-errors';
 
@@ -251,14 +252,14 @@ export function approvalsFor(db: MerchantDb, role: StaffRole): ApprovalsView {
     });
   }
   for (const v of db.pricingVersions ?? []) {
-    if (v.source !== 'post_onboarding') continue;
+    if (v.source !== 'change') continue;
     const app = db.applications.find((a) => a.id === v.applicationId);
     if (!app) continue;
     const method = ONBOARDING_COUNTRIES[app.country]?.paymentMethods.find((p) => p.code === v.methodCode)?.name ?? v.methodCode;
     items.push({
       kind: 'pricing', id: v.id, title: `Pricing change · ${countryName(app.country)}`, merchantId: app.merchantId, merchantName: name(app.merchantId), applicationId: app.id, country: app.country,
-      summary: `${method}: ${Number(v.mdrPct.toFixed(2))}% MDR from ${new Date(v.effectiveFrom).toISOString().slice(0, 10)}`, requestedBy: v.createdBy, requestedRole: v.createdRole, requestedAt: v.createdAt,
-      status: v.state === 'pending_approval' ? 'pending' : v.state === 'cancelled' ? 'withdrawn' : v.state, approverTeam: 'finops', decidedAt: v.decidedAt ?? v.cancelledAt, link: ['/applications', app.id, 'products'],
+      summary: `${method} v${v.version}: ${pricingSummary(v)} from ${fmtDay(v.startDate)}`, requestedBy: v.createdBy, requestedRole: v.createdRole, requestedAt: v.createdAt,
+      status: v.status === 'pending_approval' ? 'pending' : v.status === 'cancelled' ? 'withdrawn' : v.status === 'rejected' ? 'rejected' : 'approved', approverTeam: 'finops', decidedAt: v.approvedAt ?? v.rejectedAt ?? v.cancelledAt, link: ['/pricing-approvals'],
     });
   }
   for (const e of db.entities ?? []) {

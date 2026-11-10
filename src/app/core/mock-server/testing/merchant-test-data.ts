@@ -1,6 +1,6 @@
 import { emptyApplicationData } from '../../merchants/application-rules';
 import { ApplicationData, CountryApplication, StaffRole } from '../../merchants/merchant-models';
-import { ProductPricingView } from '../../merchants/products';
+import { PricingDraft, ProductPricingView } from '../../merchants/products';
 import { ONBOARDING_COUNTRIES } from '../../merchants/onboarding-config';
 import { buildMerchantSeed } from '../merchant-seed';
 import { MERCHANT_DB_VERSION } from '../merchant-server';
@@ -125,22 +125,37 @@ export function completeApplicationData(country: string, legalName: string): App
 
 type Call = (method: string, path: string, body?: unknown, role?: StaffRole) => Promise<{ status: number; body: any }>;
 
+/** A Percentage pricing draft for tests (today, open-ended). */
+export function percentageDraft(methodCode: string, mdrPct: number, startDate: string, flow: 'payin' | 'payout' = 'payin', over: Partial<PricingDraft> = {}): PricingDraft {
+  return { flow, methodCode, vaBanks: [], technique: 'variable_rate', currency: '', mdrPct, fixedFee: null, minimumFee: 0, volumePeriod: null, tiers: null, historical: null, subscription: null, promotion: null, startDate, endDate: null, ...over };
+}
+
 /**
  * Completes Product & Payment Config as Customer Success (test only): keeps the switched-on
- * products (or switches on the first one), gives each PayIn product a T+1 settlement cycle and
- * prices any unpriced product at the method's lowest allowed MDR.
+ * products (or switches on the first PayIn one), gives each PayIn product a T+1 settlement cycle
+ * and prices any unpriced product at 1% (Percentage) from today.
  */
 export async function completeProductConfig(call: Call, applicationId: string) {
   const view = (await call('GET', `/api/applications/${applicationId}/products`, null, 'cs')).body as ProductPricingView;
   const anyOn = view.config.products.some((p) => p.enabled);
-  const products = view.config.products.map((p, i) => ({ methodCode: p.methodCode, enabled: anyOn ? p.enabled : i === 0 }));
-  const settlement = Object.fromEntries(products.filter((p) => p.enabled).map((p) => [p.methodCode, view.config.settlement[p.methodCode] ?? 'T+1']));
-  const saved = await call('PUT', `/api/applications/${applicationId}/products`, { products, settlement, revision: view.config.revision }, 'cs');
-  if (saved.status !== 200 && saved.body?.message !== 'There are no changes to save.') throw new Error(`Saving products failed: ${JSON.stringify(saved.body)}`);
+  const firstPayin = view.methods.find((m) => m.flow === 'payin')!.code;
+  const products = view.config.products.map((p) => ({ methodCode: p.methodCode, enabled: anyOn ? p.enabled : p.methodCode === firstPayin }));
+  if (!anyOn) {
+    const saved = await call('PUT', `/api/applications/${applicationId}/products`, { products, settlement: {}, revision: view.config.revision }, 'cs');
+    if (saved.status !== 200) throw new Error(`Saving products failed: ${JSON.stringify(saved.body)}`);
+  }
+  const mid = (await call('GET', `/api/applications/${applicationId}/products`, null, 'cs')).body as ProductPricingView;
+  const settlement = Object.fromEntries(mid.config.products.filter((p) => p.enabled && p.flow === 'payin').map((p) => [p.methodCode, mid.config.settlement[p.methodCode] ?? 'T+1']));
+  if (JSON.stringify(settlement) !== JSON.stringify(mid.config.settlement)) {
+    const saved = await call('PUT', `/api/applications/${applicationId}/products`, { products: mid.config.products.map((p) => ({ methodCode: p.methodCode, enabled: p.enabled })), settlement, revision: mid.config.revision }, 'cs');
+    if (saved.status !== 200) throw new Error(`Saving settlement failed: ${JSON.stringify(saved.body)}`);
+  }
   const after = (await call('GET', `/api/applications/${applicationId}/products`, null, 'cs')).body as ProductPricingView;
   for (const gap of after.gaps.filter((g) => g.issue === 'pricing')) {
-    const method = after.methods.find((m) => m.code === gap.methodCode)!;
-    const priced = await call('POST', `/api/applications/${applicationId}/pricing`, { methodCode: method.code, mdrPct: method.minMdr }, 'cs');
-    if (priced.status !== 201) throw new Error(`Pricing failed: ${JSON.stringify(priced.body)}`);
+    for (const code of gap.methodCodes) {
+      const method = after.methods.find((m) => m.code === code)!;
+      const priced = await call('POST', `/api/applications/${applicationId}/pricing`, { draft: percentageDraft(code, 1, after.today, method.flow) }, 'cs');
+      if (priced.status !== 201) throw new Error(`Pricing failed: ${JSON.stringify(priced.body)}`);
+    }
   }
 }

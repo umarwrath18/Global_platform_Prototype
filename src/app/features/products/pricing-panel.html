@@ -1,5 +1,4 @@
 @let v = view();
-@let canEdit = v.can.editPricing;
 <section class="panel-card step-card" aria-labelledby="pricing-title">
   <header class="step-head">
     <span class="step-num" aria-hidden="true">2</span>
@@ -9,16 +8,22 @@
         <input type="checkbox" role="switch" [checked]="history()" (change)="history.set($any($event.target).checked)" />
         Show version history
       </label>
-      @if (canEdit) {
-        <button type="button" class="btn sm" [disabled]="open() || !anyEnabled() || productsDirty()" (click)="openEditor({ flow: 'payin', methodCode: null })" [title]="productsDirty() ? 'Save or discard product changes first' : !anyEnabled() ? 'Switch on and save a product first' : ''">
+      @if (maker()) {
+        <button type="button" class="btn sm" [disabled]="open() || !anyEnabled() || productsDirty()" (click)="openEditor(presetFor('payin', null))" [title]="productsDirty() ? 'Save products before setting their settlement and pricing.' : !anyEnabled() ? 'Switch on at least one product.' : ''">
           <app-icon name="plus" [size]="14" />Add pricing
         </button>
       }
     </div>
   </header>
 
-  @if (productsDirty() && canEdit) {
-    <p class="step-note"><app-icon name="info" [size]="14" />Save or discard your product changes before changing pricing.</p>
+  @if (productsDirty() && maker()) {
+    <p class="step-note"><app-icon name="info" [size]="14" />Save products before setting their settlement and pricing.</p>
+  }
+  @if (!maker() && v.pricingMessage && v.mode !== 'read_only') {
+    <p class="step-note"><app-icon name="lock" [size]="14" />{{ v.pricingMessage }}</p>
+  }
+  @if (note(); as n) {
+    <p class="step-note warn" role="status"><app-icon name="info" [size]="14" />{{ n }}</p>
   }
 
   <div class="table-wrap">
@@ -26,24 +31,24 @@
       <thead>
         <tr>
           <th scope="col">Payment method</th>
-          <th scope="col">Flow</th>
+          <th scope="col">Technique</th>
           <th scope="col">Pricing</th>
-          <th scope="col">Effective dates</th>
+          <th scope="col">Effective</th>
           <th scope="col">Status</th>
           <th scope="col"><span class="sr-only">Actions</span></th>
         </tr>
       </thead>
       <tbody>
         @for (u of unpriced(); track u.code) {
-          <tr class="unpriced" [class.active-row]="editor()?.methodCode === u.code">
-            <td>{{ u.name }}</td>
-            <td>{{ flowLabel[u.flow] }}</td>
+          <tr class="unpriced" [class.active-row]="editor()?.methodCode === u.code && !editor()?.editOf">
+            <td>{{ u.name }}<div class="sub-line">{{ flowLabel[u.flow] }}</div></td>
+            <td class="muted">–</td>
             <td class="muted">No pricing yet</td>
             <td class="muted">–</td>
             <td><span class="status warning">Not priced</span></td>
             <td class="row-actions">
-              @if (canEdit && !u.pending) {
-                <button type="button" class="btn sm" [disabled]="open() || productsDirty()" (click)="openEditor({ flow: u.flow, methodCode: u.code })">Set pricing</button>
+              @if (maker() && !u.pending) {
+                <button type="button" class="btn sm" [disabled]="productsDirty() || !!busy()" (click)="openEditor(presetFor(u.flow, u.code))"><app-icon name="plus" [size]="13" />Set pricing</button>
               } @else if (u.pending) {
                 <span class="muted small">Waiting for FinOps</span>
               }
@@ -51,47 +56,43 @@
           </tr>
         }
         @for (x of rows(); track x.id) {
-          <tr [class.active-row]="editor()?.methodCode === x.methodCode && x.status === 'active'" [class.faded]="x.status === 'superseded' || x.status === 'cancelled' || x.status === 'rejected'">
+          <tr [class.active-row]="editor()?.editOf === x.id" [class.faded]="x.status === 'expired' || x.status === 'cancelled' || x.status === 'rejected'">
             <td>
               {{ x.method?.name ?? x.methodCode }}
-              @if (x.source === 'legacy_application') {<span class="tag" title="Risk-approved MDR from the country application">From application</span>}
+              <div class="sub-line">{{ flowLabel[x.flow] }} · v{{ x.version }}@if (vaText(x); as va) { · {{ va }}}</div>
             </td>
-            <td>{{ flowLabel[x.flow] }}</td>
-            <td class="mono">{{ x.mdrPct }}% MDR</td>
-            <td>{{ range(x) }}</td>
-            <td><span class="status" [class]="'status ' + tone[x.status]">{{ statusLabel[x.status] }}</span></td>
+            <td>{{ technique(x.technique) }}</td>
+            <td>
+              <span class="mono">{{ short(x) }}</span>
+              @if (subscriptionText(x); as sub) {<div class="sub-line">{{ sub }}</div>}
+              @if (x.promotion; as p) {<div class="sub-line">Promo {{ p.mdrPct }}%{{ p.type === 'conditional' ? ' (conditional)' : '' }}</div>}
+            </td>
+            <td>{{ period(x) }}</td>
+            <td>
+              <span class="status" [class]="'status ' + tone[x.status]">{{ statusLabel[x.status] }}</span>
+              @if (x.status === 'rejected' && x.rejectionReason) {<div class="sub-line">{{ x.rejectionReason }}</div>}
+            </td>
             <td class="row-actions">
-              @if (x.status === 'active' && canEdit) {
-                <button type="button" class="btn sm ghost" [disabled]="open() || productsDirty() || !!busy()" (click)="openEditor({ flow: x.flow, methodCode: x.methodCode, mdrPct: x.mdrPct })">Edit</button>
+              @if (maker() && canEditRow(x)) {
+                <button type="button" class="btn sm ghost" [disabled]="productsDirty() || !!busy()" (click)="openEditor({ flow: x.flow, methodCode: x.methodCode, editOf: x.id })">Edit</button>
               }
-              @if ((x.status === 'pending_approval' || x.status === 'scheduled') && canEdit) {
-                <button type="button" class="btn sm ghost" [disabled]="open() || !!busy()" (click)="cancelVersion(x)">Cancel</button>
-              }
-              @if (x.status === 'pending_approval' && v.can.decidePricing) {
-                <button type="button" class="btn sm" [disabled]="!!busy()" (click)="rejecting.set(rejecting() === x.id ? null : x.id)">Reject</button>
-                <button type="button" class="btn sm primary" [disabled]="!!busy()" (click)="decide(x, 'approve')">@if (busy() === x.id) {<span class="spinner" aria-hidden="true"></span>}Approve</button>
+              @if (maker() && canCancelRow(x)) {
+                <button type="button" class="btn sm ghost" [disabled]="open() || !!busy()" (click)="cancelVersion(x)">@if (busy() === x.id) {<span class="spinner" aria-hidden="true"></span>}Cancel</button>
               }
             </td>
           </tr>
-          @if (rejecting() === x.id) {
-            <tr class="decision-row">
-              <td colspan="6">
-                <div class="decision">
-                  <label for="reject-{{ x.id }}">Reason for rejecting <span class="req">*</span></label>
-                  <input id="reject-{{ x.id }}" class="f-input" maxlength="1000" [value]="comment()" (input)="comment.set($any($event.target).value)" />
-                  <button type="button" class="btn sm danger-outline" [disabled]="!!busy()" (click)="decide(x, 'reject')">Reject pricing</button>
-                </div>
-              </td>
-            </tr>
-          }
         } @empty {
           @if (!unpriced().length) {
-            <tr><td colspan="6" class="muted empty-row">{{ anyEnabled() ? 'No pricing to show.' : 'Switch on and save a product to set its pricing.' }}</td></tr>
+            <tr><td colspan="6" class="muted empty-row">{{ anyEnabled() ? 'No pricing to show.' : 'No pricing set for this MID yet. Switch on its products above, then add pricing for each one.' }}</td></tr>
           }
         }
       </tbody>
     </table>
   </div>
+
+  @if (v.can.decidePricing && v.versions.some(x => x.status === 'pending_approval')) {
+    <p class="step-note"><app-icon name="info" [size]="14" />Approve or reject pending pricing on <a routerLink="/pricing-approvals">Pricing Approvals</a>.</p>
+  }
 
   @if (error(); as e) {<div class="alert danger compact panel-alert" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
 

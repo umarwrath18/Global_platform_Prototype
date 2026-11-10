@@ -152,7 +152,7 @@ describe('Merchant portal', () => {
       const o = (await get<MerchantPortalOverview>('/api/merchant-portal/overview', t)).body;
       expect(o.merchant).toEqual({ id: 'GM-109001', name: 'Nusantara Home Retail Sdn Bhd' });
       expect(o.balances.map((b) => b.currency)).toEqual(['MYR', 'IDR']);
-      expect(o.paymentMethods.map((m) => m.code)).toEqual(['MY_CARDS', 'MY_FPX', 'MY_DUITNOW', 'MY_TNG', 'ID_QRIS', 'ID_VA', 'ID_OVO']);
+      expect(o.paymentMethods.map((m) => m.code)).toEqual(['fpx', 'duitnow_qr', 'tng', 'cards', 'va', 'qris', 'ovo']);
       const page = (await list('range=30d&pageSize=100', t)).body;
       expect(page.total).toBeGreaterThan(0);
       expect(new Set(page.items.map((x) => x.currency))).toEqual(new Set(['MYR', 'IDR']));

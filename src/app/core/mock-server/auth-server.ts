@@ -1052,6 +1052,23 @@ export class AuthServer {
    * simulated services). `portal` says which kind of user the calling service serves: internal
    * services refuse merchant users, and the merchant portal refuses internal users.
    */
+  /**
+   * Re-authentication for sensitive actions (pricing approvals): checks a current code from the
+   * signed-in user's own authenticator, with the same replay protection and failure counting as
+   * sign-in. Throws MFA_CODE_INVALID / MFA_CODE_REUSED / MFA_BLOCKED like the MFA APIs.
+   */
+  async verifyCode(token: string | null, code: unknown): Promise<void> {
+    await this.ensureSeeded();
+    const db = this.load();
+    const { user } = await this.requireSession(db, token, false);
+    if (typeof code !== 'string' || !/^\d{6}$/.test(code.trim())) fail(400, 'VALIDATION_FAILED');
+    try {
+      await this.checkCurrentCode(db, user, (code as string).trim(), 'step_up');
+    } finally {
+      this.save(db);
+    }
+  }
+
   async authenticate(
     token: string | null,
     portal: 'internal' | 'merchant' = 'internal',

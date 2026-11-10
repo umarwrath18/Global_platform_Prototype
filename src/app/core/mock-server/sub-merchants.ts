@@ -1,7 +1,7 @@
 import { isEmail, isUrl } from '../merchants/application-rules';
 import { CountryApplication, StaffRole } from '../merchants/merchant-models';
 import { countryName, ONBOARDING_COUNTRIES, subMerchantRoutes } from '../merchants/onboarding-config';
-import { activePricing } from '../merchants/products';
+import { pricingInEffect, pricingSummary, todayIso } from '../merchants/products';
 import { regionForCountry } from '../merchants/regions';
 import { SUB_MERCHANT_CHECKS, SubMerchantView } from '../merchants/sub-merchants';
 import { entityOfApplication, entityProblems, formatEntityId, goLiveBlocker, isRuleError, issueMid, MerchantEntity, parentEntityOf, RegionalMid, toMidView } from './merchant-identity';
@@ -215,7 +215,7 @@ export function subMerchantView(db: MerchantDb, sub: MerchantEntity, now: number
     const s = productState(db, app);
     products = s.config.products.filter((p) => p.enabled).map((p) => ({
       name: s.methods.find((m) => m.code === p.methodCode)?.name ?? p.methodCode,
-      mdrPct: activePricing(s.versions, p.methodCode, now)?.mdrPct ?? null,
+      pricing: ((v) => (v ? pricingSummary(v) : null))(pricingInEffect(s.versions, p.methodCode, todayIso(now), p.flow)),
       settlement: s.config.settlement[p.methodCode] ?? null,
     }));
   }

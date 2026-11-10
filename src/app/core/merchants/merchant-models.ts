@@ -371,7 +371,7 @@ export interface ApplicationDetail {
   midIssue: string | null;
   /** True once the merchant has been approved by Risk: MCC changes then need Risk approval. */
   mccChangeNeedsRisk: boolean;
-  /** During Product & Payment Config: what still stops "Issue production keys". Null at other stages. */
+  /** During Product & Payment Config: what still stops "Confirm onboarding". Null at other stages. */
   productGaps: ProductGap[] | null;
   /** Change requests for this country after Risk approval, latest first. */
   changes: ChangeRequest[];
@@ -390,6 +390,7 @@ export type ReadinessAction =
   | { action: 'start_configuration' }
   | { action: 'set_item'; stage: ReadinessStage; key: string; done: boolean }
   | { action: 'generate_keys' }
+  | { action: 'confirm_onboarding' }
   | { action: 'start_integration' }
   | { action: 'set_ipn'; url: string }
   | { action: 'request_go_live' }
@@ -458,6 +459,8 @@ export type MerchantApiErrorCode =
   | 'PRICING_WILL_BE_CANCELLED'
   | 'PRODUCT_HAS_ACTIVE_PRICING'
   | 'PRICING_PENDING'
+  | 'PRICING_OVERLAP'
+  | 'SERVICE_UNAVAILABLE'
   | 'CHANGE_REQUEST_REQUIRED'
   | 'CHANGE_PENDING'
   | 'SUB_MERCHANT_ROUTE_NOT_ALLOWED'

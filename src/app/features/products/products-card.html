@@ -8,47 +8,40 @@
   </header>
 
   <div class="step-body">
-    <div class="flow-row">
-      <div class="flow-label"><strong>PayIn</strong><span>Collections</span></div>
-      <div class="chips" role="group" aria-label="PayIn products">
-        @for (m of payin(); track m.code) {
-          <button
-            type="button"
-            class="p-chip"
-            role="switch"
-            [attr.aria-checked]="!!enabled()[m.code]"
-            [class.on]="enabled()[m.code]"
-            [class.changed]="changed(m.code)"
-            [disabled]="!edit || locked() || saving() || (lockedOn(m.code) && enabled()[m.code])"
-            [title]="chipTitle(m.code, m.name)"
-            (click)="toggle(m.code, m.name)"
-          >
-            <span class="knob" aria-hidden="true"></span>
-            <span class="p-name">{{ m.name }}</span>
-            @if (changed(m.code)) {
-              <span class="p-state unsaved">Not saved</span>
-            } @else if (enabled()[m.code] && priced(m.code)) {
-              <span class="p-state priced">✓ Priced</span>
-            }
-            @if (lockedOn(m.code) && enabled()[m.code]) {<app-icon name="lock" [size]="12" />}
-          </button>
-        }
+    @for (flow of flows; track flow) {
+      <div class="flow-row">
+        <div class="flow-label"><strong>{{ flowRow[flow] }}</strong></div>
+        <div class="chips" role="group" [attr.aria-label]="flowRow[flow] + ' products'">
+          @for (m of methodsOf(flow); track m.code) {
+            <button
+              type="button"
+              class="p-chip"
+              role="switch"
+              [attr.aria-checked]="!!enabled()[m.code]"
+              [class.on]="enabled()[m.code]"
+              [class.changed]="changed(m.code)"
+              [disabled]="!edit || locked() || saving() || (lockedOn(m.code) && enabled()[m.code])"
+              [title]="chipTitle(m.code)"
+              (click)="toggle(m.code)"
+            >
+              <span class="knob" aria-hidden="true"></span>
+              <span class="p-name">{{ m.name }}</span>
+              @if (changed(m.code)) {
+                <span class="p-state unsaved">{{ enabled()[m.code] ? 'Not saved' : 'Off – not saved' }}</span>
+              } @else if (enabled()[m.code] && priced(m.code)) {
+                <span class="p-state priced">Priced</span>
+              }
+              @if (lockedOn(m.code) && enabled()[m.code]) {<app-icon name="lock" [size]="12" />}
+            </button>
+          }
+        </div>
       </div>
-    </div>
-
-    <div class="flow-row">
-      <div class="flow-label"><strong>PayOut</strong><span>Disbursements</span></div>
-      @if (payout().length) {
-        <div class="chips" role="group" aria-label="PayOut products"></div>
-      } @else {
-        <p class="flow-empty">No payout methods configured for {{ v.countryName }}.</p>
-      }
-    </div>
+    }
 
     <div class="divider" role="separator"></div>
 
     <div class="settle">
-      <p class="settle-label"><strong>Settlement</strong> / Per PayIn product</p>
+      <p class="settle-label"><strong>Settlement</strong> – Per PayIn product</p>
       @if (settled().length) {
         <div class="settle-grid">
           @for (m of settled(); track m.code) {
@@ -63,17 +56,18 @@
           }
         </div>
       } @else {
-        <p class="flow-empty">Save at least one PayIn product to set its settlement cycle.</p>
+        <p class="flow-empty">Switch on and save the product first.</p>
       }
-      <p class="f-hint">Settlement changes apply once saved and are recorded in the audit trail. They never create a pricing version.</p>
+      <p class="f-hint">Settlement changes apply once saved and are recorded in the audit trail.</p>
     </div>
 
+    @if (!edit && v.productsMessage) {<p class="f-hint" role="note"><app-icon name="lock" [size]="13" /> {{ v.productsMessage }}</p>}
     @if (error(); as e) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
   </div>
 
   @if (dirty()) {
     <footer class="step-foot">
-      <span class="foot-status"><span class="dot-unsaved" aria-hidden="true"></span>{{ productChanges() + settlementChanges() }} unsaved {{ productChanges() + settlementChanges() === 1 ? 'change' : 'changes' }}</span>
+      <span class="foot-status"><span class="dot-unsaved" aria-hidden="true"></span>{{ footText() }}</span>
       <div class="foot-actions">
         <button type="button" class="btn sm" (click)="reset()" [disabled]="saving()">Discard</button>
         <button type="button" class="btn sm primary" (click)="save()" [disabled]="saving() || locked()">

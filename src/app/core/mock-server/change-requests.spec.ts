@@ -5,6 +5,8 @@ import { AuthServer } from './auth-server';
 import { MerchantDb, MerchantServer } from './merchant-server';
 import { FlakyStorage } from './testing/merchant-test-data';
 import { signIn } from './testing/sign-in';
+import { percentageDraft } from './testing/merchant-test-data';
+import { todayIso } from '../merchants/products';
 
 const KEY = 'mobi.gp.merchantdb';
 
@@ -190,7 +192,7 @@ describe('Changes after Risk approval', () => {
   describe('Approvals page', () => {
     it('shows each team what waits for it, and recent decisions', async () => {
       const bank = (await requestCountry('APP-2026-0001', 'bank', { ...app('APP-2026-0001').data.bank, bankName: 'RHB Bank' })).body;
-      const pricing = (await call<any>('POST', '/api/applications/APP-2026-0009/pricing', { methodCode: 'ID_QRIS', mdrPct: 0.8 }, 'sales')).body.version;
+      const pricing = (await call<any>('POST', '/api/applications/APP-2026-0009/pricing', { draft: percentageDraft('qris', 0.8, todayIso(now + 24 * 60 * 60_000)) }, 'sales')).body.version;
       const d = db();
       d.mccRequests = [{ id: 'MCR-0001', merchantId: 'GM-100105', previous: null, proposed: { code: '5814', description: 'TEST – Fast food restaurants' }, reason: 'Menu change', restrictedIn: [], requestedBy: 'Sarah Lim', requestedRole: 'sales', requestedAt: now, status: 'pending', decidedBy: null, decidedRole: null, decidedAt: null, decisionComment: null }];
       storage.setItem(KEY, JSON.stringify(d));
@@ -201,11 +203,12 @@ describe('Changes after Risk approval', () => {
       expect(risk.pending.map((i) => `${i.kind}:${i.id}`)).toEqual([`change:${bank.id}`, 'mcc:MCR-0001']);
       expect(risk.pending[0]).toMatchObject({ link: ['/applications', 'APP-2026-0001'], summary: 'Bank name: Maybank → RHB Bank' });
       const finops = await view('finops');
-      expect(finops.pending.map((i) => `${i.kind}:${i.id}`)).toEqual([`pricing:${pricing.id}`]);
-      expect(finops.pending[0].link).toEqual(['/applications', 'APP-2026-0009', 'products']);
-      expect((await view('sales')).pending).toHaveLength(3);
+      // The seed also has a pending Cards change for APP-2026-0001.
+      expect(finops.pending.map((i) => `${i.kind}:${i.id}`).sort()).toEqual([`pricing:${pricing.id}`, 'pricing:PV-SEED-0001-cards-v2'].sort());
+      expect(finops.pending[0].link).toEqual(['/pricing-approvals']);
+      expect((await view('sales')).pending).toHaveLength(4);
       expect((await view('sales')).canDecide).toBe(false);
-      expect((await view('cs')).pending).toHaveLength(3);
+      expect((await view('cs')).pending).toHaveLength(4);
 
       await decide(bank.id, 'reject', 'Bank letter is not on company letterhead');
       const after = await view('risk');

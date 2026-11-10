@@ -4,7 +4,7 @@ import { ReadinessStage } from './merchant-models';
 // Per-country onboarding rules. NOTE: these values are illustrative and have NOT been
 // approved by Mobi Risk, Legal or Product. They are the defaults for Country Configuration:
 // at runtime `ONBOARDING_COUNTRIES` holds the live configuration (see applyCountryConfigs).
-// Currency, Payment Method and Pricing configuration are still fixed here.
+// Currency and the product catalog (Pricing Engine §3.3) are fixed here.
 
 export interface FieldRule {
   key: string;
@@ -22,13 +22,13 @@ export interface DocumentRule {
   hint?: string;
 }
 
+/** A product in the country catalog (Pricing Engine §3.3). */
 export interface PaymentMethodRule {
   code: string;
   name: string;
-  kind: 'card' | 'bank_transfer' | 'qr' | 'ewallet';
-  defaultMdr: number;
-  minMdr: number;
-  maxMdr: number;
+  flow: 'payin' | 'payout';
+  /** Usual maximum MDR %: the pricing editor warns above it (hard limit 10%). */
+  typicalMaxMdr: number;
 }
 
 export interface DirectorRules {
@@ -73,14 +73,9 @@ export function subMerchantRoutes(cfg: Pick<CountryOnboardingConfig, 'subMerchan
   return { opsInitiated: cfg?.subMerchantCreation?.opsInitiated ?? true, parentInitiated: cfg?.subMerchantCreation?.parentInitiated ?? false };
 }
 
-const pm = (code: string, name: string, kind: PaymentMethodRule['kind'], defaultMdr: number, minMdr: number, maxMdr: number): PaymentMethodRule => ({
-  code,
-  name,
-  kind,
-  defaultMdr,
-  minMdr,
-  maxMdr,
-});
+const pm = (code: string, name: string, flow: PaymentMethodRule['flow'], typicalMaxMdr: number): PaymentMethodRule => ({ code, name, flow, typicalMaxMdr });
+/** Bank Transfer payout, in every corridor. */
+const PAYOUT = pm('bank_transfer_payout', 'Bank Transfer', 'payout', 5);
 
 // Launched countries: registration is open here. See PLANNED_COUNTRIES for the roadmap.
 export const ONBOARDING_COUNTRIES: Record<string, CountryOnboardingConfig> = {
@@ -104,12 +99,7 @@ export const ONBOARDING_COUNTRIES: Record<string, CountryOnboardingConfig> = {
       { type: 'bank_statement', label: 'Bank statement (latest 3 months)', required: true },
       { type: 'sst_certificate', label: 'SST registration certificate', required: false },
     ],
-    paymentMethods: [
-      pm('MY_CARDS', 'Visa / Mastercard', 'card', 2.2, 1.5, 3.5),
-      pm('MY_FPX', 'FPX online banking', 'bank_transfer', 1.0, 0.6, 1.8),
-      pm('MY_DUITNOW', 'DuitNow QR', 'qr', 0.8, 0.5, 1.5),
-      pm('MY_TNG', "Touch 'n Go eWallet", 'ewallet', 1.5, 1.0, 2.5),
-    ],
+    paymentMethods: [pm('fpx', 'FPX', 'payin', 1.8), pm('duitnow_qr', 'DuitNow QR', 'payin', 1.5), pm('tng', "Touch 'n Go", 'payin', 2.5), pm('grabpay', 'GrabPay', 'payin', 5), pm('cards', 'Cards', 'payin', 3.5), PAYOUT],
   },
   ID: {
     ...COUNTRY_CATALOGUE['ID'],
@@ -131,13 +121,7 @@ export const ONBOARDING_COUNTRIES: Record<string, CountryOnboardingConfig> = {
       { type: 'director_id', label: 'Director KTP / passport copies', required: true },
       { type: 'bank_statement', label: 'Bank account proof', required: true },
     ],
-    paymentMethods: [
-      pm('ID_QRIS', 'QRIS', 'qr', 0.7, 0.3, 1.0),
-      pm('ID_VA', 'Bank virtual account', 'bank_transfer', 0.9, 0.5, 1.5),
-      pm('ID_OVO', 'OVO', 'ewallet', 1.5, 1.0, 2.5),
-      pm('ID_DANA', 'DANA', 'ewallet', 1.5, 1.0, 2.5),
-      pm('ID_CARDS', 'Visa / Mastercard', 'card', 2.5, 1.8, 3.5),
-    ],
+    paymentMethods: [pm('va', 'Virtual Account', 'payin', 1.5), pm('qris', 'QRIS', 'payin', 1.0), pm('dana', 'DANA', 'payin', 2.5), pm('ovo', 'OVO', 'payin', 2.5), PAYOUT],
   },
   VN: {
     ...COUNTRY_CATALOGUE['VN'],
@@ -158,12 +142,7 @@ export const ONBOARDING_COUNTRIES: Record<string, CountryOnboardingConfig> = {
       { type: 'legal_rep_id', label: 'Legal representative ID / passport', required: true },
       { type: 'bank_confirmation', label: 'Bank account confirmation letter', required: true },
     ],
-    paymentMethods: [
-      pm('VN_VIETQR', 'VietQR', 'qr', 0.6, 0.3, 1.2),
-      pm('VN_NAPAS', 'Napas domestic ATM cards', 'card', 1.1, 0.7, 1.8),
-      pm('VN_MOMO', 'MoMo', 'ewallet', 1.6, 1.0, 2.5),
-      pm('VN_CARDS', 'International cards', 'card', 2.4, 1.8, 3.5),
-    ],
+    paymentMethods: [pm('vietqr', 'VietQR', 'payin', 1.2), pm('momo', 'MoMo', 'payin', 2.5), pm('zalopay', 'ZaloPay', 'payin', 5), pm('bank_transfer', 'Bank Transfer', 'payin', 5), PAYOUT],
   },
 };
 

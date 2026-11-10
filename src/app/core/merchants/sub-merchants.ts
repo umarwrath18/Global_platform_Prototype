@@ -55,7 +55,7 @@ export interface SubMerchantView {
   goLiveBlocker: string | null;
   /** The parent's application in this country, whose products, pricing and settlement apply. */
   parentApplicationId: string | null;
-  inherited: { products: { name: string; mdrPct: number | null; settlement: string | null }[] };
+  inherited: { products: { name: string; pricing: string | null; settlement: string | null }[] };
 }
 
 export interface CreateSubMerchantRequest {

@@ -10,7 +10,7 @@ import {
   StaffRole,
 } from '../merchants/merchant-models';
 import { ONBOARDING_COUNTRIES, READINESS_CHECKLISTS as READINESS } from '../merchants/onboarding-config';
-import type { PricingVersion, ProductConfig } from '../merchants/products';
+import { periodText, pricingSummary, type PricingAuditEvent, type PricingVersion, type ProductConfig } from '../merchants/products';
 import type { MerchantDb, MerchantRecord } from './merchant-server';
 import { simulateVerification } from './verification';
 
@@ -89,7 +89,7 @@ export function buildMerchantSeed(now: number, version: number): MerchantDb {
   const seeds: AppSeed[] = [
     // GM-100101 · linked to GA-1001 (MY/ID/VN live)
     {
-      id: 'APP-2026-0001', merchant: trading, country: 'MY', industry: 'Retail & e-commerce', website: 'https://tanjungtrading.example', directors: tradingDirectors, category: 'enterprise',
+      id: 'APP-2026-0001', merchant: trading, country: 'MY', industry: 'Retail & e-commerce', website: 'https://tanjungtrading.example', directors: tradingDirectors, category: 'enterprise', enabledMethods: ['fpx', 'duitnow_qr', 'tng', 'cards'],
       steps: [[225, 'Application created', 'draft', 'sales'], [221, 'Submitted for Risk review', 'pending_risk_review', 'sales'], [218, 'Approved by Risk', 'risk_approved', 'risk', 'Documents and screening clear.'], [217, 'CS configuration started', 'cs_configuration', 'cs'], [214, 'Production keys generated', 'keys_generated', 'cs'], [213, 'Merchant integration started', 'integration', 'cs'], [205, 'Integration complete; go-live verification started', 'go_live_verification', 'cs'], [203, 'Go-live verified; country is operational', 'operational', 'cs']],
     },
     {
@@ -136,7 +136,7 @@ export function buildMerchantSeed(now: number, version: number): MerchantDb {
       directors: [person('Made Wirawan', 'Indonesian', 'B7654321', '+62 813 3777 2211', 9)],
       steps: [[12, 'Application created', 'draft', 'sales'], [8, 'Submitted for Risk review', 'pending_risk_review', 'sales'], [3, 'Approved by Risk', 'risk_approved', 'risk', 'Approved. Standard monitoring.'], [2, 'CS configuration started', 'cs_configuration', 'cs']],
       // CS has switched on and priced three products; settlement isn't set yet.
-      enabledMethods: ['MY_CARDS', 'MY_DUITNOW', 'MY_TNG'],
+      enabledMethods: ['cards', 'duitnow_qr', 'tng'],
       configDone: 2,
     },
     // GM-100106 · VN in go-live verification, MY expansion draft
@@ -184,6 +184,30 @@ export function buildMerchantSeed(now: number, version: number): MerchantDb {
     if (own.length) m.updatedAt = Math.max(m.updatedAt, ...own.map((a) => a.updatedAt));
   }
 
+  // A pricing change waiting for FinOps: Sales / Operations proposed new Cards pricing for Tanjung (MY).
+  const pricingVersions = products.flatMap((p) => p?.versions ?? []);
+  pricingVersions.push(
+    blankVersion({
+      id: 'PV-SEED-0001-cards-v2',
+      applicationId: 'APP-2026-0001',
+      methodCode: 'cards',
+      currency: 'MYR',
+      technique: 'higher_of',
+      mdrPct: 2.0,
+      minimumFee: 0.5,
+      version: 2,
+      status: 'pending_approval',
+      source: 'change',
+      settlementSnapshot: 'T+1',
+      startDate: new Date(now + 7 * DAY).toISOString().slice(0, 10),
+      createdAt: ago(1),
+      createdBy: STAFF.sales,
+      createdById: 'seed-sales',
+      createdRole: 'sales',
+    }),
+  );
+  notifications.unshift({ id: `NT-${nt++}`, at: ago(1), event: 'pricing_approval_requested', title: `Pricing to approve: ${trading.legalName} · Cards`, body: `${STAFF.sales} submitted pricing change v2 for APP-2026-0001: Higher of Percentage or Fixed Fee: 2% + Min: MYR 0.5.`, applicationId: 'APP-2026-0001', merchantId: trading.id, country: 'MY', audience: ['finops'], readBy: [] });
+
   return {
     version,
     seq: { merchant: 100109, application: 16, notification: nt },
@@ -192,57 +216,104 @@ export function buildMerchantSeed(now: number, version: number): MerchantDb {
     applications,
     notifications,
     productConfigs: products.flatMap((p) => (p ? [p.config] : [])),
-    pricingVersions: products.flatMap((p) => p?.versions ?? []),
+    pricingVersions,
+    pricingAudit: seedAudit(pricingVersions, applications, merchants),
   };
 }
 
 const CONFIGURED: ApplicationStatus[] = ['keys_generated', 'integration', 'go_live_verification', 'operational'];
 
+/** Demo MDRs (Percentage) for seeded pricing. Illustrative only, not approved Mobi prices. */
+const SEED_MDR: Record<string, number> = { fpx: 1.0, duitnow_qr: 0.8, tng: 1.5, grabpay: 1.5, cards: 2.2, va: 0.9, qris: 0.7, dana: 1.5, ovo: 1.5, vietqr: 0.6, momo: 1.6, zalopay: 1.6, bank_transfer: 0.6 };
+
+const blankVersion = (over: Partial<PricingVersion> & Pick<PricingVersion, 'id' | 'applicationId' | 'methodCode' | 'startDate' | 'createdAt'>): PricingVersion => ({
+  flow: 'payin',
+  vaBanks: [],
+  technique: 'variable_rate',
+  currency: 'MYR',
+  mdrPct: 1,
+  fixedFee: null,
+  minimumFee: 0,
+  volumePeriod: null,
+  tiers: null,
+  historical: null,
+  subscription: null,
+  promotion: null,
+  endDate: null,
+  version: 1,
+  status: 'active',
+  usd: null,
+  source: 'onboarding',
+  settlementSnapshot: null,
+  editOf: null,
+  createdBy: STAFF.cs,
+  createdById: 'seed-cs',
+  createdRole: 'cs',
+  approvedBy: null,
+  approvedAt: null,
+  rejectedBy: null,
+  rejectedAt: null,
+  rejectionReason: null,
+  cancelledBy: null,
+  cancelledAt: null,
+  ...over,
+});
+
 /**
- * Products and approved pricing for seed applications that are past Product & Payment Config: the
- * chosen products (default: the country's first three), settlement T+1, the default MDR from the
- * date CS configuration started. An application still in configuration gets its chosen products
- * and pricing only, with no settlement. Others have none: CS sets them in Stage 4.
+ * Products and pricing for seed applications that are past Product & Payment Config: the chosen
+ * PayIn products (default: the country's first three), settlement T+1, Percentage pricing at the
+ * demo MDR from the day CS configuration started. An application still in configuration gets its
+ * chosen products and pricing only, with no settlement. Others have none: CS sets them in Stage 4.
  */
 function seedProducts(s: AppSeed, app: CountryApplication): { config: ProductConfig; versions: PricingVersion[] } | null {
   const configured = CONFIGURED.includes(app.status);
   if (!configured && !(app.status === 'cs_configuration' && s.enabledMethods)) return null;
   const cycle = configured ? ('T+1' as const) : null;
   const cfg = ONBOARDING_COUNTRIES[s.country];
-  const codes = s.enabledMethods ?? cfg.paymentMethods.slice(0, 3).map((m) => m.code);
+  const payin = cfg.paymentMethods.filter((m) => m.flow === 'payin');
+  const codes = s.enabledMethods ?? payin.slice(0, 3).map((m) => m.code);
   const started = app.history.find((h) => h.toStatus === 'cs_configuration') ?? app.history[0];
   const config: ProductConfig = {
     applicationId: app.id,
-    products: cfg.paymentMethods.map((m) => ({ methodCode: m.code, flow: 'payin', enabled: codes.includes(m.code) })),
+    products: cfg.paymentMethods.map((m) => ({ methodCode: m.code, flow: m.flow, enabled: codes.includes(m.code) })),
     settlement: cycle ? Object.fromEntries(codes.map((c) => [c, cycle])) : {},
     revision: 1,
     savedAt: started.at,
     savedBy: STAFF.cs,
   };
-  const versions: PricingVersion[] = cfg.paymentMethods
+  const versions = payin
     .filter((m) => codes.includes(m.code))
-    .map((m) => ({
-      id: `PV-SEED-${app.id.slice(-4)}-${m.code}`,
-      applicationId: app.id,
-      methodCode: m.code,
-      flow: 'payin',
-      mdrPct: m.defaultMdr,
-      effectiveFrom: started.at,
-      state: 'approved',
-      settlementCycleAtCreation: cycle,
-      source: 'onboarding',
-      createdBy: STAFF.cs,
-      createdRole: 'cs',
-      createdAt: started.at,
-      decidedBy: null,
-      decidedRole: null,
-      decidedAt: null,
-      decisionComment: null,
-      cancelledBy: null,
-      cancelledAt: null,
-      cancelReason: null,
-    }));
+    .map((m) => blankVersion({ id: `PV-SEED-${app.id.slice(-4)}-${m.code}`, applicationId: app.id, methodCode: m.code, currency: cfg.currency, mdrPct: SEED_MDR[m.code] ?? 1, startDate: new Date(started.at).toISOString().slice(0, 10), createdAt: started.at, settlementSnapshot: cycle }));
   return { config, versions };
+}
+
+/** MDR audit entries for seeded versions (as CS set them during onboarding, or Ops submitted them). */
+function seedAudit(versions: PricingVersion[], applications: CountryApplication[], merchants: MerchantRecord[]): PricingAuditEvent[] {
+  return versions.map((v, i) => {
+    const app = applications.find((a) => a.id === v.applicationId)!;
+    const cfg = ONBOARDING_COUNTRIES[app.country];
+    const pending = v.status === 'pending_approval';
+    return {
+      id: `PA-SEED-${String(i + 1).padStart(3, '0')}`,
+      at: v.createdAt,
+      user: v.createdBy,
+      role: pending ? 'Ops' : 'CS',
+      applicationId: app.id,
+      merchantId: app.merchantId,
+      merchantName: merchants.find((m) => m.id === app.merchantId)?.legalName ?? app.merchantId,
+      country: app.country,
+      methodCode: v.methodCode,
+      methodName: cfg.paymentMethods.find((m) => m.code === v.methodCode)?.name ?? v.methodCode,
+      flow: v.flow,
+      versionId: v.id,
+      version: v.version,
+      previous: pending ? `${pricingSummary(versions.find((x) => x.applicationId === v.applicationId && x.methodCode === v.methodCode && x.version === v.version - 1)!)} (v${v.version - 1})` : 'No pricing configured',
+      next: pricingSummary(v),
+      effective: periodText(v),
+      status: v.status,
+      reason: null,
+    };
+  });
 }
 
 function buildApplication(s: AppSeed, ago: (d: number) => number): CountryApplication {
@@ -388,8 +459,8 @@ export function buildSeedAdditions(now: number): { merchants: MerchantRecord[]; 
     [start - 22, 'Go-live verified; country is operational', 'operational', 'cs'],
   ];
   const seeds: AppSeed[] = [
-    { id: 'APP-2026-9001', merchant: nusantara, country: 'MY', industry: 'Retail & e-commerce', website: 'https://nusantarahome.example', directors, steps: live(165), enabledMethods: ['MY_CARDS', 'MY_FPX', 'MY_DUITNOW', 'MY_TNG'] },
-    { id: 'APP-2026-9002', merchant: nusantara, country: 'ID', industry: 'Retail & e-commerce', website: 'https://nusantarahome.example', directors, steps: live(130), enabledMethods: ['ID_QRIS', 'ID_VA', 'ID_OVO'] },
+    { id: 'APP-2026-9001', merchant: nusantara, country: 'MY', industry: 'Retail & e-commerce', website: 'https://nusantarahome.example', directors, steps: live(165), enabledMethods: ['fpx', 'duitnow_qr', 'tng', 'cards'] },
+    { id: 'APP-2026-9002', merchant: nusantara, country: 'ID', industry: 'Retail & e-commerce', website: 'https://nusantarahome.example', directors, steps: live(130), enabledMethods: ['va', 'qris', 'ovo'] },
   ];
   const applications = seeds.map((x) => buildApplication(x, ago));
   nusantara.updatedAt = Math.max(...applications.map((a) => a.updatedAt));

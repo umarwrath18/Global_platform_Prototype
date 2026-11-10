@@ -10,7 +10,7 @@ import { SubMerchantsPanel } from './sub-merchants-panel';
 const sub = (over: Partial<SubMerchantView> = {}): SubMerchantView => ({
   id: 'ME-000090', displayName: 'Makati branch', legalEntity: null, email: 'makati@manila.test', website: 'https://makati.example', tradingLicenseUrl: null, country: 'PH', status: 'approved', createdVia: 'ops', createdBy: 'Sarah Lim', createdAt: 0,
   lifecycleStatus: 'active', lifecycleReason: null, goLiveChecks: [{ key: 'live_transaction', label: 'Live low-value test transaction succeeded', done: false, doneAt: null, doneBy: null }],
-  history: [], mid: null, goLiveBlocker: null, parentApplicationId: 'APP-7', inherited: { products: [{ name: 'GCash', mdrPct: 2, settlement: 'T+1' }] }, ...over,
+  history: [], mid: null, goLiveBlocker: null, parentApplicationId: 'APP-7', inherited: { products: [{ name: 'VietQR', pricing: 'Percentage: 0.6%', settlement: 'T+1' }] }, ...over,
 });
 
 async function render(role: StaffRole, subs: SubMerchantView[], merchant: Partial<GlobalMerchant> = {}, applications = [{ id: 'APP-7', country: 'PH', status: 'operational' }] as CountryApplication[], openId: string | null = null) {
@@ -79,7 +79,7 @@ describe('Sub-merchants panel', () => {
     await settle();
     expect(el.querySelector('.sm-blocker')?.textContent).toContain("can't go live until Manila Learning Hub Inc. is operational");
     expect(button('Go live')!.disabled).toBe(true);
-    expect(el.textContent).toContain('GCash · 2% MDR · settlement T+1');
+    expect(el.textContent).toContain('VietQR · Percentage: 0.6% · settlement T+1');
   });
 
   it('lets Risk approve, and requires a reason to reject', async () => {

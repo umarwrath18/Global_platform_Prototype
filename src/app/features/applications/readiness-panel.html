@@ -30,7 +30,7 @@
             <span class="dot" aria-hidden="true">@if (s.state === 'done') {<app-icon name="check" [size]="13" />}</span>
             <div>
               <h3>{{ s.title }} <span class="sr-only">({{ s.state }})</span>
-                @if (s.key === 'configuration' && a.status === 'cs_configuration' && productGaps()?.length) {<span class="gap-count" [attr.aria-label]="productGaps()!.length + ' open items'">{{ productGaps()!.length }}</span>}
+                @if (s.key === 'configuration' && a.status === 'cs_configuration' && gaps()) {<span class="gap-count" [attr.aria-label]="gaps() + ' open items'">{{ gaps() }}</span>}
               </h3>
               <p>{{ s.description }}</p>
             </div>
@@ -40,7 +40,11 @@
             <div class="config-summary">
               <span><strong>Country</strong> {{ cfg().name }}</span>
               <span><strong>Currency</strong> {{ a.currency }}</span>
-              <span>Products, settlement and pricing are set in Product &amp; Payment Config below.</span>
+              @if (a.status === 'cs_configuration') {
+                <span>Switch on products, set their settlement cycles and pricing before confirming. <a href="#product-config" (click)="openConfig($event)">Open Product &amp; Payment Config</a></span>
+              } @else {
+                <span>Products, settlement and pricing are set in Product &amp; Payment Config below.</span>
+              }
             </div>
           }
 
@@ -94,12 +98,11 @@
           @if (canAct()) {
             @if (s.key === 'configuration' && a.status === 'cs_configuration') {
               <div class="stage-actions">
-                <button type="button" class="btn primary" [disabled]="!canAdvance('configuration') || !!productGaps()?.length || !!busy()" (click)="run({ action: 'generate_keys' }, 'generate_keys', 'Production keys issued')">
-                  @if (busy() === 'generate_keys') {<span class="spinner" aria-hidden="true"></span>} @else {<app-icon name="key" [size]="16" />}Issue production keys
+                <button type="button" class="btn primary" [disabled]="!canAdvance('configuration') || !!productGaps()?.length || !!busy()" (click)="run({ action: 'confirm_onboarding' }, 'confirm_onboarding', 'Onboarding confirmed – production keys issued')">
+                  @if (busy() === 'confirm_onboarding') {<span class="spinner" aria-hidden="true"></span>} @else {<app-icon name="check-circle" [size]="16" />}Confirm onboarding
                 </button>
                 @if (productGaps()?.length) {
                   <div class="gap-list" role="status">
-                    <strong>Finish Product &amp; Payment Config first:</strong>
                     <ul>@for (g of productGaps(); track $index) {<li>{{ g.message }}</li>}</ul>
                   </div>
                 } @else if (!allDone('configuration')) {<span class="hint">{{ strict ? 'Complete every item first.' : 'Open items will be marked complete.' }}</span>}

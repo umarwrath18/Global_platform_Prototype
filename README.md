@@ -224,28 +224,33 @@ outcome (merchant page → MCC history). Suspended merchants can still request M
 To try it, load the clearly labelled test fixture: `mobiDemo.loadMccTestFixture()`, then reload.
 Its entries are test data, not approved Mobi, scheme or regulatory rules.
 
-**Product & Payment Config.** The onboarding stage after Risk approval (formerly "CS configuration")
-sets up what each country MID offers, in two steps:
-1. **Products:** switch PayIn products on or off (the country's configured payment methods) and set
-   a settlement cycle (T+0 to T+5) for each saved PayIn product. **No PayOut methods have been
-   approved, so PayOut shows "No payout methods configured" and stays disabled.** Settlement is a
-   product setting: saving it never creates or changes a pricing version and needs no approval.
-2. **Pricing:** MDR % only (no fees, tiers or techniques), in versions with effective dates and
-   statuses (pending approval, scheduled, active, superseded, rejected, cancelled). Unpriced
-   switched-on products appear as "Not priced" rows with "Set pricing". The editor opens inline.
+**Product & Payment Config (Pricing Engine).** Stage 4 of onboarding, built from the Pricing Engine
+document §8 (Part B). Two steps on one screen:
+1. **Products:** the corridor catalog (MY: FPX, DuitNow QR, Touch 'n Go, GrabPay, Cards; ID: Virtual
+   Account, QRIS, DANA, OVO; VN: VietQR, MoMo, ZaloPay, Bank Transfer; every corridor: Bank Transfer
+   payout). Drafts until saved; a settlement cycle (T+0 to T+5) per saved PayIn product, which never
+   creates a pricing version.
+2. **Pricing**, versioned per MID + flow + payment method (+ VA banks for Indonesia VA): Percentage
+   (minimum fee applied as a floor), Fixed Fee (local or USD at the prototype's static rates),
+   Percentage + Fixed, Higher of, Volume-Based (one tier for the whole transaction, month-to-date
+   volume) and Historical Volume (default MDR when there's no history), or subscription only.
+   Secondary charges: a monthly subscription (charged on the 1st for the previous month) and
+   unconditional or conditional promotions (after the condition is met; highest threshold wins).
+   Effective dates follow the document's overlap and supersession rules; a simulated daily job moves
+   scheduled → active → expired whenever data loads. MDR is capped at 10%, with a warning above each
+   method's usual maximum. Fees round half up to the currency's smallest unit; no tax.
 
-"Issue production keys" is the onboarding handoff. It stays blocked, in guided and strict mode,
-until at least one product is on, every switched-on product has pricing in effect and every PayIn
-product has a settlement cycle; the missing items are listed. During onboarding Customer Success
-changes everything and it applies when saved. After the handoff, Sales / Operations change products
-and settlement, and pricing changes wait for **FinOps** (a prototype-only "View as" option, not a
-login), who approves or rejects them; a late approval takes effect when approved. A product with
-active pricing can't be switched off after onboarding; switching off cancels pending or scheduled
-pricing (during onboarding, after a confirmation, any pricing). Every save is recorded in the
-application history. The registration form no longer collects products or MDR: until CS first
-saves products, every product is off and there is no pricing; no settlement cycle is assumed.
-There is no standalone pricing page or popup.
-After onboarding, open Merchants → the card icon on a row, or a country's "Products & pricing" link.
+**Modes** are derived from the MID's state: *onboarding* (CS; pricing applies when saved), *change*
+after "Confirm onboarding" (Sales / Ops submit, FinOps approves on **Pricing Approvals**), and
+*read only* before CS review or while the merchant is suspended. Editing keeps the scope and the
+pricing method and creates v+1. **Maker ≠ checker:** the person who submitted a change can't decide
+it, so test approvals with two logins (e.g. submit as `123`, approve as `TANJUNG-ADMIN` with "View as"
+FinOps). Each decision asks for a current code from the approver's authenticator. **"Confirm
+onboarding"** replaces "Issue production keys" (it also issues them) and is blocked until a product
+is on, every product has pricing in effect and every PayIn product has a settlement cycle. Every
+pricing create, approval, rejection and cancellation is in the **MDR audit log** (sidebar) and the
+application history. Not built yet: the standalone Merchant Pricing engine (Part A), sub-merchant
+MID pricing, a merchant-facing pricing view, and re-authentication for settlement or USD fee changes.
 
 **Changes after Risk approval.** Once Risk has approved a merchant, anything Risk reviewed changes
 only through a change request that Risk approves: the legal identity (merchant page → "Request

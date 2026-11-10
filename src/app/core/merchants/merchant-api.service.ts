@@ -19,7 +19,7 @@ import {
 import type { MccChangeRequest } from './mcc';
 import type { ApprovalsView, ChangeRequest, CreateChangeRequest } from './change-requests';
 import type { CreateSubMerchantRequest, SubMerchantView } from './sub-merchants';
-import type { PricingVersion, ProductPricingView, SaveProductsRequest, SetPricingRequest } from './products';
+import type { PricingApprovalsView, PricingAuditEvent, PricingDecisionRequest, PricingVersion, ProductPricingView, SaveProductsRequest, SetPricingRequest } from './products';
 import { StaffRoleService } from './staff-role.service';
 
 export type MerchantClientError = MerchantApiError | { code: 'NETWORK_ERROR'; message?: string } | { code: 'UNKNOWN_ERROR'; message?: string };
@@ -174,9 +174,18 @@ export class MerchantApi {
     return this.run(this.http.post<PricingResult>(url, { reason }, { headers: this.headers }));
   }
 
-  decidePricing(applicationId: string, versionId: string, decision: 'approve' | 'reject', comment: string) {
+  /** FinOps decision; `code` is the approver's current authenticator code (re-authentication). */
+  decidePricing(applicationId: string, versionId: string, req: PricingDecisionRequest) {
     const url = `/api/applications/${encodeURIComponent(applicationId)}/pricing/${encodeURIComponent(versionId)}/decision`;
-    return this.run(this.http.post<PricingResult>(url, { decision, comment }, { headers: this.headers }), true);
+    return this.run(this.http.post<PricingResult>(url, req, { headers: this.headers }), true);
+  }
+
+  pricingApprovals() {
+    return this.run(this.http.get<PricingApprovalsView>('/api/pricing/approvals', { headers: this.headers }));
+  }
+
+  pricingAudit() {
+    return this.run(this.http.get<PricingAuditEvent[]>('/api/pricing/audit', { headers: this.headers }));
   }
 
   async refreshNotifications() {

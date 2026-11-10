@@ -75,7 +75,7 @@
           </dl>
           <h4>Uses the parent's products and pricing in {{ countryName(s.country) }}</h4>
           @if (s.inherited.products.length) {
-            <ul class="sm-products">@for (p of s.inherited.products; track p.name) {<li>{{ p.name }} · {{ p.mdrPct !== null ? p.mdrPct + '% MDR' : 'not priced' }} · settlement {{ p.settlement ?? 'not set' }}</li>}</ul>
+            <ul class="sm-products">@for (p of s.inherited.products; track p.name) {<li>{{ p.name }} · {{ p.pricing ?? 'not priced' }} · settlement {{ p.settlement ?? 'not set' }}</li>}</ul>
           } @else {
             <p class="muted">The parent has no products switched on in {{ countryName(s.country) }} yet.</p>
           }

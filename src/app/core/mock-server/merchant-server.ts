@@ -31,7 +31,7 @@ import {
   StaffRole,
 } from '../merchants/merchant-models';
 import { ONBOARDING_COUNTRIES, READINESS_CHECKLISTS, REGISTRATION_COUNTRIES } from '../merchants/onboarding-config';
-import { PricingVersion, ProductConfig, productPhase } from '../merchants/products';
+import { PricingAuditEvent, PricingVersion, ProductConfig } from '../merchants/products';
 import { ChangeRequestRecord, describeChange, FieldChange, ProfileEvent } from '../merchants/change-requests';
 import { EMPTY_MCC_CATALOGUE, MccAuditEvent, MccCatalogue, MccCatalogueEntry, MccChangeRequest, mccCountryCheck, mccIssue, MccRef } from '../merchants/mcc';
 import { regionForCountry } from '../merchants/regions';
@@ -41,7 +41,7 @@ import { MigrationFlag, migrationFlags, MigrationLogEntry, normaliseMerchantDb, 
 import { buildMerchantSeed, buildSeedAdditions, SEED_ADDITION_MERCHANT_IDS } from './merchant-seed';
 import { createSubMerchant, goLiveSubMerchant, reviewSubMerchant, setSubMerchantCheck, SubMerchantContext, subMerchantLifecycle, subMerchantsOf, submitSubMerchant } from './sub-merchants';
 import { approvalsFor, ChangeContext, decideChange, merchantRiskApproved, profileEvent, requestCountryChange, requestProfileChange, toChangeView, withdrawChange } from './change-requests';
-import { cancelPricing, decidePricing, DERIVED_CHECKLIST, onboardingGaps, ProductContext, productState, productView, saveProducts, setPricing, syncDerivedChecklist } from './product-pricing';
+import { cancelPricing, checkDecision, decidePricing, DERIVED_CHECKLIST, onboardingGaps, pricingApprovals, pricingAuditLog, ProductContext, productState, productView, runPricingJob, saveProducts, setPricing, syncDerivedChecklist } from './product-pricing';
 import { ApiError, fail } from './server-errors';
 import { simulateVerification } from './verification';
 
@@ -50,13 +50,14 @@ import { simulateVerification } from './verification';
 // status transitions, validation and duplicate checks are never left to the UI.
 
 /**
- * 3: registration form per country (MY / ID / VN only; transaction settings; no pricing in the
- * application). Version 2 data is kept as a backup and replaced with the new demo data.
+ * 4: Product & Payment Config per the Pricing Engine document (catalog, pricing methods, versions).
+ * 3: registration form per country (MY / ID / VN only; no pricing in the application).
+ * Version 2 and 3 data is kept as a backup and replaced with the new demo data.
  */
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 export const MERCHANT_DB_VERSION = DB_VERSION;
 /** Versions replaced on load with fresh demo data, after a backup, because their records can't be converted. */
-const REPLACED_VERSIONS = [2];
+const REPLACED_VERSIONS = [2, 3];
 
 export type MerchantRecord = Omit<GlobalMerchant, 'globalStatus' | 'lifecycleStatus'> & Partial<Pick<GlobalMerchant, 'lifecycleStatus' | 'lifecycleReason' | 'lifecycleUpdatedAt' | 'lifecycleUpdatedBy'>>;
 
@@ -65,7 +66,7 @@ export interface MerchantDb {
   version: number;
   /** Highest data upgrade applied (absent = before entities and MIDs). See merchant-migrations.ts. */
   schemaRevision?: number;
-  seq: { merchant: number; application: number; notification: number; entity?: number; mid?: number; mccRequest?: number; pricing?: number; changeRequest?: number };
+  seq: { merchant: number; application: number; notification: number; entity?: number; mid?: number; mccRequest?: number; pricing?: number; pricingAudit?: number; changeRequest?: number };
   merchants: MerchantRecord[];
   applications: CountryApplication[];
   notifications: PortalNotification[];
@@ -79,6 +80,8 @@ export interface MerchantDb {
   /** Product & Payment Config per application; absent until products are first saved. */
   productConfigs?: ProductConfig[];
   pricingVersions?: PricingVersion[];
+  /** Append-only MDR audit log (Pricing Engine §7.10). */
+  pricingAudit?: PricingAuditEvent[];
   /** Change requests after Risk approval (profile identity and country details). */
   changeRequests?: ChangeRequestRecord[];
   profileEvents?: ProfileEvent[];
@@ -122,6 +125,8 @@ export interface AuthBridge {
    * A new account never takes an ID in `reservedIds` (IDs merchant data already refers to).
    */
   activateCountry(accountId: string | null, accountName: string, country: string, opts?: { merchantId?: string; reservedIds?: string[] }): Promise<string>;
+  /** Re-authentication: checks a current code from the signed-in user's own authenticator. Throws when wrong. */
+  verifyCode?(token: string | null, code: unknown): Promise<void>;
 }
 
 export interface MerchantServerOptions {
@@ -183,7 +188,7 @@ export class MerchantServer {
   }
 
   static handles(path: string) {
-    return /^\/api\/(merchants|applications|notifications|changes|approvals|sub-merchants)(\/|\?|$)/.test(path);
+    return /^\/api\/(merchants|applications|notifications|changes|approvals|sub-merchants|pricing)(\/|\?|$)/.test(path);
   }
 
   async handle(method: string, path: string, body: any, token: string | null, roleHeader: string | null): Promise<ServerReply> {
@@ -225,7 +230,20 @@ export class MerchantServer {
         if (id && sub === 'products' && m === 'PUT') return ok(this.productAction(id, caller, role, (ctx) => ({ message: saveProducts(ctx, body) })));
         if (id && sub === 'pricing' && !subId && m === 'POST') return ok(this.productAction(id, caller, role, (ctx) => ({ version: setPricing(ctx, body) })), 201);
         if (id && sub === 'pricing' && subId && action === 'cancel' && m === 'POST') return ok(this.productAction(id, caller, role, (ctx) => ({ version: cancelPricing(ctx, subId, body) })));
-        if (id && sub === 'pricing' && subId && action === 'decision' && m === 'POST') return ok(this.productAction(id, caller, role, (ctx) => ({ version: decidePricing(ctx, subId, body) })));
+        if (id && sub === 'pricing' && subId && action === 'decision' && m === 'POST') {
+          // Checks first, then re-authentication with the approver's own MFA code, then the decision.
+          const db = this.load();
+          checkDecision(this.productContext(db, this.findApplication(db, id), caller, role), subId, body);
+          if (!this.opts.auth.verifyCode) fail(503, 'SERVICE_UNAVAILABLE', { message: 'Re-authentication is not available.' });
+          try {
+            await this.opts.auth.verifyCode!(token, body?.code);
+          } catch (e: any) {
+            // The auth server's own error (wrong, reused or blocked code): pass its reply through.
+            if (e && typeof e.status === 'number' && e.body) return { status: e.status, body: e.body };
+            throw e;
+          }
+          return ok(this.productAction(id, caller, role, (ctx) => ({ version: decidePricing(ctx, subId, body) })));
+        }
       }
       if (resource === 'changes' && id && sub === 'decision' && m === 'POST') return ok(this.changeAction(caller, role, (ctx) => decideChange(ctx, id, body)));
       if (resource === 'changes' && id && sub === 'withdraw' && m === 'POST') return ok(this.changeAction(caller, role, (ctx) => withdrawChange(ctx, id)));
@@ -240,6 +258,8 @@ export class MerchantServer {
         if (sub && actions[sub]) return ok(this.subMerchantAction(caller, role, actions[sub]));
       }
       if (resource === 'approvals' && !id && m === 'GET') return ok(approvalsFor(this.load(), role));
+      if (resource === 'pricing' && id === 'approvals' && !sub && m === 'GET') return ok(pricingApprovals(this.load(), role, caller, this.now()));
+      if (resource === 'pricing' && id === 'audit' && !sub && m === 'GET') return ok(pricingAuditLog(this.load()));
       if (resource === 'notifications') {
         if (!id && m === 'GET') return ok(this.load().notifications);
         if (id === 'read' && m === 'POST') return ok(this.markRead(body, role));
@@ -471,7 +491,7 @@ export class MerchantServer {
       mid: mid ? toMidView(mid) : null,
       midIssue: application.status === 'operational' && !mid ? (issue?.detail ?? 'No live MID has been assigned.') : null,
       mccChangeNeedsRisk: this.riskApproved(db, application.merchantId),
-      productGaps: productPhase(application.status) === 'onboarding' ? onboardingGaps(db, application, this.now()) : null,
+      productGaps: application.status === 'cs_configuration' ? onboardingGaps(db, application, this.now()) : null,
       changes: (db.changeRequests ?? []).filter((r) => r.applicationId === application.id).sort((a, b) => b.requestedAt - a.requestedAt).map(toChangeView),
     };
   }
@@ -720,20 +740,22 @@ export class MerchantServer {
         this.event(app, caller, role, `${item!.done ? 'Completed' : 'Reopened'}: ${item!.label}`, null, null);
         break;
       }
+      case 'confirm_onboarding':
       case 'generate_keys': {
-        // The onboarding handoff: products, pricing and settlement must be complete, in guided mode too.
+        // "Confirm onboarding" (§8.8): products, pricing and settlement must be complete, in guided
+        // mode too. It also issues the production keys.
         if (app.status === 'cs_configuration') {
           const gaps = onboardingGaps(db, app, now);
           if (gaps.length) {
             fail(409, 'PRODUCT_CONFIG_INCOMPLETE', {
-              message: `Finish Product & Payment Config first: ${gaps.map((g) => g.message).join(' ')}`,
-              errors: gaps.map((g) => ({ section: 'pricing', field: `products.${g.methodCode ?? 'any'}`, message: g.message })),
+              message: gaps.map((g) => g.message).join(' '),
+              errors: gaps.map((g) => ({ section: 'pricing', field: `products.${g.issue}`, message: g.message })),
             });
           }
           syncDerivedChecklist(this.productContext(db, app, caller, role));
         }
         requireDone('configuration');
-        move('cs_configuration', 'keys_generated', 'Production keys generated');
+        move('cs_configuration', 'keys_generated', 'Onboarding confirmed; production keys generated');
         r.keySet = { reference: `KS-${randomToken(3).toUpperCase()}`, generatedAt: now, environment: 'production', simulated: true };
         this.notify(db, 'configuration_ready', app, merchant, ['cs', 'sales'], {
           title: `Configuration ready: ${merchant.legalName} · ${cname}`,
@@ -1292,6 +1314,8 @@ export class MerchantServer {
     else if (!this.persistUpgrade(stored, raw, db)) current = stored;
     current.lifecycleEvents ??= [];
     for (const merchant of current.merchants) merchant.lifecycleStatus ??= 'active';
+    // The daily pricing status job, simulated on every load (scheduled → active, active → expired).
+    runPricingJob(current, this.now());
     return current;
   }
 

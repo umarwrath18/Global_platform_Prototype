@@ -1,0 +1,98 @@
+<main class="page">
+  <div class="portal-head">
+    <div>
+      <h1>Pricing Approvals</h1>
+      <p class="sub">Merchant Pricing changes submitted by Ops after onboarding.</p>
+    </div>
+    <a class="btn sm ghost" routerLink="/pricing-audit"><app-icon name="list" [size]="15" />MDR audit log</a>
+  </div>
+
+  @if (view(); as v) {
+    @if (!v.canDecide) {
+      <div class="alert compact" role="note"><app-icon name="lock" /><div>Read-only – Switch to FinOps to approve</div></div>
+    }
+    <section class="panel-card">
+      <div class="tabs" role="tablist" aria-label="Pricing approvals">
+        <button type="button" role="tab" [class.on]="tab() === 'pending'" [attr.aria-selected]="tab() === 'pending'" (click)="tab.set('pending')">Pending<span class="n">{{ v.pending.length }}</span></button>
+        <button type="button" role="tab" [class.on]="tab() === 'decided'" [attr.aria-selected]="tab() === 'decided'" (click)="tab.set('decided')">Decided<span class="n">{{ v.decided.length }}</span></button>
+      </div>
+      @let list = tab() === 'pending' ? v.pending : v.decided;
+      @if (list.length) {
+        <ul class="pa-list">
+          @for (i of list; track i.version.id) {
+            <li class="pa-item">
+              <div class="pa-main">
+                <p class="pa-title">
+                  <a [routerLink]="['/applications', i.applicationId, 'products']">{{ i.merchantName }}</a>
+                  <span class="muted">· {{ i.mid ? 'MID ' + i.mid : i.applicationId }} · {{ i.countryName }}</span>
+                </p>
+                <p class="pa-product">{{ i.methodName }} ({{ flowLabel[i.version.flow] }}) · v{{ i.version.version }} · {{ technique(i.version.technique) }}</p>
+                <dl class="pa-compare">
+                  <div><dt>Current</dt><dd>{{ i.current ?? 'No pricing configured' }}</dd></div>
+                  <div><dt>Proposed</dt><dd>{{ i.proposed }}@if (secondary(i.version); as s) {<span class="muted"> · {{ s }}</span>}</dd></div>
+                  <div><dt>Effective</dt><dd>{{ period(i.version) }}</dd></div>
+                </dl>
+                <p class="pa-meta">
+                  Submitted by {{ i.version.createdBy }} · {{ dateTime(i.version.createdAt) }}
+                  @if (i.version.approvedBy) { · Approved by {{ i.version.approvedBy }} · {{ dateTime(i.version.approvedAt!) }}}
+                  @if (i.version.rejectedBy) { · Rejected by {{ i.version.rejectedBy }} · {{ dateTime(i.version.rejectedAt!) }}: “{{ i.version.rejectionReason }}”}
+                </p>
+                @if (i.version.version > 1 && tab() === 'pending') {
+                  <p class="pa-meta">This is v{{ i.version.version }} – a modified version of the previous configuration. Approving this will supersede the previous version.</p>
+                }
+              </div>
+              <div class="pa-side">
+                <span class="status" [class]="'status ' + tone[i.version.status]">{{ statusLabel[i.version.status] }}</span>
+                @if (tab() === 'pending' && v.canDecide) {
+                  @if (i.ownSubmission) {
+                    <p class="pa-own">You submitted this change, so someone else must approve it.</p>
+                  } @else {
+                    <div class="pa-actions">
+                      <button type="button" class="btn sm" (click)="open(i, 'reject')">Reject</button>
+                      <button type="button" class="btn sm primary" (click)="open(i, 'approve')">Approve</button>
+                    </div>
+                  }
+                }
+              </div>
+            </li>
+          }
+        </ul>
+      } @else {
+        <div class="empty-state">
+          <div class="icon-tile"><app-icon name="check-circle" /></div>
+          <h3>{{ tab() === 'pending' ? 'Nothing is waiting for approval.' : 'No decisions yet.' }}</h3>
+        </div>
+      }
+    </section>
+  } @else if (loadError(); as e) {
+    <div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e.message ?? "We couldn't load pricing approvals." }} <button type="button" class="btn sm" (click)="load()">Try again</button></div></div>
+  } @else {
+    <section class="panel-card"><div class="skeleton-rows" aria-busy="true" aria-label="Loading"><span></span><span></span></div></section>
+  }
+
+  @if (dialog(); as d) {
+    <div class="modal-backdrop" (click)="close()">
+      <section class="pa-modal panel-card" role="dialog" aria-modal="true" aria-labelledby="pa-title" (click)="$event.stopPropagation()" (keydown.escape)="close()">
+        <h2 id="pa-title">{{ d.decision === 'approve' ? 'Approve pricing change' : 'Reject pricing change' }}</h2>
+        <p class="muted">{{ d.item.merchantName }} · {{ d.item.methodName }} v{{ d.item.version.version }} · {{ d.item.proposed }}</p>
+        @if (d.decision === 'reject') {
+          <label class="f-label" for="pa-reason">Provide a reason for rejecting this pricing configuration.</label>
+          <textarea id="pa-reason" class="f-input" rows="3" maxlength="1000" placeholder="Enter rejection reason..." [value]="reason()" (input)="reason.set($any($event.target).value)"></textarea>
+        }
+        <label class="f-label" for="pa-code">Confirm it's you: enter the code from your authenticator app</label>
+        <input id="pa-code" class="f-input code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" [class.invalid]="!!dialogError()" (input)="setCode($any($event.target).value, $any($event.target))" (keydown.enter)="confirm()" />
+        @if (dialogError(); as e) {<p class="f-error" role="alert"><app-icon name="alert-circle" [size]="16" />{{ e }}</p>}
+        <div class="pa-modal-actions">
+          <button type="button" class="btn" (click)="close()" [disabled]="busy()">Cancel</button>
+          <button type="button" class="btn" [class.primary]="d.decision === 'approve'" [class.danger]="d.decision === 'reject'" (click)="confirm()" [disabled]="busy() || code().length !== 6 || (d.decision === 'reject' && !reason().trim())">
+            @if (busy()) {<span class="spinner" aria-hidden="true"></span>}{{ d.decision === 'approve' ? 'Approve' : 'Reject' }}
+          </button>
+        </div>
+      </section>
+    </div>
+  }
+
+  @if (toast(); as t) {
+    <div class="p-toast" [class.danger]="t.tone === 'danger'" role="status"><app-icon [name]="t.tone === 'success' ? 'check-circle' : 'alert-circle'" [size]="18" />{{ t.text }}</div>
+  }
+</main>

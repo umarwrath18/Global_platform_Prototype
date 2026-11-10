@@ -138,9 +138,9 @@
             <app-readiness-panel [application]="a" [canAct]="role() === 'cs'" [suspended]="suspended()" [productGaps]="d.productGaps" (changed)="onReadiness($event)" />
           }
           @if (showProducts()) {
-            <section class="ppc-section" aria-label="Product & Payment Config">
+            <section class="ppc-section" id="product-config" aria-label="Product & Payment Config">
               <div class="ppc-title">
-                <h2>Product &amp; Payment Config</h2>
+                <h2 tabindex="-1">Product &amp; Payment Config</h2>
                 @if (a.status !== 'cs_configuration') {<a [routerLink]="['/applications', a.id, 'products']">Open on its own page</a>}
               </div>
               <app-product-payment-config [applicationId]="a.id" (changed)="onProductsChanged()" />

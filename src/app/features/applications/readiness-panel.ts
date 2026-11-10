@@ -3,7 +3,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { MerchantApi, toMerchantError } from '../../core/merchants/merchant-api.service';
 import { ApplicationStatus, ChecklistItem, CountryApplication, ReadinessAction, ReadinessStage } from '../../core/merchants/merchant-models';
 import { rulesFor } from '../../core/merchants/onboarding-config';
-import { ProductGap } from '../../core/merchants/products';
+import { gapCount, ProductGap } from '../../core/merchants/products';
 
 /** Configuration items set automatically from Product & Payment Config (not ticked by hand). */
 const DERIVED_KEYS = new Set(['payment_methods', 'pricing_loaded']);
@@ -37,8 +37,17 @@ export class ReadinessPanel {
   readonly canAct = input(false);
   /** A suspended merchant can be prepared but can't go live until Risk reactivates it. */
   readonly suspended = input(false);
-  /** During Product & Payment Config: what still stops "Issue production keys". */
+  /** During Product & Payment Config: what still stops "Confirm onboarding". */
   readonly productGaps = input<ProductGap[] | null>(null);
+  /** Stage 4 badge: products not priced + PayIn products without a cycle, or 1 if no products are on. */
+  protected readonly gaps = computed(() => gapCount(this.productGaps() ?? []));
+
+  protected openConfig(e: Event) {
+    e.preventDefault();
+    const el = document.getElementById('product-config');
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    el?.querySelector<HTMLElement>('h2')?.focus();
+  }
   protected readonly derived = DERIVED_KEYS;
   readonly changed = output<{ application: CountryApplication; message?: string }>();
 
@@ -63,7 +72,7 @@ export class ReadinessPanel {
     const state = (start: number, end: number): StageView['state'] => (i >= end ? 'done' : i >= start ? 'current' : 'upcoming');
     return [
       { key: 'configuration', title: 'Product & Payment Config', description: 'Switch on products, then set settlement and pricing for the country.', state: state(0, 2), checklist: 'configuration' },
-      { key: 'keys', title: 'Production keys', description: 'Issued once setup is complete.', state: i >= 2 ? 'done' : 'upcoming', checklist: null },
+      { key: 'keys', title: 'Production keys', description: 'Issued when CS confirms onboarding.', state: i >= 2 ? 'done' : 'upcoming', checklist: null },
       { key: 'integration', title: 'Merchant integration', description: 'The merchant connects to Mobi with their production keys.', state: state(2, 4), checklist: 'integration' },
       { key: 'go_live', title: 'Go-live verification', description: 'Final checks before the country goes live.', state: state(4, 5), checklist: 'go_live' },
     ];

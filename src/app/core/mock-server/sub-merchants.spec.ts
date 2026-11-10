@@ -185,13 +185,14 @@ describe('Sub-merchants', () => {
   });
 
   it('shows the parent’s products, pricing and settlement for that country', async () => {
-    await call('PUT', '/api/applications/APP-2026-0001/products', { products: [{ methodCode: 'MY_CARDS', enabled: true }, { methodCode: 'MY_FPX', enabled: true }, { methodCode: 'MY_DUITNOW', enabled: true }], settlement: { MY_CARDS: 'T+2', MY_FPX: 'T+1', MY_DUITNOW: 'T+1' }, revision: 1 }, 'sales');
+    await call('PUT', '/api/applications/APP-2026-0001/products', { products: [{ methodCode: 'fpx', enabled: true }, { methodCode: 'duitnow_qr', enabled: true }, { methodCode: 'tng', enabled: true }, { methodCode: 'cards', enabled: true }], settlement: { fpx: 'T+1', duitnow_qr: 'T+1', tng: 'T+1', cards: 'T+2' }, revision: 1 }, 'sales');
     const s = (await create('GM-100101', { country: 'MY', displayName: 'Tanjung Outlet KL' })).body as SubMerchantView;
     expect(s.parentApplicationId).toBe('APP-2026-0001');
     expect(s.inherited.products).toEqual([
-      { name: 'Visa / Mastercard', mdrPct: 2.2, settlement: 'T+2' },
-      { name: 'FPX online banking', mdrPct: 1, settlement: 'T+1' },
-      { name: 'DuitNow QR', mdrPct: 0.8, settlement: 'T+1' },
+      { name: 'FPX', pricing: 'Percentage: 1%', settlement: 'T+1' },
+      { name: 'DuitNow QR', pricing: 'Percentage: 0.8%', settlement: 'T+1' },
+      { name: "Touch 'n Go", pricing: 'Percentage: 1.5%', settlement: 'T+1' },
+      { name: 'Cards', pricing: 'Percentage: 2.2%', settlement: 'T+2' },
     ]);
   });
 
