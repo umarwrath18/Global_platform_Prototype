@@ -59,20 +59,20 @@ export class AccountSecurity {
     const e = this.error();
     if (!e) return null;
     const left = 'attemptsRemaining' in e ? e.attemptsRemaining : undefined;
-    const tail = left ? ` ${left} attempt${left === 1 ? '' : 's'} left before sign-in is blocked.` : '';
+    const tail = left ? ` ${left} attempt${left === 1 ? '' : 's'} left` : '';
     switch (e.code) {
       case 'MFA_CODE_INVALID':
-        return this.replaceStep() === 'new' ? `That code doesn’t match the new authenticator.${left ? ` ${left} attempt${left === 1 ? '' : 's'} left.` : ''}` : `That code is incorrect or has expired.${tail}`;
+        return `Incorrect code.${tail}`;
       case 'MFA_CODE_REUSED':
-        return 'That code was already used. Wait for the next code, then enter it.';
+        return 'Code already used. Wait for a new code.';
       case 'MFA_SETUP_ATTEMPTS_EXCEEDED':
-        return 'Too many incorrect codes for the new authenticator. Start the replacement again.';
+        return 'Too many attempts. Start again.';
       case 'STEP_UP_REQUIRED':
-        return 'This replacement timed out. Start again.';
+        return 'Session timed out. Start again.';
       case 'VALIDATION_FAILED':
         return 'Enter the 6-digit code.';
       case 'NETWORK_ERROR':
-        return 'You appear to be offline. Check your connection and try again.';
+        return 'You’re offline. Check your connection and try again.';
       default:
         return 'Something went wrong. Please try again.';
     }

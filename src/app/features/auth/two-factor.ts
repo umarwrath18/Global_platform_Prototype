@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { ClientError, formatClock, toClientError } from '../../core/api/api-error';
+import { ClientError, toClientError } from '../../core/api/api-error';
 import { AuthenticatorEnrolment } from '../../core/api/models';
 import { APP_PORTAL } from '../../core/app-portal';
 import { safeReturnUrl } from '../../core/auth/auth.guards';
@@ -11,7 +11,7 @@ import { AuthShell } from './auth-shell';
 
 /** What is on screen. The server's challenge stage decides which of these are reachable. */
 type View =
-  | 'intro' // setup: why 2FA is required
+  | 'intro' // setup: MFA is required
   | 'scan' // setup: QR code and setup key
   | 'confirm' // setup: enter a code from the new authenticator
   | 'enabled' // setup done, signed in
@@ -51,33 +51,31 @@ export class TwoFactor {
   protected readonly now = signal(Date.now());
   protected readonly landing = signal('/dashboard');
 
-  protected readonly firstName = computed(() => this.pending()?.user.name.split(' ')[0] ?? '');
   protected readonly expiresIn = computed(() => Math.max(0, ((this.pending()?.expiresAt ?? 0) - this.now()) / 1000));
   protected readonly codeComplete = computed(() => /^\d{6}$/.test(this.code()));
-  protected readonly formatClock = formatClock;
 
   protected readonly notice = computed<Notice | null>(() => {
     const e = this.error();
     if (!e) return null;
     const left = 'attemptsRemaining' in e ? e.attemptsRemaining : undefined;
-    const tail = left ? ` ${left} attempt${left === 1 ? '' : 's'} left.` : '';
+    const tail = left ? ` ${left} attempt${left === 1 ? '' : 's'} left` : '';
     switch (e.code) {
       case 'MFA_CODE_INVALID':
-        return { tone: 'danger', text: `That code is incorrect or has expired. Enter the current code from your app.${tail}` };
+        return { tone: 'danger', text: `Incorrect code.${tail}` };
       case 'MFA_CODE_REUSED':
-        return { tone: 'warning', text: 'That code was already used. Wait for your app to show a new code, then enter it.' };
+        return { tone: 'warning', text: 'Code already used. Wait for a new code.' };
       case 'MFA_SETUP_ATTEMPTS_EXCEEDED':
-        return { tone: 'danger', title: 'Too many incorrect codes', text: 'For your security, please sign in again to restart setup.' };
+        return { tone: 'danger', text: 'Too many attempts. Sign in again.' };
       case 'VALIDATION_FAILED':
         return { tone: 'danger', text: 'Enter the 6-digit code.' };
       case 'NETWORK_ERROR':
-        return { tone: 'warning', title: 'No connection', text: 'You appear to be offline. Check your internet connection and try again.' };
+        return { tone: 'warning', text: 'You’re offline. Check your connection and try again.' };
       case 'SERVICE_UNAVAILABLE':
-        return { tone: 'warning', title: 'Service unavailable', text: 'We couldn’t reach the sign-in service. Please try again in a moment.' };
+        return { tone: 'warning', text: 'Service unavailable. Try again shortly.' };
       case 'ACCOUNT_SUSPENDED':
       case 'ACCOUNT_INACTIVE':
       case 'USER_DISABLED':
-        return { tone: 'danger', title: 'Access unavailable', text: 'This account can’t sign in right now. Please contact Mobi Support.' };
+        return { tone: 'danger', text: 'This account can’t sign in. Contact Mobi Support.' };
       default:
         return { tone: 'danger', text: 'Something went wrong. Please try again.' };
     }
@@ -158,7 +156,7 @@ export class TwoFactor {
   }
 
   protected continue() {
-    if (this.router.url.startsWith('/two-factor')) void this.router.navigateByUrl(this.landing());
+    if (this.router.url.startsWith('/mfa')) void this.router.navigateByUrl(this.landing());
   }
 
   protected backToLogin() {

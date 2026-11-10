@@ -1,11 +1,11 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { ClientError, formatDuration, toClientError } from '../../core/api/api-error';
+import { ClientError, toClientError } from '../../core/api/api-error';
 import { APP_PORTAL } from '../../core/app-portal';
 import { safeReturnUrl } from '../../core/auth/auth.guards';
 import { AuthService, SignedOutReason } from '../../core/auth/auth.service';
-import { DEMO_ACCOUNT_GUIDE, DEMO_PASSWORD } from '../../core/mock-server/seed';
+import { DEMO_PASSWORD, demoAccountsFor } from '../../core/mock-server/seed';
 import { Icon } from '../../shared/icon';
 import { AuthShell } from './auth-shell';
 
@@ -15,18 +15,22 @@ interface Notice {
   text: string;
 }
 
+// Short on purpose: say what to do next, never why an account is restricted or how the rules work.
+const BLOCKED: Notice = { tone: 'danger', text: 'This account can’t sign in. Contact Mobi Support.' };
+
 const REASON_NOTICES: Record<SignedOutReason | 'password-reset', Notice> = {
-  'signed-out': { tone: 'info', text: 'You have been signed out.' },
-  'session-expired': { tone: 'warning', text: 'Your session expired. Please sign in again to continue.' },
-  'signin-required': { tone: 'info', text: 'Please sign in to continue.' },
-  'account-suspended': { tone: 'danger', title: 'Account suspended', text: 'Your session ended because this Global Account was suspended. Please contact Mobi Support.' },
-  'account-inactive': { tone: 'danger', title: 'Account inactive', text: 'Your session ended because this Global Account is not active. Please contact Mobi Support.' },
-  'user-disabled': { tone: 'danger', title: 'Access disabled', text: 'Your session ended because your user access was disabled. Please contact Mobi Support.' },
+  'signed-out': { tone: 'info', text: 'You’ve been signed out.' },
+  'session-expired': { tone: 'warning', text: 'Session expired. Sign in again.' },
+  'signin-required': { tone: 'info', text: 'Sign in to continue.' },
+  'account-suspended': BLOCKED,
+  'account-inactive': BLOCKED,
+  'user-disabled': BLOCKED,
   'password-reset': { tone: 'success', text: 'Password updated. Sign in with your new password.' },
-  'mfa-required': { tone: 'info', title: 'Two-factor authentication is now required', text: 'For your security, please sign in again and set up an authenticator app to continue.' },
-  'mfa-blocked': { tone: 'danger', title: 'Sign-in blocked', text: 'Too many incorrect authentication codes. Mobi’s security team has been alerted. Please contact Mobi Support to restore access.' },
-  'wrong-portal': { tone: 'warning', text: 'You were signed out because this account belongs to the other Mobi portal.' },
-  'mfa-reset': { tone: 'warning', title: 'Two-factor authentication was reset', text: 'Sign in again and register a new authenticator app to continue.' },
+  'mfa-required': { tone: 'info', text: 'MFA is now required. Sign in to set it up.' },
+  'mfa-blocked': { tone: 'danger', text: 'Sign-in blocked. Contact Mobi Support.' },
+  // Replaced with the app-specific "use the other portal" message in the constructor.
+  'wrong-portal': { tone: 'warning', text: '' },
+  'mfa-reset': { tone: 'warning', text: 'MFA was reset. Sign in to set it up again.' },
 };
 
 @Component({
@@ -60,7 +64,7 @@ export class Login {
 
   protected readonly app = inject(APP_PORTAL);
   // Each app lists only the test accounts that can sign in to it.
-  protected readonly demoAccounts = DEMO_ACCOUNT_GUIDE.filter((a) => (a.portal ?? 'internal') === this.app.portal);
+  protected readonly demoAccounts = demoAccountsFor(this.app.portal);
   protected readonly demoPassword = DEMO_PASSWORD;
 
   protected readonly lockRemainingSec = computed(() => Math.max(0, (this.lockedUntil() - this.now()) / 1000));
@@ -72,29 +76,24 @@ export class Login {
     switch (e.code) {
       case 'INVALID_CREDENTIALS': {
         const left = 'attemptsRemaining' in e ? e.attemptsRemaining : undefined;
-        const suffix = left ? ` ${left} attempt${left === 1 ? '' : 's'} left before sign-in is temporarily locked.` : '';
-        return { tone: 'danger', text: `The Global Account ID or password is incorrect.${suffix}` };
+        const suffix = left ? ` ${left} attempt${left === 1 ? '' : 's'} left` : '';
+        return { tone: 'danger', text: `Incorrect Global Account ID or password.${suffix}` };
       }
       case 'LOGIN_LOCKED':
-        return this.isLocked()
-          ? { tone: 'danger', title: 'Too many failed attempts', text: `For your security, sign-in is temporarily locked. Try again in ${formatDuration(this.lockRemainingSec())}, or reset your password.` }
-          : { tone: 'info', text: 'You can try signing in again now.' };
+        // The lock time is not shown; the Sign in button stays disabled until it ends.
+        return this.isLocked() ? { tone: 'danger', text: 'Too many attempts. Try again later.' } : null;
       case 'ACCOUNT_SUSPENDED':
-        return { tone: 'danger', title: 'Account suspended', text: 'This Global Account has been suspended. Please contact Mobi Support for assistance.' };
       case 'ACCOUNT_INACTIVE':
-        return { tone: 'danger', title: 'Account inactive', text: 'This Global Account is not active. Please contact Mobi Support for assistance.' };
       case 'USER_DISABLED':
-        return { tone: 'danger', title: 'Access disabled', text: 'Your user access has been disabled. Please contact Mobi Support for assistance.' };
+        return BLOCKED;
       case 'WRONG_PORTAL':
-        return this.app.portal === 'merchant'
-          ? { tone: 'warning', title: 'Use the Global Platform', text: 'This account is for Mobi’s Global Platform, not the Merchant Portal. Sign in there instead.' }
-          : { tone: 'warning', title: 'Use the Merchant Portal', text: 'This is a merchant account. Sign in at the Mobi Merchant Portal instead.' };
+        return { tone: 'warning', text: this.wrongPortalText() };
       case 'MFA_BLOCKED':
-        return { tone: 'danger', title: 'Sign-in blocked', text: 'Too many incorrect authentication codes were entered. Mobi’s security team has been alerted. Please contact Mobi Support to restore access.' };
+        return { tone: 'danger', text: 'Sign-in blocked. Contact Mobi Support.' };
       case 'NETWORK_ERROR':
-        return { tone: 'warning', title: 'No connection', text: 'You appear to be offline. Check your internet connection and try again.' };
+        return { tone: 'warning', text: 'You’re offline. Check your connection and try again.' };
       case 'SERVICE_UNAVAILABLE':
-        return { tone: 'warning', title: 'Service unavailable', text: 'We couldn’t reach the sign-in service. Please try again in a moment.' };
+        return { tone: 'warning', text: 'Service unavailable. Try again shortly.' };
       default:
         return { tone: 'danger', text: 'Something went wrong. Please try again.' };
     }
@@ -104,10 +103,15 @@ export class Login {
     // Coming back to the password step abandons any half-finished 2FA step.
     this.auth.cancelPending();
     const reason = this.route.snapshot.queryParamMap.get('reason') as keyof typeof REASON_NOTICES | null;
-    if (reason && REASON_NOTICES[reason]) this.notice.set(REASON_NOTICES[reason]);
+    if (reason === 'wrong-portal') this.notice.set({ tone: 'warning', text: this.wrongPortalText() });
+    else if (reason && REASON_NOTICES[reason]) this.notice.set(REASON_NOTICES[reason]);
 
     const timer = setInterval(() => this.now.set(Date.now()), 1000);
     inject(DestroyRef).onDestroy(() => clearInterval(timer));
+  }
+
+  private wrongPortalText() {
+    return `Use the Mobi ${this.app.portal === 'merchant' ? 'Global Platform' : 'Merchant Portal'} to sign in.`;
   }
 
   protected fieldError(name: 'loginId' | 'password'): string | null {
@@ -139,7 +143,7 @@ export class Login {
       // The password alone never grants access: continue to the second factor.
       await this.auth.login(loginId.trim(), password, remember);
       const returnUrl = safeReturnUrl(this.route.snapshot.queryParamMap.get('returnUrl'));
-      await this.router.navigate(['/two-factor'], returnUrl ? { queryParams: { returnUrl } } : {});
+      await this.router.navigate(['/mfa'], returnUrl ? { queryParams: { returnUrl } } : {});
     } catch (e) {
       const err = toClientError(e);
       if (err.code === 'LOGIN_LOCKED' && 'retryAfterSec' in err && err.retryAfterSec) {

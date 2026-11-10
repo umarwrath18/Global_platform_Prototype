@@ -3,8 +3,10 @@ import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, i
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
-import { ClientError, formatClock, formatDuration, toClientError } from '../../core/api/api-error';
+import { APP_PORTAL } from '../../core/app-portal';
+import { ClientError, formatClock, toClientError } from '../../core/api/api-error';
 import { OtpRequestResponse, OtpVerifyResponse } from '../../core/api/models';
+import { demoAccountsFor } from '../../core/mock-server/seed';
 import { PASSWORD_POLICY, PASSWORD_VIOLATION_TEXT, PasswordViolation, checkPassword } from '../../core/api/password-policy';
 import { DemoInboxService } from '../../shared/demo-inbox.service';
 import { Icon } from '../../shared/icon';
@@ -23,6 +25,9 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 })
 export class ForgotPassword {
   private readonly http = inject(HttpClient);
+  /** PROTOTYPE ONLY: registered emails of this app's test accounts ("Use a test email"). */
+  protected readonly testEmails = demoAccountsFor(inject(APP_PORTAL).portal).filter((a) => a.email);
+  protected readonly showTestEmails = signal(false);
   private readonly inbox = inject(DemoInboxService);
   private readonly otpInput = viewChild<ElementRef<HTMLInputElement>>('otpInput');
   private readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
@@ -59,7 +64,6 @@ export class ForgotPassword {
 
   protected readonly policy = PASSWORD_POLICY;
   protected readonly resendInSec = computed(() => Math.max(0, (this.resendAvailableAt() - this.now()) / 1000));
-  protected readonly expiresInSec = computed(() => Math.max(0, (this.expiresAt() - this.now()) / 1000));
   protected readonly otpComplete = computed(() => /^\d{6}$/.test(this.otpValue()));
 
   protected readonly violations = computed(() => checkPassword(this.newPasswordValue(), { email: this.email() }));
@@ -77,34 +81,32 @@ export class ForgotPassword {
   protected readonly errorText = computed<{ tone: 'danger' | 'warning'; title?: string; text: string } | null>(() => {
     const e = this.error();
     if (!e) return null;
-    const retry = 'retryAfterSec' in e && e.retryAfterSec ? formatDuration(e.retryAfterSec) : null;
+    // Short on purpose: say what to do next, never how the limits work.
     switch (e.code) {
       case 'OTP_COOLDOWN':
-        return { tone: 'warning', text: `A code was sent recently. You can request a new code in ${retry ?? 'a moment'}.` };
+        return { tone: 'warning', text: 'Please wait before requesting a new code.' };
       case 'OTP_SEND_LIMIT':
-        return { tone: 'warning', title: 'Too many code requests', text: `For your security, please wait ${retry ?? 'a while'} before requesting another code.` };
+        return { tone: 'warning', text: 'Too many requests. Try again later.' };
       case 'OTP_DELIVERY_FAILED':
-        return { tone: 'warning', title: 'We couldn’t send the code', text: 'The email service didn’t accept the message. Please try again shortly or contact Mobi Support.' };
+        return { tone: 'warning', text: 'Couldn’t send the code. Try again later.' };
       case 'OTP_INVALID': {
         const left = 'attemptsRemaining' in e ? e.attemptsRemaining : undefined;
-        return { tone: 'danger', text: `That code is incorrect.${left ? ` ${left} attempt${left === 1 ? '' : 's'} remaining.` : ''}` };
+        return { tone: 'danger', text: `Incorrect or expired code.${left ? ` ${left} attempt${left === 1 ? '' : 's'} left` : ''}` };
       }
       case 'OTP_EXPIRED':
-        return { tone: 'danger', title: 'Code expired', text: 'This code has expired. Request a new code to continue.' };
       case 'OTP_USED':
-        return { tone: 'danger', title: 'Code already used', text: 'This code has already been used. Request a new code to continue.' };
       case 'OTP_ATTEMPTS_EXCEEDED':
-        return { tone: 'danger', title: 'Too many incorrect attempts', text: 'This code can no longer be used. Request a new code to continue.' };
+        return { tone: 'danger', text: 'Request a new code.' };
       case 'RESET_TOKEN_INVALID':
-        return { tone: 'danger', title: 'Verification expired', text: 'Your verification has expired. Please start again to reset your password.' };
+        return { tone: 'danger', text: 'Session timed out.' };
       case 'RESET_NOT_ALLOWED':
-        return { tone: 'danger', title: 'Password can’t be reset', text: 'This account can’t be updated right now. Please contact Mobi Support.' };
+        return { tone: 'danger', text: 'This account can’t be updated. Contact Mobi Support.' };
       case 'PASSWORD_POLICY':
-        return { tone: 'danger', text: 'This password doesn’t meet the password policy. Please choose another.' };
+        return { tone: 'danger', text: 'Choose a different password.' };
       case 'NETWORK_ERROR':
-        return { tone: 'warning', title: 'No connection', text: 'You appear to be offline. Check your internet connection and try again.' };
+        return { tone: 'warning', text: 'You’re offline. Check your connection and try again.' };
       case 'SERVICE_UNAVAILABLE':
-        return { tone: 'warning', title: 'Service unavailable', text: 'We couldn’t reach the service. Please try again in a moment.' };
+        return { tone: 'warning', text: 'Service unavailable. Try again shortly.' };
       default:
         return { tone: 'danger', text: 'Something went wrong. Please try again.' };
     }
@@ -133,6 +135,11 @@ export class ForgotPassword {
 
   protected formatClock = formatClock;
   protected violationText = (v: PasswordViolation) => PASSWORD_VIOLATION_TEXT[v];
+
+  protected useTestEmail(email: string) {
+    this.emailForm.controls.email.setValue(email);
+    this.showTestEmails.set(false);
+  }
 
   protected emailError(): string | null {
     const c = this.emailForm.controls.email;

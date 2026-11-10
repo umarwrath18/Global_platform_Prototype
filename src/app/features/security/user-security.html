@@ -2,7 +2,7 @@
   <div class="portal-head">
     <div>
       <h1>User security</h1>
-      <p class="sub">Two-factor authentication status, reset requests, security blocks and the audit trail for merchant users.</p>
+      <p class="sub">MFA status, reset requests, security blocks and the audit trail for merchant users.</p>
     </div>
     @if (role()) {
       <button type="button" class="btn" (click)="load()" [disabled]="loading()"><app-icon name="rotate" [size]="16" />Refresh</button>
@@ -55,7 +55,7 @@
             <div class="table-wrap">
               <table class="data-table">
                 <thead>
-                  <tr><th>User</th><th>Global Account</th><th>2FA</th><th>Last used</th><th>Reset request</th><th><span class="sr-only">Actions</span></th></tr>
+                  <tr><th>User</th><th>Global Account</th><th>MFA</th><th>Last used</th><th>Reset request</th><th><span class="sr-only">Actions</span></th></tr>
                 </thead>
                 <tbody>
                   @for (u of users(); track u.userId) {
@@ -168,7 +168,7 @@
         <!-- ------------------------------------------ Audit log (FR-08) -->
         @case ('audit') {
           <section class="panel-card">
-            <div class="panel-head"><div><h2>Audit log</h2><p>Two-factor registration, verification, replacement, blocks, alerts, resets and waive-offs. Newest first.</p></div></div>
+            <div class="panel-head"><div><h2>Audit log</h2><p>MFA registration, verification, replacement, blocks, alerts, resets and waive-offs. Newest first.</p></div></div>
             @if (auditRows().length) {
               <div class="table-wrap">
                 <table class="data-table">
@@ -202,7 +202,7 @@
       <section class="modal panel-card" role="dialog" aria-modal="true" aria-labelledby="action-title" (click)="$event.stopPropagation()">
         <div class="panel-head">
           <div>
-            <h2 id="action-title">{{ a.kind === 'request' ? 'Open reset request' : a.kind === 'reset' ? 'Verify identity and reset 2FA' : 'Waive security block' }}</h2>
+            <h2 id="action-title">{{ a.kind === 'request' ? 'Open reset request' : a.kind === 'reset' ? 'Verify identity and reset MFA' : 'Waive security block' }}</h2>
             <p>{{ a.user.name }} · {{ a.user.loginId }} · {{ a.user.accountName }}</p>
           </div>
           <button type="button" class="btn sm" (click)="close()" [disabled]="busy()">Cancel</button>
@@ -256,7 +256,7 @@
               <button type="button" class="btn" (click)="close()" [disabled]="busy()">Cancel</button>
               <button type="button" class="btn" [class.danger]="a.kind === 'reset'" [class.primary]="a.kind !== 'reset'" [disabled]="!canSubmit()" (click)="submit()">
                 @if (busy()) {<span class="spinner" aria-hidden="true"></span>}
-                {{ a.kind === 'request' ? 'Open request' : a.kind === 'reset' ? 'Reset 2FA' : 'Waive block' }}
+                {{ a.kind === 'request' ? 'Open request' : a.kind === 'reset' ? 'Reset MFA' : 'Waive block' }}
               </button>
             </div>
           }

@@ -109,15 +109,24 @@ export const SEED_USERS: SeedUser[] = [
 
 /** Shown in the login screen's "sample accounts" panel. */
 export const DEMO_ACCOUNT_GUIDE: { loginId: string; scenario: string; portal?: 'merchant' }[] = [
-  { loginId: 'TANJUNG-MERCHANT', scenario: 'Tanjung Global Trading · 3 live countries · 2FA not set up yet', portal: 'merchant' },
-  { loginId: 'NUSANTARA-MERCHANT', scenario: 'Nusantara Home Retail · Malaysia & Indonesia live · 2FA on', portal: 'merchant' },
-  { loginId: 'LUMI-MERCHANT', scenario: 'Lumi Home Living · no live countries yet · 2FA on', portal: 'merchant' },
-  { loginId: '123', scenario: 'Administrator · 3 active countries · 2FA not set up yet' },
-  { loginId: 'TANJUNG-ADMIN', scenario: 'Administrator · same account · 2FA on' },
-  { loginId: 'TANJUNG-VIEWER', scenario: 'Viewer · same account · 2FA on' },
-  { loginId: 'LUMI-ADMIN', scenario: 'Account with no active countries · 2FA not set up yet' },
+  { loginId: 'TANJUNG-MERCHANT', scenario: 'Tanjung Global Trading · 3 live countries · MFA not set up yet', portal: 'merchant' },
+  { loginId: 'NUSANTARA-MERCHANT', scenario: 'Nusantara Home Retail · Malaysia & Indonesia live · MFA on', portal: 'merchant' },
+  { loginId: 'LUMI-MERCHANT', scenario: 'Lumi Home Living · no live countries yet · MFA on', portal: 'merchant' },
+  { loginId: '123', scenario: 'Administrator · 3 active countries · MFA not set up yet' },
+  { loginId: 'TANJUNG-ADMIN', scenario: 'Administrator · same account · MFA on' },
+  { loginId: 'TANJUNG-VIEWER', scenario: 'Viewer · same account · MFA on' },
+  { loginId: 'LUMI-ADMIN', scenario: 'Account with no active countries · MFA not set up yet' },
   { loginId: 'TANJUNG-RAVI', scenario: 'User access disabled' },
   { loginId: 'SERIMUTIARA-ADMIN', scenario: 'Account suspended' },
   { loginId: 'NUSAPANGAN-ADMIN', scenario: 'Account inactive' },
   { loginId: 'TANJUNG-KEVIN', scenario: 'Sign-in service unavailable' },
 ];
+
+/** PROTOTYPE ONLY: the test accounts (with their registered email) that can sign in to one app. */
+export function demoAccountsFor(portal: 'internal' | 'merchant'): { loginId: string; email: string; scenario: string }[] {
+  return DEMO_ACCOUNT_GUIDE.filter((a) => (a.portal ?? 'internal') === portal).map((a) => ({
+    loginId: a.loginId,
+    email: SEED_USERS.find((u) => u.loginId === a.loginId)?.email ?? '',
+    scenario: a.scenario,
+  }));
+}

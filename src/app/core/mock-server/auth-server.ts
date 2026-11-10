@@ -763,7 +763,7 @@ export class AuthServer {
     this.resolveAlerts(db, target.id, actor, 'Authenticator reset');
     this.audit(db, 'IDENTITY_VERIFIED', { userId: target.id, accountId: target.accountId, actor, detail: `${request!.id}; method=${method}` });
     this.audit(db, 'MFA_RESET', { userId: target.id, accountId: target.accountId, actor, reason, detail: `${request!.id}; sessions_revoked=${revoked}` });
-    this.notify(db, target, 'Your Mobi two-factor authentication was reset', `Mobi reset two-factor authentication for ${target.loginId} (request ${request!.id}). The next time you sign in you must register a new authenticator app. If you didn't ask for this, contact Mobi Support immediately.`);
+    this.notify(db, target, 'Your Mobi MFA was reset', `Mobi reset MFA for ${target.loginId} (request ${request!.id}). The next time you sign in you must register a new authenticator app. If you didn't ask for this, contact Mobi Support immediately.`);
     this.save(db);
     return null;
   }

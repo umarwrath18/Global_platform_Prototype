@@ -1,22 +1,10 @@
 <app-auth-shell>
   @switch (view()) {
-    <!-- ------------------------------------------------ Setup: why 2FA (mandatory, no skip) -->
+    <!-- ------------------------------------------------ Setup: mandatory, no skip -->
     @case ('intro') {
       <div class="icon-tile"><app-icon name="shield" [size]="22" /></div>
-      <p class="eyebrow">Hi {{ firstName() }}, one more step</p>
-      <h1 class="screen-title" #heading tabindex="-1">Protect your account with two-factor authentication</h1>
-      <p class="screen-lead">Mobi now requires a code from an authenticator app every time you sign in, so a password alone can’t open your account.</p>
-
-      <ul class="benefits">
-        <li><app-icon name="smartphone" [size]="18" /><span><strong>Use an authenticator app</strong> such as Google Authenticator or Microsoft Authenticator.</span></li>
-        <li><app-icon name="clock" [size]="18" /><span><strong>Takes about 2 minutes.</strong> You’ll scan a QR code, then enter a 6-digit code.</span></li>
-        <li><app-icon name="help" [size]="18" /><span><strong>Lost your phone later?</strong> Contact Mobi Support. They’ll verify your identity and help you set up a new one.</span></li>
-      </ul>
-
-      <div class="alert" role="note">
-        <app-icon name="info" />
-        <div>Two-factor authentication is required for all merchant users and can’t be skipped.</div>
-      </div>
+      <h1 class="screen-title" #heading tabindex="-1">Set up MFA authentication</h1>
+      <p class="screen-lead">Required for every sign-in.</p>
 
       @if (notice(); as n) {
         <div class="alert" [class]="n.tone" role="alert"><app-icon name="alert-circle" /><div>@if (n.title) {<strong>{{ n.title }}</strong>}{{ n.text }}</div></div>
@@ -34,9 +22,7 @@
 
     <!-- ------------------------------------------------ Setup: QR code and manual key -->
     @case ('scan') {
-      <p class="eyebrow">Step 1 of 2</p>
-      <h1 class="screen-title" #heading tabindex="-1">Scan with your authenticator app</h1>
-      <p class="screen-lead">Add your Mobi account to the app, then continue to enter the code it shows.</p>
+      <h1 class="screen-title" #heading tabindex="-1">Scan with your authenticator app, or enter the key.</h1>
       @if (enrolment(); as e) {
         <app-authenticator-qr [enrolment]="e" />
       }
@@ -46,10 +32,8 @@
 
     <!-- ------------------------------------------------ Setup: verify the new authenticator -->
     @case ('confirm') {
-      <button type="button" class="back-link" (click)="go('scan')"><app-icon name="arrow-left" [size]="16" />Back to QR code</button>
-      <p class="eyebrow">Step 2 of 2</p>
+      <button type="button" class="back-link" (click)="go('scan')"><app-icon name="arrow-left" [size]="16" />Back</button>
       <h1 class="screen-title" #heading tabindex="-1">Enter the code from your app</h1>
-      <p class="screen-lead">Type the 6-digit code shown for <strong>Mobi Global Platform</strong> in your authenticator app.</p>
       @if (notice(); as n) {
         <div class="alert" [class]="n.tone" role="alert"><app-icon name="alert-circle" /><div>@if (n.title) {<strong>{{ n.title }}</strong>}{{ n.text }}</div></div>
       }
@@ -65,7 +49,7 @@
             @if (busy()) {
               <span class="spinner" aria-hidden="true"></span>Verifying…
             } @else {
-              Verify and turn on 2FA
+              Verify
             }
           </button>
         </form>
@@ -75,26 +59,21 @@
     <!-- ------------------------------------------------ Setup complete -->
     @case ('enabled') {
       <div class="icon-tile success"><app-icon name="check-circle" [size]="22" /></div>
-      <p class="eyebrow">You’re all set</p>
-      <h1 class="screen-title" #heading tabindex="-1">Two-factor authentication is on</h1>
-      <p class="screen-lead">From now on you’ll enter a code from your authenticator app each time you sign in. Moving to a new phone? Replace your authenticator from <strong>Account security</strong>.</p>
+      <h1 class="screen-title" #heading tabindex="-1">MFA authentication is on.</h1>
       <button type="button" class="btn-primary" (click)="continue()">Continue to {{ app.productName }}</button>
     }
 
     <!-- ------------------------------------------------ Sign-in: authenticator code -->
     @case ('code') {
       <div class="icon-tile"><app-icon name="lock" [size]="22" /></div>
-      <p class="eyebrow">Two-factor authentication</p>
-      <h1 class="screen-title" #heading tabindex="-1">Enter your authenticator code</h1>
-      <p class="screen-lead">Open your authenticator app and enter the 6-digit code for <strong>Mobi Global Platform</strong> ({{ pending()?.user?.loginId }}).</p>
+      <h1 class="screen-title" #heading tabindex="-1">Enter the code from your authenticator app.</h1>
       @if (notice(); as n) {
         <div class="alert" [class]="n.tone" role="alert"><app-icon name="alert-circle" /><div>@if (n.title) {<strong>{{ n.title }}</strong>}{{ n.text }}</div></div>
       }
       <form (submit)="$event.preventDefault(); verify()" novalidate>
         <div class="field">
           <label class="field-label" for="code">Authentication code</label>
-          <input #codeInput id="code" class="input code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" (input)="onCodeInput($any($event.target).value, $any($event.target))" [attr.aria-invalid]="!!error()" [class.invalid]="!!error()" aria-describedby="code-hint" />
-          <p class="field-hint" id="code-hint"><app-icon name="clock" [size]="14" />Codes change every 30 seconds. This sign-in step expires in {{ formatClock(expiresIn()) }}.</p>
+          <input #codeInput id="code" class="input code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" (input)="onCodeInput($any($event.target).value, $any($event.target))" [attr.aria-invalid]="!!error()" [class.invalid]="!!error()" />
         </div>
         <button type="submit" class="btn-primary" [disabled]="!codeComplete() || busy()" [class.busy]="busy()">
           @if (busy()) {
@@ -114,29 +93,24 @@
     @case ('lost') {
       <button type="button" class="back-link" (click)="go('code')"><app-icon name="arrow-left" [size]="16" />Back</button>
       <div class="icon-tile"><app-icon name="smartphone" [size]="22" /></div>
-      <p class="eyebrow">Account recovery</p>
-      <h1 class="screen-title" #heading tabindex="-1">Lost access to your authenticator?</h1>
-      <p class="screen-lead">Contact Mobi Support. They’ll open a reset request, and an authorised administrator will verify your identity before resetting two-factor authentication. The next time you sign in, you’ll set up your authenticator app again.</p>
-      <a class="btn-primary support" href="mailto:support@mobi.xyz?subject=Two-factor%20authentication%20reset">Contact Mobi Support</a>
-      <p class="fineprint">For your security, Mobi Support can’t turn off two-factor authentication or tell you a code.</p>
+      <h1 class="screen-title" #heading tabindex="-1">Lost your device?</h1>
+      <p class="screen-lead">Contact Mobi Support to regain access.</p>
+      <a class="btn-primary support" href="mailto:support@mobi.xyz?subject=MFA%20reset">Contact Mobi Support</a>
       <p class="foot"><button type="button" class="link-button muted" (click)="backToLogin()">Back to sign in</button></p>
     }
 
     <!-- ------------------------------------------------ Sign-in complete -->
     @case ('signed-in') {
       <div class="icon-tile success"><app-icon name="check-circle" [size]="22" /></div>
-      <p class="eyebrow">Verified</p>
       <h1 class="screen-title" #heading tabindex="-1">You’re signed in</h1>
-      <p class="screen-lead">Taking you to {{ app.productName }}…</p>
       <button type="button" class="btn-primary" (click)="continue()">Continue</button>
     }
 
     <!-- ------------------------------------------------ Too many attempts (FR-03) -->
     @case ('blocked') {
       <div class="icon-tile danger"><app-icon name="shield" [size]="22" /></div>
-      <p class="eyebrow">Sign-in blocked</p>
-      <h1 class="screen-title" #heading tabindex="-1">Too many incorrect codes</h1>
-      <p class="screen-lead">For your security, sign-in to this account is blocked and Mobi’s security team has been alerted. Contact Mobi Support to restore access. Trying again won’t unlock it.</p>
+      <h1 class="screen-title" #heading tabindex="-1">Sign-in blocked.</h1>
+      <p class="screen-lead">Contact Mobi Support.</p>
       <a class="btn-secondary wide" href="mailto:support@mobi.xyz?subject=Sign-in%20blocked">Contact Mobi Support</a>
       <p class="foot"><button type="button" class="link-button muted" (click)="backToLogin()">Back to sign in</button></p>
     }
@@ -144,9 +118,8 @@
     <!-- ------------------------------------------------ Challenge expired / missing -->
     @case ('expired') {
       <div class="icon-tile"><app-icon name="clock" [size]="22" /></div>
-      <p class="eyebrow">Sign-in timed out</p>
-      <h1 class="screen-title" #heading tabindex="-1">Please sign in again</h1>
-      <p class="screen-lead">For your security, the second step of sign-in has to be completed within 5 minutes of entering your password.</p>
+      <h1 class="screen-title" #heading tabindex="-1">Session timed out.</h1>
+      <p class="screen-lead">Sign in again.</p>
       <button type="button" class="btn-primary" (click)="backToLogin()">Back to sign in</button>
     }
   }

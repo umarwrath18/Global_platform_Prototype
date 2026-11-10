@@ -11,9 +11,9 @@ export const routes: Routes = [
     loadComponent: () => import('./features/auth/login').then((m) => m.Login),
   },
   {
-    path: 'two-factor',
+    path: 'mfa',
     canActivate: [twoFactorGuard],
-    title: 'Two-factor authentication · Mobi Global Platform',
+    title: 'MFA · Mobi Global Platform',
     loadComponent: () => import('./features/auth/two-factor').then((m) => m.TwoFactor),
   },
   {

@@ -11,13 +11,14 @@
 
   @if (showSamples()) {
     <div id="sample-accounts" class="samples">
-      <p class="samples-head">Every test account uses the password <code>{{ demoPassword }}</code>. Choose one to fill in the form.</p>
+      <p class="samples-head">Every test account uses the password <code>{{ demoPassword }}</code>. The email is for <strong>Forgot password</strong>. Choose one to fill in the form.</p>
       <ul>
         @for (a of demoAccounts; track a.loginId) {
           <li>
             <button type="button" (click)="fillSample(a.loginId)">
               <span class="sample-id">{{ a.loginId }}</span>
               <span class="sample-desc">{{ a.scenario }}</span>
+              <span class="sample-email">{{ a.email }}</span>
             </button>
           </li>
         }

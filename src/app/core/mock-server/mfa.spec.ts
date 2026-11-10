@@ -303,7 +303,7 @@ describe('Two-factor authentication', () => {
       // The user's sessions end, they must set up a new authenticator, and they're told by email.
       expect((await call('GET', '/api/auth/session', null, user)).body).toEqual({ code: 'MFA_RESET' });
       expect(((await login('TANJUNG-ADMIN')).body as any).stage).toBe('setup');
-      expect(emails.at(-1)).toMatchObject({ to: 'aisyah@tanjungtrading.example', subject: 'Your Mobi two-factor authentication was reset' });
+      expect(emails.at(-1)).toMatchObject({ to: 'aisyah@tanjungtrading.example', subject: 'Your Mobi MFA was reset' });
 
       const audit = (await call('GET', '/api/security/audit', null, secToken, 'security')).body as any[];
       const reset = audit.find((e) => e.type === 'MFA_RESET');

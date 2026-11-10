@@ -17,17 +17,12 @@ import { Icon } from './icon';
           <span class="qr-loading" aria-hidden="true"></span>
         }
       </div>
-      <ol class="steps">
-        <li>Open <strong>Google Authenticator</strong>, <strong>Microsoft Authenticator</strong> or another authenticator app on your phone.</li>
-        <li>Tap <strong>Add account</strong> and scan this QR code.</li>
-        <li>Can't scan it? Choose <strong>Enter a setup key</strong> and type the key below.</li>
-      </ol>
     </div>
 
     <div class="key">
       <div class="key-head">
         <span class="key-label">Setup key</span>
-        <span class="key-meta">Account: {{ enrolment().accountLabel }} · Time-based</span>
+        <span class="key-meta">{{ enrolment().accountLabel }}</span>
       </div>
       <div class="key-row">
         <code>{{ grouped() }}</code>
@@ -39,10 +34,8 @@ import { Icon } from './icon';
   `,
   styles: `
     .setup {
-      display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 20px;
-      align-items: center;
+      display: flex;
+      justify-content: center;
       margin-bottom: 16px;
     }
     .qr-box {
@@ -59,16 +52,6 @@ import { Icon } from './icon';
       height: 176px;
       border-radius: 8px;
       background: var(--surface-muted);
-    }
-    .steps {
-      margin: 0;
-      padding-left: 20px;
-      display: grid;
-      gap: 8px;
-      font-size: 14px;
-      line-height: 1.5;
-      color: var(--text-muted);
-      strong { color: var(--text); font-weight: 600; }
     }
     .key {
       padding: 12px 14px;
@@ -112,9 +95,6 @@ import { Icon } from './icon';
       font-weight: 600;
       cursor: pointer;
       &:hover { background: var(--surface-muted); }
-    }
-    @media (max-width: 520px) {
-      .setup { grid-template-columns: 1fr; justify-items: center; }
     }
   `,
 })

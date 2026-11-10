@@ -2,7 +2,7 @@
   <div class="portal-head">
     <div>
       <h1>Account security</h1>
-      <p class="sub">Two-factor authentication for {{ session()?.user?.name }} ({{ session()?.user?.loginId }}).</p>
+      <p class="sub">{{ session()?.user?.name }} ({{ session()?.user?.loginId }})</p>
     </div>
   </div>
 
@@ -18,8 +18,8 @@
     <section class="panel-card">
       <div class="panel-head">
         <div>
-          <h2>Two-factor authentication</h2>
-          <p>Required for every sign-in. It can’t be turned off.</p>
+          <h2>MFA</h2>
+          <p>Required for every sign-in.</p>
         </div>
         <span class="status success">On</span>
       </div>
@@ -37,7 +37,7 @@
       <div class="panel-head">
         <div>
           <h2>Authenticator app</h2>
-          <p>Moving to a new phone? Register the new authenticator here. The old one stops working once the new one is verified.</p>
+          <p>Moving to a new phone? Replace your authenticator.</p>
         </div>
         @if (replaceStep() === 'idle' || replaceStep() === 'done') {
           <button type="button" class="btn" (click)="startReplace()"><app-icon name="smartphone" [size]="16" />Replace authenticator</button>
@@ -47,8 +47,7 @@
       @switch (replaceStep()) {
         @case ('current') {
           <div class="panel-body flow">
-            <p class="step">Step 1 of 2 · Confirm it’s you</p>
-            <p class="lead">Enter the current 6-digit code from the authenticator you’re replacing.</p>
+            <p class="lead">Enter the code from your current authenticator.</p>
             @if (errorText(); as msg) {
               <div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ msg }}</div></div>
             }
@@ -69,20 +68,17 @@
           <div class="panel-body flow">
             <div class="alert compact" role="note">
               <app-icon name="info" />
-              <div>
-                <strong>Lost your current authenticator?</strong>
-                Contact Mobi Support. They’ll open a reset request, and an authorised administrator will verify your identity before resetting 2FA. You’ll then set up your new phone the next time you sign in.
-              </div>
+              <div>Contact Mobi Support to regain access.</div>
             </div>
             <div class="flow-foot">
-              <a class="link-button" href="mailto:support@mobi.xyz?subject=Two-factor%20authentication%20reset">Contact Mobi Support</a>
+              <a class="link-button" href="mailto:support@mobi.xyz?subject=MFA%20reset">Contact Mobi Support</a>
               <button type="button" class="btn sm" (click)="cancelReplace()">Close</button>
             </div>
           </div>
         }
         @case ('new') {
           <div class="panel-body flow">
-            <p class="step">Step 2 of 2 · Register the new authenticator</p>
+            <p class="lead">Scan with your new authenticator app, or enter the key.</p>
             @if (replacement(); as r) {
               <app-authenticator-qr [enrolment]="r" />
             }
@@ -90,14 +86,14 @@
               <div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ msg }}</div></div>
             }
             <form class="code-form" (submit)="$event.preventDefault(); confirmNew()" novalidate>
-              <label class="f-label" for="replace-new">Code from the NEW authenticator</label>
+              <label class="f-label" for="replace-new">Code from the new authenticator</label>
               <div class="code-row">
                 <input id="replace-new" class="input code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" (input)="onCode($any($event.target).value, $any($event.target))" />
                 <button type="submit" class="btn primary" [disabled]="code().length !== 6 || busy()">@if (busy()) {<span class="spinner" aria-hidden="true"></span>}Verify and replace</button>
               </div>
             </form>
             <div class="flow-foot">
-              <span class="muted">Your current authenticator keeps working until this step succeeds.</span>
+              <span></span>
               <button type="button" class="btn sm" (click)="cancelReplace()">Cancel</button>
             </div>
           </div>
@@ -106,7 +102,7 @@
           <div class="panel-body">
             <div class="alert success compact" role="status">
               <app-icon name="check-circle" />
-              <div><strong>Authenticator replaced</strong>Use your new app from now on. The previous authenticator no longer works, and we’ve emailed you a confirmation.</div>
+              <div>Authenticator replaced.</div>
             </div>
           </div>
         }

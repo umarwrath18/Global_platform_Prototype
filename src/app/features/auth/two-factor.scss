@@ -7,33 +7,6 @@
   color: var(--danger);
 }
 
-.benefits {
-  display: grid;
-  gap: 12px;
-  margin: 0 0 20px;
-  padding: 0;
-  list-style: none;
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--text-muted);
-
-  li {
-    display: flex;
-    gap: 12px;
-    align-items: flex-start;
-  }
-
-  app-icon {
-    flex: none;
-    margin-top: 1px;
-    color: var(--mobi-blue);
-  }
-
-  strong {
-    color: var(--text);
-  }
-}
-
 .next {
   margin-top: 20px;
 }

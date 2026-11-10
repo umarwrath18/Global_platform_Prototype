@@ -39,7 +39,7 @@ const EVENT_LABEL: Record<string, string> = {
   ADMIN_STEP_UP_VERIFIED: 'Admin identity confirmed',
   MFA_RESET_REQUESTED: 'Reset requested',
   IDENTITY_VERIFIED: 'Identity verified',
-  MFA_RESET: '2FA reset',
+  MFA_RESET: 'MFA reset',
   NOTIFICATION_SENT: 'User notified',
 };
 
@@ -193,7 +193,7 @@ export class UserSecurity {
         this.flash(`Reset request ${res.id} opened for ${a.user.name}. A Security Admin must verify identity and complete it.`);
       } else if (a.kind === 'reset') {
         await this.api.resetAuthenticator(a.user.userId, { requestId: a.user.openRequestId ?? '', identityVerified: true, verificationMethod: this.method().trim(), reason: this.reason().trim(), stepUpToken: token });
-        this.flash(`2FA reset for ${a.user.name}. They must register a new authenticator at next sign-in.`);
+        this.flash(`MFA reset for ${a.user.name}. They must register a new authenticator at next sign-in.`);
       } else {
         await this.api.waiveBlock(a.user.userId, this.reason().trim(), token);
         this.flash(`Block waived for ${a.user.name}. They can sign in again.`);
@@ -226,7 +226,7 @@ export class UserSecurity {
       case 'RESET_REQUEST_EXISTS':
         return 'This user already has an open reset request.';
       case 'RESET_REQUEST_REQUIRED':
-        return 'Mobi Support must open a reset request before 2FA can be reset.';
+        return 'Mobi Support must open a reset request before MFA can be reset.';
       case 'NOT_BLOCKED':
         return 'This user isn’t blocked any more.';
       case 'ROLE_NOT_PERMITTED':

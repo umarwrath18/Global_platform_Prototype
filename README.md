@@ -95,7 +95,15 @@ generated sample data for the merchant's live countries and switched-on payment 
 *Sample data · not live*. See [`docs/merchant-portal-batch-4.md`](docs/merchant-portal-batch-4.md) for the
 API contracts the real backend needs to provide.
 
-### Two-factor authentication (Batch 3)
+### MFA (Batch 3)
+
+> Named **MFA** everywhere users see it (previously "two-factor authentication" / "2FA"). The sign-in
+> step's URL is `/mfa`. Messages are kept short on purpose: they tell the user what to do next, never
+> why an account is restricted or how lockouts work. The **"Use a test account"** list on the login
+> page shows each account's registered email, and the Forgot password page has **"Use a test email"**,
+> so the OTP can be tested (it appears in the Email preview). Unregistered emails get the same screen
+> but no code, by design.
+
 
 Every sign-in needs a password **and** a 6-digit code from an authenticator app. A correct
 password alone never creates a session.
