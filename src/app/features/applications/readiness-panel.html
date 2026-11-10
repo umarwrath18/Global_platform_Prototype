@@ -62,6 +62,23 @@
             }
           }
 
+          @if (s.key === 'integration' && ipnEditable()) {
+            <div class="ipn" [class.missing]="!a.data.transaction.ipnCallbackUrl">
+              <label for="ipn-url"><strong>IPN callback URL</strong></label>
+              @if (canAct()) {
+                <div class="ipn-row">
+                  <input id="ipn-url" class="f-input" type="url" placeholder="https://" [value]="ipnDraft() ?? a.data.transaction.ipnCallbackUrl" (input)="ipnDraft.set($any($event.target).value)" aria-describedby="ipn-help" />
+                  <button type="button" class="btn sm" [disabled]="!!busy() || ipnDraft() === null || ipnDraft() === a.data.transaction.ipnCallbackUrl" (click)="saveIpn()">
+                    @if (busy() === 'set_ipn') {<span class="spinner" aria-hidden="true"></span>}Save
+                  </button>
+                </div>
+              } @else {
+                <p class="mono">{{ a.data.transaction.ipnCallbackUrl || 'Not set yet' }}</p>
+              }
+              <p class="hint" id="ipn-help">{{ a.data.transaction.ipnCallbackUrl ? 'Where Mobi sends payment notifications. https only.' : 'Not set yet. Required before go-live. https only.' }}</p>
+            </div>
+          }
+
           @if (s.key === 'keys') {
             @if (a.readiness.keySet; as k) {
               <div class="keyset">
@@ -105,10 +122,11 @@
             }
             @if (s.key === 'go_live' && a.status === 'go_live_verification') {
               <div class="stage-actions">
-                <button type="button" class="btn primary" [disabled]="suspended() || !canAdvance('go_live') || !!busy()" (click)="run({ action: 'confirm_go_live' }, 'confirm_go_live', cfg().name + ' is live')">
+                <button type="button" class="btn primary" [disabled]="suspended() || !a.data.transaction.ipnCallbackUrl || !canAdvance('go_live') || !!busy()" (click)="run({ action: 'confirm_go_live' }, 'confirm_go_live', cfg().name + ' is live')">
                   @if (busy() === 'confirm_go_live') {<span class="spinner" aria-hidden="true"></span>}Go live
                 </button>
                 @if (suspended()) {<span class="hint">Go-live is on hold while the merchant is suspended.</span>}
+                @else if (!a.data.transaction.ipnCallbackUrl) {<span class="hint">Set the IPN callback URL before go-live.</span>}
                 @else if (!allDone('go_live')) {<span class="hint">{{ strict ? 'Every check must pass first.' : 'Open checks will be marked complete.' }}</span>}
               </div>
             }

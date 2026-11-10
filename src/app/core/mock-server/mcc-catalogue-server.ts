@@ -2,8 +2,8 @@ import { EMPTY_MCC_CATALOGUE, MccCatalogue, MccCatalogueSource, readMccCatalogue
 import { AuthBridge, ServerReply } from './merchant-server';
 import { MCC_TEST_FIXTURE, MCC_TEST_FIXTURE_NAME, MCC_TEST_FIXTURE_VERSION } from './mcc-test-fixture';
 
-// Simulated MCC catalogue (Phase 2). Stored under its own key and empty until a catalogue is
-// loaded on purpose: an approved one when it is supplied, or the labelled test fixture. Signed-in
+// Simulated MCC catalogue (Phase 2). Stored under its own key. Until a catalogue is loaded on
+// purpose the default applies (the app uses the standard ISO 18245 shortlist; tests use none): an approved one when it is supplied, or the labelled test fixture. Signed-in
 // users can read it; nobody can edit entries through the portal, because the content must come
 // from the approved source.
 
@@ -19,6 +19,8 @@ export interface MccCatalogueServerOptions {
   storageKey?: string;
   now?: () => number;
   auth: Pick<AuthBridge, 'authenticate'>;
+  /** Used while no catalogue has been loaded. Default: none (MCC is then optional). */
+  defaultCatalogue?: MccCatalogue;
 }
 
 export class MccCatalogueServer {
@@ -43,13 +45,14 @@ export class MccCatalogueServer {
 
   /** The current catalogue; empty when none has been loaded. Reads storage on every call. */
   catalogue(): MccCatalogue {
+    const fallback = () => structuredClone(this.opts.defaultCatalogue ?? EMPTY_MCC_CATALOGUE);
     const raw = this.opts.storage.getItem(this.storageKey);
-    if (!raw) return structuredClone(EMPTY_MCC_CATALOGUE);
+    if (!raw) return fallback();
     try {
       const db = JSON.parse(raw) as CatalogueDb;
-      return db.version === DB_VERSION ? db.catalogue : structuredClone(EMPTY_MCC_CATALOGUE);
+      return db.version === DB_VERSION ? db.catalogue : fallback();
     } catch {
-      return structuredClone(EMPTY_MCC_CATALOGUE);
+      return fallback();
     }
   }
 

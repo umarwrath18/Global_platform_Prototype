@@ -2,12 +2,25 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, OnInit, ou
 import { documentFileError, validateApplication } from '../../core/merchants/application-rules';
 import { CHANGE_SECTION_LABEL, ChangeSection, maskValue } from '../../core/merchants/change-requests';
 import { MerchantApi, toMerchantError } from '../../core/merchants/merchant-api.service';
-import { ApplicationData, CountryApplication, Director, FieldIssue, GlobalMerchant, MERCHANT_CATEGORIES, MERCHANT_CATEGORY_LABEL } from '../../core/merchants/merchant-models';
+import {
+  APPROVAL_PRIORITIES,
+  APPROVAL_PRIORITY_LABEL,
+  ApplicationData,
+  CONNECTION_TYPE_LABEL,
+  CONNECTION_TYPES,
+  CountryApplication,
+  Director,
+  FieldIssue,
+  GlobalMerchant,
+  MERCHANT_CATEGORIES,
+  MERCHANT_CATEGORY_LABEL,
+} from '../../core/merchants/merchant-models';
+import { PhoneField } from '../../shared/phone-field';
 import { INDUSTRIES, ONBOARDING_COUNTRIES } from '../../core/merchants/onboarding-config';
 import { Icon } from '../../shared/icon';
 
 type CountrySection = Exclude<ChangeSection, 'identity'>;
-const SECTIONS: CountrySection[] = ['business', 'bank', 'directors', 'documents'];
+const SECTIONS: CountrySection[] = ['business', 'bank', 'transaction', 'directors', 'documents'];
 let uid = 0;
 const newId = () => `c${Date.now().toString(36)}${uid++}`;
 
@@ -15,7 +28,7 @@ const newId = () => `c${Date.now().toString(36)}${uid++}`;
 @Component({
   selector: 'app-change-request-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon],
+  imports: [Icon, PhoneField],
   templateUrl: './change-request-form.html',
   styleUrl: './changes.scss',
 })
@@ -32,6 +45,10 @@ export class ChangeRequestForm implements OnInit {
   protected readonly industries = INDUSTRIES;
   protected readonly merchantCategories = MERCHANT_CATEGORIES;
   protected readonly merchantCategoryLabel = MERCHANT_CATEGORY_LABEL;
+  protected readonly connectionTypes = CONNECTION_TYPES;
+  protected readonly connectionTypeLabel = CONNECTION_TYPE_LABEL;
+  protected readonly priorities = APPROVAL_PRIORITIES;
+  protected readonly priorityLabel = APPROVAL_PRIORITY_LABEL;
   protected readonly section = signal<CountrySection>('bank');
   protected readonly draft = signal<ApplicationData>(null!);
   protected readonly reason = signal('');
@@ -100,10 +117,20 @@ export class ChangeRequestForm implements OnInit {
   }
 
   protected setBusiness(key: keyof ApplicationData['business'], value: string) {
-    this.edit((d) => {
-      if (key === 'expectedMonthlyVolume') d.business.expectedMonthlyVolume = value === '' ? null : Number(value);
-      else (d.business[key] as string) = value;
-    });
+    this.edit((d) => ((d.business[key] as string) = value));
+  }
+
+  protected setAmount(key: 'dailyLimit' | 'minTransactionValue', value: string) {
+    const v = value.replace(/,/g, '').trim();
+    this.edit((d) => (d.transaction[key] = v === '' ? null : Number(v)));
+  }
+
+  protected setTransaction(key: 'merchantCategory' | 'connectionType' | 'ipnCallbackUrl', value: string) {
+    this.edit((d) => ((d.transaction[key] as string) = value));
+  }
+
+  protected setReceipts(on: boolean) {
+    this.edit((d) => (d.transaction.sendReceipts = on));
   }
 
   /** Bank fields may be missing on older data. */
@@ -115,16 +142,12 @@ export class ChangeRequestForm implements OnInit {
     this.edit((d) => (d.bank[key] = value));
   }
 
-  protected setDirector(i: number, key: keyof Director, value: string) {
-    this.edit((d) => {
-      const p = d.directors[i];
-      if (key === 'ownershipPct') p.ownershipPct = value === '' ? null : Number(value);
-      else (p[key] as string) = value;
-    });
+  protected setDirector(i: number, key: Exclude<keyof Director, 'id'>, value: string) {
+    this.edit((d) => (d.directors[i][key] = value));
   }
 
   protected addDirector() {
-    this.edit((d) => d.directors.push({ id: newId(), name: '', nationality: '', idNumber: '', role: 'director', ownershipPct: null }));
+    this.edit((d) => d.directors.push({ id: newId(), name: '', contactNumber: '', nationality: '', profileUrl: '', idNumber: '' }));
   }
 
   protected removeDirector(i: number) {
@@ -146,7 +169,8 @@ export class ChangeRequestForm implements OnInit {
       return;
     }
     this.docErrors.update(({ [type]: _, ...rest }) => rest);
-    this.edit((d) => d.documents.push({ id: newId(), type, fileName: file.name, sizeKb, uploadedAt: Date.now(), sample: false }));
+    // One file per document type: a new file replaces the current one.
+    this.edit((d) => (d.documents = [...d.documents.filter((x) => x.type !== type), { id: newId(), type, fileName: file.name, sizeKb, uploadedAt: Date.now(), sample: false }]));
   }
 
   protected docError(type: string): string | null {

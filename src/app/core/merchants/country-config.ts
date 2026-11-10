@@ -132,11 +132,9 @@ export function readCountryConfigInput(current: CountryOnboardingConfig, raw: an
 
   const d = raw?.directors ?? {};
   const minCount = typeof d.minCount === 'number' && Number.isInteger(d.minCount) ? d.minCount : NaN;
-  const threshold = d.ownershipThresholdPct === null || d.ownershipThresholdPct === undefined || d.ownershipThresholdPct === '' ? null : Number(d.ownershipThresholdPct);
-  const directors = { required: d.required === true, minCount, ownershipThresholdPct: threshold, note: str(d.note, 300) };
+  const directors = { required: d.required === true, minCount, note: str(d.note, 300), idLabel: str(d.idLabel, 60) || current.directors.idLabel };
   if (!(minCount >= 0 && minCount <= 20)) errors.push({ section: 'directors', field: 'directors.minCount', message: 'Enter a whole number from 0 to 20.' });
   else if (directors.required && minCount < 1) errors.push({ section: 'directors', field: 'directors.minCount', message: 'When directors are required, at least 1 must be listed.' });
-  if (threshold !== null && !(threshold > 0 && threshold <= 100)) errors.push({ section: 'directors', field: 'directors.ownershipThresholdPct', message: 'Enter a percentage from 1 to 100, or leave it empty.' });
 
   // Older clients may not send the routes: keep the current ones then.
   const routes = raw?.subMerchantCreation;
@@ -167,6 +165,6 @@ export function describeConfigChanges(before: CountryOnboardingConfig, after: Co
     if (!old) out.push(`Document added: ${doc.label}${doc.required ? ' (required)' : ''}`);
     else if (!same(old, doc)) out.push(`Document updated: ${doc.label}${old.required !== doc.required ? (doc.required ? ' (now required)' : ' (now optional)') : ''}`);
   }
-  if (!same(before.directors, after.directors)) out.push('Director and owner rules updated');
+  if (!same(before.directors, after.directors)) out.push('Director rules updated');
   return out;
 }

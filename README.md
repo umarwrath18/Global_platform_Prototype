@@ -60,7 +60,7 @@ them under "Use a test account".
 
 | Global Account ID     | Scenario                                              |
 | --------------------- | ----------------------------------------------------- |
-| `123`                 | Administrator · Tanjung Global Trading (GA-1001): MY/ID/VN active, TH pending, PH failed · **2FA not set up yet** |
+| `123`                 | Administrator · Tanjung Global Trading (GA-1001): MY/ID/VN active (the Batch 1 account also lists TH pending, PH failed) · **2FA not set up yet** |
 | `TANJUNG-ADMIN`       | Second administrator on the same account (GA-1001) · **2FA on** |
 | `TANJUNG-VIEWER`      | Viewer on GA-1001 · **2FA on**                        |
 | `LUMI-ADMIN`          | Active account with no active countries (GA-4004) · **2FA not set up yet** |
@@ -159,6 +159,37 @@ continue their controlled review: Sales / Ops can edit and submit them, Risk can
 reject, and CS can work through readiness up to the go-live step. Suspension does not change the
 linked Global Account or its portal logins.
 
+**Country applications (registration).** Registration is open for the launched countries
+**Malaysia, Indonesia and Vietnam**. India, the Philippines and the UAE are shown as **Planned**
+(disabled) in the country picker; Thailand was removed. Step 1 (the Global Merchant ID) is
+unchanged. The guided form has six sections:
+- **Business information:** Approval priority (Urgent / High / Medium / Low, default Medium; it
+  orders the Risk queue), Merchant trading name, Business name (from the profile), the country's
+  registration number (MY SSM, ID NIB, VN ERC), Date of incorporation, Company type, Tax
+  registration (MY TIN + optional SST, ID NPWP, VN Tax Code), Website URL, Nature of business, MCC
+  and Registered address.
+- **Contact information:** Phone (country code preset), Email, Current address ("Same as registered
+  address") and 1 to 4 Settlement emails.
+- **Bank details:** per country (MY SWIFT / BIC optional, ID Bank code / SWIFT optional, VN Bank
+  branch required + SWIFT optional).
+- **Transaction settings:** Daily transaction limit and Minimum transaction value (local currency),
+  Merchant category (Enterprise / SME / Micro), Merchant connection type, IPN callback URL (https,
+  required before go-live: CS can set it during readiness) and "Send payment receipts to customers".
+- **Directors:** name, contact number, nationality, ID / passport (MY NRIC, ID KTP, VN CCCD) and an
+  optional website / LinkedIn.
+- **Documents:** one file per document type.
+
+**Preview** shows everything by section with Edit links and highlights what's missing; submitting
+asks "Confirmation – You're about to register this merchant. Please confirm to proceed." (No /
+Confirm & Register). Products, pricing and settlement are set in Product & Payment Config, not in
+registration. Browsers holding the earlier demo data get the new demo data once on load; the old
+data is kept under `mobi.gp.merchantdb.backup.v2`.
+
+**Dashboard and Applications.** The Operations Dashboard shows transaction KPIs (Total
+transactions, Successful, Failed, Success rate, Volume) as "—" with "No transaction data yet".
+The onboarding figures moved to the **Applications** page: a summary strip (Drafts, Pending review,
+Returned, In readiness, Operational) and "Needs attention", ordered by approval priority.
+
 **Country configuration (MVP feature 5).** Open **Countries** in the sidebar to see each country's
 onboarding rules: availability, business types, registration and tax ID rules, bank fields,
 documents and director/owner rules, with a change history. New and draft applications follow the
@@ -180,9 +211,12 @@ model and its rules so far; there is no screen to create them yet.
 **Merchant category codes (MCC).** The MCC belongs to the parent merchant (GMID) and is shared by
 its sub-merchants. Codes come from one catalogue with per-country availability: *available*, or
 *restricted* (can be chosen but is flagged for Risk review); codes not listed for a country can't be
-used there. **No approved catalogue has been supplied, so the catalogue is empty by default** and MCC
-isn't required anywhere. Where a catalogue covers a country, Sales / Operations choose the MCC in the
-country application (only codes available there are listed) and it's required at submission.
+used there. Until an approved catalogue is supplied, the app uses a **standard MCC shortlist
+(ISO 18245)** grouped by nature of business, as payment providers present it (`mcc-standard.ts`).
+Codes providers usually treat as high risk (gambling, money transfer, quasi-cash, etc.) are
+*restricted*; this follows provider practice and is not an approved Mobi Risk rule. Sales /
+Operations search and choose the MCC in the country application (codes for the selected nature of
+business are listed first), and it's required at submission.
 Before the merchant's first Risk approval the MCC can be changed directly; after that, changes go
 through a request that Risk approves or rejects, and the MCC changes only on approval. Every change,
 request and decision is recorded with the old and new MCC, reason, requester, approver, times and
@@ -208,16 +242,16 @@ and settlement, and pricing changes wait for **FinOps** (a prototype-only "View 
 login), who approves or rejects them; a late approval takes effect when approved. A product with
 active pricing can't be switched off after onboarding; switching off cancels pending or scheduled
 pricing (during onboarding, after a confirmation, any pricing). Every save is recorded in the
-application history. Until products are first saved, they are shown from the Risk-approved
-application: its MDRs become legacy pricing only where the history records the approval and the
-MDR is in range; no settlement cycle is assumed. There is no standalone pricing page or popup.
+application history. The registration form no longer collects products or MDR: until CS first
+saves products, every product is off and there is no pricing; no settlement cycle is assumed.
+There is no standalone pricing page or popup.
 After onboarding, open Merchants → the card icon on a row, or a country's "Products & pricing" link.
 
 **Changes after Risk approval.** Once Risk has approved a merchant, anything Risk reviewed changes
 only through a change request that Risk approves: the legal identity (merchant page → "Request
-identity change") and, per country, business details, bank / settlement account, directors and
-beneficial owners, and documents (application page → "Changes after approval"). Sales / Operations
-request and can withdraw their own requests; Risk approves (the change is applied at once) or
+identity change") and, per country, business details, bank / settlement account, transaction settings,
+directors and documents (application page → "Changes after approval"). Sales / Operations
+request and can withdraw their own requests (transaction settings too); Risk approves (the change is applied at once) or
 rejects with a reason (nothing changes). Contact details stay directly editable. Every edit,
 request and decision is recorded (merchant page → Profile history, and the application history),
 with the old and new values; bank account numbers are always masked and are never shown in full

@@ -16,25 +16,46 @@
   @switch (section()) {
     @case ('business') {
       <div class="f-grid">
-        <div class="f-field"><label for="cr-trading">Trading name</label><input id="cr-trading" class="f-input" [class.invalid]="err('business.tradingName')" [value]="d.business.tradingName" (input)="setBusiness('tradingName', $any($event.target).value)" />@if (err('business.tradingName'); as m) {<p class="f-error">{{ m }}</p>}</div>
-        <div class="f-field"><label for="cr-type">Business type</label>
+        <div class="f-field"><label for="cr-priority">Approval priority</label>
+          <select id="cr-priority" class="f-input" (change)="setBusiness('approvalPriority', $any($event.target).value)">
+            @for (p of priorities; track p) {<option [value]="p" [selected]="p === d.business.approvalPriority">{{ priorityLabel[p] }}</option>}
+          </select></div>
+        <div class="f-field"><label for="cr-trading">Merchant trading name</label><input id="cr-trading" class="f-input" [class.invalid]="err('business.tradingName')" [value]="d.business.tradingName" (input)="setBusiness('tradingName', $any($event.target).value)" />@if (err('business.tradingName'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        <div class="f-field"><label for="cr-lreg">{{ c.localRegistration.label }}</label><input id="cr-lreg" class="f-input" [class.invalid]="err('business.localRegistrationNumber')" [value]="d.business.localRegistrationNumber" (input)="setBusiness('localRegistrationNumber', $any($event.target).value)" />@if (err('business.localRegistrationNumber'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        <div class="f-field"><label for="cr-date">Date of incorporation</label><input id="cr-date" type="date" class="f-input" [class.invalid]="err('business.incorporationDate')" [value]="d.business.incorporationDate" (change)="setBusiness('incorporationDate', $any($event.target).value)" />@if (err('business.incorporationDate'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        <div class="f-field"><label for="cr-type">Company type</label>
           <select id="cr-type" class="f-input" (change)="setBusiness('businessType', $any($event.target).value)">
             @for (t of c.businessTypes; track t) {<option [value]="t" [selected]="t === d.business.businessType">{{ t }}</option>}
           </select>@if (err('business.businessType'); as m) {<p class="f-error">{{ m }}</p>}</div>
-        <div class="f-field"><label for="cr-category">Merchant category</label>
-          <select id="cr-category" class="f-input" [class.invalid]="err('business.merchantCategory')" (change)="setBusiness('merchantCategory', $any($event.target).value)">
-            <option value="" [selected]="!d.business.merchantCategory">Select merchant category</option>
-            @for (k of merchantCategories; track k) {<option [value]="k" [selected]="k === d.business.merchantCategory">{{ merchantCategoryLabel[k] }}</option>}
-          </select>@if (err('business.merchantCategory'); as m) {<p class="f-error">{{ m }}</p>}</div>
-        <div class="f-field"><label for="cr-industry">Industry</label>
-          <select id="cr-industry" class="f-input" (change)="setBusiness('industry', $any($event.target).value)">
-            @for (t of industries; track t) {<option [value]="t" [selected]="t === d.business.industry">{{ t }}</option>}
-          </select></div>
-        <div class="f-field"><label for="cr-web">Website</label><input id="cr-web" class="f-input" [class.invalid]="err('business.website')" [value]="d.business.website" (input)="setBusiness('website', $any($event.target).value)" />@if (err('business.website'); as m) {<p class="f-error">{{ m }}</p>}</div>
-        <div class="f-field"><label for="cr-lreg">{{ c.localRegistration.label }}</label><input id="cr-lreg" class="f-input" [class.invalid]="err('business.localRegistrationNumber')" [value]="d.business.localRegistrationNumber" (input)="setBusiness('localRegistrationNumber', $any($event.target).value)" />@if (err('business.localRegistrationNumber'); as m) {<p class="f-error">{{ m }}</p>}</div>
         <div class="f-field"><label for="cr-tax">{{ c.taxId.label }}</label><input id="cr-tax" class="f-input" [class.invalid]="err('business.taxId')" [value]="d.business.taxId" (input)="setBusiness('taxId', $any($event.target).value)" />@if (err('business.taxId'); as m) {<p class="f-error">{{ m }}</p>}</div>
-        <div class="f-field"><label for="cr-vol">Expected monthly volume ({{ c.currency }})</label><input id="cr-vol" class="f-input" type="number" min="0" [value]="d.business.expectedMonthlyVolume ?? ''" (input)="setBusiness('expectedMonthlyVolume', $any($event.target).value)" />@if (err('business.expectedMonthlyVolume'); as m) {<p class="f-error">{{ m }}</p>}</div>
-        <div class="f-field full"><label for="cr-addr">Business address in {{ c.name }}</label><textarea id="cr-addr" class="f-input" rows="2" [class.invalid]="err('business.address')" [value]="d.business.address" (input)="setBusiness('address', $any($event.target).value)"></textarea>@if (err('business.address'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        @if (c.secondaryTaxId; as st) {
+          <div class="f-field"><label for="cr-tax2">{{ st.label }}</label><input id="cr-tax2" class="f-input" [class.invalid]="err('business.secondaryTaxId')" [value]="d.business.secondaryTaxId" (input)="setBusiness('secondaryTaxId', $any($event.target).value)" />@if (err('business.secondaryTaxId'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        }
+        <div class="f-field"><label for="cr-web">Website URL</label><input id="cr-web" class="f-input" [class.invalid]="err('business.website')" [value]="d.business.website" (input)="setBusiness('website', $any($event.target).value)" />@if (err('business.website'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        <div class="f-field"><label for="cr-industry">Nature of business</label>
+          <select id="cr-industry" class="f-input" [class.invalid]="err('business.industry')" (change)="setBusiness('industry', $any($event.target).value)">
+            <option value="" [selected]="!d.business.industry">Select nature of business</option>
+            @for (t of industries; track t) {<option [value]="t" [selected]="t === d.business.industry">{{ t }}</option>}
+          </select>@if (err('business.industry'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        <div class="f-field full"><label for="cr-addr">Registered address</label><textarea id="cr-addr" class="f-input" rows="2" [class.invalid]="err('business.address')" [value]="d.business.address" (input)="setBusiness('address', $any($event.target).value)"></textarea>@if (err('business.address'); as m) {<p class="f-error">{{ m }}</p>}</div>
+      </div>
+    }
+    @case ('transaction') {
+      <div class="f-grid">
+        <div class="f-field"><label for="cr-limit">Daily transaction limit ({{ c.currency }})</label><input id="cr-limit" class="f-input" type="number" min="0" [class.invalid]="err('transaction.dailyLimit')" [value]="d.transaction.dailyLimit ?? ''" (input)="setAmount('dailyLimit', $any($event.target).value)" />@if (err('transaction.dailyLimit'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        <div class="f-field"><label for="cr-min">Minimum transaction value ({{ c.currency }})</label><input id="cr-min" class="f-input" type="number" min="0" step="any" [class.invalid]="err('transaction.minTransactionValue')" [value]="d.transaction.minTransactionValue ?? ''" (input)="setAmount('minTransactionValue', $any($event.target).value)" />@if (err('transaction.minTransactionValue'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        <div class="f-field"><label for="cr-category">Merchant category</label>
+          <select id="cr-category" class="f-input" [class.invalid]="err('transaction.merchantCategory')" (change)="setTransaction('merchantCategory', $any($event.target).value)">
+            <option value="" [selected]="!d.transaction.merchantCategory">Select merchant category</option>
+            @for (k of merchantCategories; track k) {<option [value]="k" [selected]="k === d.transaction.merchantCategory">{{ merchantCategoryLabel[k] }}</option>}
+          </select>@if (err('transaction.merchantCategory'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        <div class="f-field"><label for="cr-conn">Merchant connection type</label>
+          <select id="cr-conn" class="f-input" [class.invalid]="err('transaction.connectionType')" (change)="setTransaction('connectionType', $any($event.target).value)">
+            <option value="" [selected]="!d.transaction.connectionType">Select connection type</option>
+            @for (k of connectionTypes; track k) {<option [value]="k" [selected]="k === d.transaction.connectionType">{{ connectionTypeLabel[k] }}</option>}
+          </select>@if (err('transaction.connectionType'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        <div class="f-field full"><label for="cr-ipn">IPN callback URL</label><input id="cr-ipn" class="f-input" type="url" placeholder="https://" [class.invalid]="err('transaction.ipnCallbackUrl')" [value]="d.transaction.ipnCallbackUrl" (input)="setTransaction('ipnCallbackUrl', $any($event.target).value)" />@if (err('transaction.ipnCallbackUrl'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        <div class="f-field full"><label class="cr-check"><input type="checkbox" [checked]="d.transaction.sendReceipts" (change)="setReceipts($any($event.target).checked)" /> Send payment receipts to customers</label></div>
       </div>
     }
     @case ('bank') {
@@ -59,22 +80,17 @@
       <div class="people">
         @for (p of d.directors; track p.id; let i = $index) {
           <fieldset class="person">
-            <legend class="sr-only">Person {{ i + 1 }}</legend>
-            <div class="f-field"><label [attr.for]="'cr-dn-' + i">Full name</label><input [id]="'cr-dn-' + i" class="f-input" [value]="p.name" (input)="setDirector(i, 'name', $any($event.target).value)" />@if (err('directors.' + i + '.name'); as m) {<p class="f-error">{{ m }}</p>}</div>
+            <legend class="sr-only">Director {{ i + 1 }}</legend>
+            <div class="f-field"><label [attr.for]="'cr-dn-' + i">Director name</label><input [id]="'cr-dn-' + i" class="f-input" [value]="p.name" (input)="setDirector(i, 'name', $any($event.target).value)" />@if (err('directors.' + i + '.name'); as m) {<p class="f-error">{{ m }}</p>}</div>
+            <div class="f-field"><label [attr.for]="'cr-dc-' + i">Contact number</label><app-phone-field [inputId]="'cr-dc-' + i" label="Contact number" [value]="p.contactNumber" [defaultCode]="c.dialCode" [invalid]="!!err('directors.' + i + '.contactNumber')" (valueChange)="setDirector(i, 'contactNumber', $event)" />@if (err('directors.' + i + '.contactNumber'); as m) {<p class="f-error">{{ m }}</p>}</div>
             <div class="f-field"><label [attr.for]="'cr-dnat-' + i">Nationality</label><input [id]="'cr-dnat-' + i" class="f-input" [value]="p.nationality" (input)="setDirector(i, 'nationality', $any($event.target).value)" />@if (err('directors.' + i + '.nationality'); as m) {<p class="f-error">{{ m }}</p>}</div>
-            <div class="f-field"><label [attr.for]="'cr-did-' + i">ID / passport</label><input [id]="'cr-did-' + i" class="f-input" [value]="p.idNumber" (input)="setDirector(i, 'idNumber', $any($event.target).value)" />@if (err('directors.' + i + '.idNumber'); as m) {<p class="f-error">{{ m }}</p>}</div>
-            <div class="f-field"><label [attr.for]="'cr-drole-' + i">Role</label>
-              <select [id]="'cr-drole-' + i" class="f-input" (change)="setDirector(i, 'role', $any($event.target).value)">
-                <option value="director" [selected]="p.role === 'director'">Director</option>
-                <option value="beneficial_owner" [selected]="p.role === 'beneficial_owner'">Beneficial owner</option>
-                <option value="director_and_owner" [selected]="p.role === 'director_and_owner'">Director &amp; owner</option>
-              </select></div>
-            <div class="f-field"><label [attr.for]="'cr-dpct-' + i">Ownership %</label><input [id]="'cr-dpct-' + i" class="f-input" type="number" min="0" max="100" [value]="p.ownershipPct ?? ''" (input)="setDirector(i, 'ownershipPct', $any($event.target).value)" />@if (err('directors.' + i + '.ownershipPct'); as m) {<p class="f-error">{{ m }}</p>}</div>
-            <button type="button" class="btn sm ghost" (click)="removeDirector(i)" [attr.aria-label]="'Remove person ' + (i + 1)">Remove</button>
+            <div class="f-field"><label [attr.for]="'cr-did-' + i">{{ c.directors.idLabel }}</label><input [id]="'cr-did-' + i" class="f-input" [value]="p.idNumber" (input)="setDirector(i, 'idNumber', $any($event.target).value)" />@if (err('directors.' + i + '.idNumber'); as m) {<p class="f-error">{{ m }}</p>}</div>
+            <div class="f-field"><label [attr.for]="'cr-dw-' + i">Website / LinkedIn</label><input [id]="'cr-dw-' + i" class="f-input" [value]="p.profileUrl" (input)="setDirector(i, 'profileUrl', $any($event.target).value)" />@if (err('directors.' + i + '.profileUrl'); as m) {<p class="f-error">{{ m }}</p>}</div>
+            <button type="button" class="btn sm ghost" (click)="removeDirector(i)" [attr.aria-label]="'Remove director ' + (i + 1)">Remove</button>
           </fieldset>
         }
       </div>
-      <button type="button" class="btn sm" (click)="addDirector()"><app-icon name="plus" [size]="14" />Add person</button>
+      <button type="button" class="btn sm" (click)="addDirector()"><app-icon name="plus" [size]="14" />Add Director</button>
     }
     @case ('documents') {
       <ul class="docs">
@@ -84,7 +100,7 @@
             @for (f of filesFor(rule.type); track f.id) {
               <span class="doc-file">{{ f.fileName }} · {{ f.sizeKb }} KB <button type="button" class="btn sm ghost" (click)="removeDoc(f.id)" [attr.aria-label]="'Remove ' + f.fileName">Remove</button></span>
             }
-            <label class="btn sm"><input type="file" class="sr-only" accept=".pdf,.jpg,.jpeg,.png" (change)="attachFile(rule.type, $any($event.target))" />Add file</label>
+            <label class="btn sm"><input type="file" class="sr-only" accept=".pdf,.jpg,.jpeg,.png" (change)="attachFile(rule.type, $any($event.target))" />{{ filesFor(rule.type).length ? 'Replace' : 'Upload' }}</label>
             @if (docError(rule.type); as m) {<p class="f-error">{{ m }}</p>}
           </li>
         }

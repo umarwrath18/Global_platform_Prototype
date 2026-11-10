@@ -3,7 +3,7 @@ import { ApplicationDetail, ApplicationSummary, CountryApplication, GlobalMercha
 import { AuthServer } from './auth-server';
 import { MerchantEntity } from './merchant-identity';
 import { MerchantDb, MerchantServer } from './merchant-server';
-import { completeProductConfig, FlakyStorage } from './testing/merchant-test-data';
+import { completeApplicationData, completeProductConfig, FlakyStorage } from './testing/merchant-test-data';
 import { signIn } from './testing/sign-in';
 
 const KEY = 'mobi.gp.merchantdb';
@@ -24,18 +24,23 @@ describe('go-live and live MIDs', () => {
   const tick = async (id: string, stage: string, keys: string[]) => {
     for (const key of keys) expect((await ready(id, { action: 'set_item', stage, key, done: true })).status).toBe(200);
   };
-  /** Takes APP-2026-0010 (GM-100101, Thailand) from Product & Payment Config to go-live verification. */
-  const prepareThailand = async () => {
-    await completeProductConfig(call, 'APP-2026-0010');
-    await tick('APP-2026-0010', 'configuration', ['settlement_account', 'merchant_portal']);
-    await ready('APP-2026-0010', { action: 'generate_keys' });
-    await ready('APP-2026-0010', { action: 'start_integration' });
-    await tick('APP-2026-0010', 'integration', ['docs_shared', 'sandbox_tests', 'webhook_verified']);
-    await ready('APP-2026-0010', { action: 'request_go_live' });
-    await tick('APP-2026-0010', 'go_live', ['live_transaction', 'settlement_test', 'merchant_signoff']);
+  /** GM-109001 (Nusantara, linked to GA-1005, live in MY and ID) applies for Vietnam; takes it to go-live verification. */
+  const prepareFurther = async () => {
+    const id = (await call<CountryApplication>('POST', '/api/merchants/GM-109001/applications', { country: 'VN' })).body.id;
+    await call('POST', `/api/applications/${id}/submit`, { data: completeApplicationData('VN', 'Nusantara Home Retail Sdn Bhd') });
+    await call('POST', `/api/applications/${id}/review`, { decision: 'approve', evidenceReviewed: true }, 'risk');
+    await ready(id, { action: 'start_configuration' });
+    await completeProductConfig(call, id);
+    await tick(id, 'configuration', ['settlement_account', 'merchant_portal']);
+    await ready(id, { action: 'generate_keys' });
+    await ready(id, { action: 'start_integration' });
+    await tick(id, 'integration', ['docs_shared', 'sandbox_tests', 'webhook_verified']);
+    await ready(id, { action: 'request_go_live' });
+    await tick(id, 'go_live', ['live_transaction', 'settlement_test', 'merchant_signoff']);
+    return id;
   };
-  /** APP-2026-0007 (GM-100106, Philippines, no Global Account yet) is in go-live verification with one check done. */
-  const preparePhilippines = () => tick('APP-2026-0007', 'go_live', ['settlement_test', 'merchant_signoff']);
+  /** APP-2026-0007 (GM-100106, Vietnam, no Global Account yet) is in go-live verification with one check done. */
+  const prepareVietnam = () => tick('APP-2026-0007', 'go_live', ['settlement_test', 'merchant_signoff']);
 
   beforeEach(async () => {
     now = Date.UTC(2026, 9, 28);
@@ -57,25 +62,25 @@ describe('go-live and live MIDs', () => {
   });
 
   it('issues exactly one live MID at go-live and creates one Global Account for a merchant without one', async () => {
-    await preparePhilippines();
+    await prepareVietnam();
     const accountsBefore = authDb().accounts.length;
     const res = await goLive('APP-2026-0007');
     expect(res.body.status).toBe('operational');
 
     const mids = db().mids!.filter((m) => m.applicationId === 'APP-2026-0007');
-    expect(mids).toEqual([expect.objectContaining({ source: 'go_live', regionCode: 'PH', country: 'PH', environment: 'live', gmid: 'GM-100106', issuedBy: 'Sarah Lim', issuedAt: now })]);
-    expect(res.body.history.map((h) => h.action)).toEqual(expect.arrayContaining(['Go-live verified; country is operational', `Live MID ${mids[0].mid} issued for Philippines`]));
+    expect(mids).toEqual([expect.objectContaining({ source: 'go_live', regionCode: 'VN', country: 'VN', environment: 'live', gmid: 'GM-100106', issuedBy: 'Sarah Lim', issuedAt: now })]);
+    expect(res.body.history.map((h) => h.action)).toEqual(expect.arrayContaining(['Go-live verified; country is operational', `Live MID ${mids[0].mid} issued for Vietnam`]));
 
     const merchant = (await call<MerchantDetail>('GET', '/api/merchants/GM-100106')).body;
     expect(merchant.merchant.linkedAccountId).toBe('GA-5001');
     expect(merchant.mids.map((m) => m.mid)).toEqual([mids[0].mid]);
     expect(authDb().accounts).toHaveLength(accountsBefore + 1);
-    expect(authDb().accounts.find((a) => a.id === 'GA-5001')).toMatchObject({ merchantId: 'GM-100106', countries: [{ code: 'PH', status: 'active' }] });
+    expect(authDb().accounts.find((a) => a.id === 'GA-5001')).toMatchObject({ merchantId: 'GM-100106', countries: [{ code: 'VN', status: 'active' }] });
     expect(db().goLiveIntents).toEqual([]);
   });
 
   it('shows each application its own live MID in the merchant and application lists', async () => {
-    await preparePhilippines();
+    await prepareVietnam();
     await goLive('APP-2026-0007');
     const list = (await call<MerchantSummary[]>('GET', '/api/merchants')).body;
     const apps = list.flatMap((m) => m.applications);
@@ -89,7 +94,7 @@ describe('go-live and live MIDs', () => {
   });
 
   it('returns the existing result when a completed go-live is repeated, writing nothing', async () => {
-    await preparePhilippines();
+    await prepareVietnam();
     const first = (await goLive('APP-2026-0007')).body;
     const merchantBefore = storage.getItem(KEY);
     const authBefore = authDb();
@@ -103,7 +108,7 @@ describe('go-live and live MIDs', () => {
   });
 
   it('finishes cleanly after a failure between account activation and the final save', async () => {
-    await preparePhilippines();
+    await prepareVietnam();
     storage.failWrite(KEY, 1); // the go-live start is saved; the final save fails
     await expect(goLive('APP-2026-0007')).rejects.toThrow(/Simulated storage failure/);
 
@@ -125,9 +130,9 @@ describe('go-live and live MIDs', () => {
     expect(d.goLiveIntents).toEqual([]);
     expect(authDb().accounts.filter((a) => a.merchantId === 'GM-100106')).toHaveLength(1);
     expect(authDb().audit.filter((e) => e.type === 'ACCOUNT_CREATED')).toHaveLength(1);
-    expect(authDb().audit.filter((e) => e.type === 'ACCOUNT_COUNTRY_ACTIVATED' && e.detail === 'PH')).toHaveLength(1);
+    expect(authDb().audit.filter((e) => e.type === 'ACCOUNT_COUNTRY_ACTIVATED' && e.detail === 'VN')).toHaveLength(1);
     expect(retry.body.history.filter((h) => h.toStatus === 'operational')).toHaveLength(1);
-    expect(retry.body.history.map((h) => h.action)).toContain('Philippines activated on Global Account GA-5001 (account created)');
+    expect(retry.body.history.map((h) => h.action)).toContain('Vietnam activated on Global Account GA-5001 (account created)');
   });
 
   describe('when merchant and auth data are out of sync', () => {
@@ -146,7 +151,7 @@ describe('go-live and live MIDs', () => {
     it('never gives a new account an ID another merchant still refers to', async () => {
       linkTo('GM-100103', 'GA-5001'); // refers to an account the auth data doesn't have
       expect(authDb().accounts.some((a) => a.id === 'GA-5001')).toBe(false);
-      await preparePhilippines();
+      await prepareVietnam();
 
       expect((await goLive('APP-2026-0007')).body.status).toBe('operational');
       const linked = db().merchants.find((m) => m.id === 'GM-100106')!.linkedAccountId;
@@ -158,12 +163,12 @@ describe('go-live and live MIDs', () => {
     it('creates a new unique account when the merchant links to one the auth data no longer has', async () => {
       linkTo('GM-100106', 'GA-5001');
       linkTo('GM-100103', 'GA-5002');
-      await preparePhilippines();
+      await prepareVietnam();
 
       const res = await goLive('APP-2026-0007');
       expect(res.body.status).toBe('operational');
       expect(db().merchants.find((m) => m.id === 'GM-100106')!.linkedAccountId).toBe('GA-5003');
-      expect(res.body.history.map((h) => h.action)).toContain('Philippines activated on Global Account GA-5003 (account created)');
+      expect(res.body.history.map((h) => h.action)).toContain('Vietnam activated on Global Account GA-5003 (account created)');
       linksAreUnique();
       // A retry still finds the same account.
       expect((await goLive('APP-2026-0007')).body.status).toBe('operational');
@@ -172,21 +177,21 @@ describe('go-live and live MIDs', () => {
   });
 
   it('reuses the linked Global Account for a further country', async () => {
-    await prepareThailand();
+    const id = await prepareFurther();
     const accounts = authDb().accounts.length;
-    expect((await goLive('APP-2026-0010')).body.status).toBe('operational');
+    expect((await goLive(id)).body.status).toBe('operational');
     expect(authDb().accounts).toHaveLength(accounts);
-    expect(authDb().accounts.find((a) => a.id === 'GA-1001')!.countries).toContainEqual({ code: 'TH', status: 'active' });
-    const mids = (await call<MerchantDetail>('GET', '/api/merchants/GM-100101')).body.mids;
-    expect(mids.map((m) => m.country).sort()).toEqual(['ID', 'MY', 'TH', 'VN']);
-    expect(new Set(mids.map((m) => m.mid)).size).toBe(4);
+    expect(authDb().accounts.find((a) => a.id === 'GA-1005')!.countries).toContainEqual({ code: 'VN', status: 'active' });
+    const mids = (await call<MerchantDetail>('GET', '/api/merchants/GM-109001')).body.mids;
+    expect(mids.map((m) => m.country).sort()).toEqual(['ID', 'MY', 'VN']);
+    expect(new Set(mids.map((m) => m.mid)).size).toBe(3);
   });
 
   it('refuses a second MID for the same entity and region, before touching the Global Account', async () => {
-    await preparePhilippines();
+    await prepareVietnam();
     const d = db();
     const entityId = d.applications.find((a) => a.id === 'APP-2026-0007')!.entityId!;
-    d.mids!.push({ mid: 'MID-000000099', entityId, gmid: 'GM-100106', regionCode: 'PH', country: 'PH', environment: 'live', source: 'go_live', issuedAt: 1, issuedBy: 'x', applicationId: null, demo: false });
+    d.mids!.push({ mid: 'MID-000000099', entityId, gmid: 'GM-100106', regionCode: 'VN', country: 'VN', environment: 'live', source: 'go_live', issuedAt: 1, issuedBy: 'x', applicationId: null, demo: false });
     storage.setItem(KEY, JSON.stringify(d));
     const authBefore = storage.getItem(AUTH_KEY);
 
@@ -196,21 +201,21 @@ describe('go-live and live MIDs', () => {
   });
 
   it('blocks go-live for a suspended merchant without writing anything', async () => {
-    await prepareThailand();
-    await call<GlobalMerchant>('POST', '/api/merchants/GM-100101/lifecycle', { action: 'suspend', reason: 'Chargeback ratio above threshold' }, 'risk');
+    const id = await prepareFurther();
+    await call<GlobalMerchant>('POST', '/api/merchants/GM-109001/lifecycle', { action: 'suspend', reason: 'Chargeback ratio above threshold' }, 'risk');
     const before = storage.getItem(KEY);
     const authBefore = storage.getItem(AUTH_KEY);
-    expect(await goLive('APP-2026-0010')).toMatchObject({ status: 409, body: { code: 'MERCHANT_SUSPENDED' } });
+    expect(await goLive(id)).toMatchObject({ status: 409, body: { code: 'MERCHANT_SUSPENDED' } });
     expect(storage.getItem(KEY)).toBe(before);
     expect(JSON.parse(storage.getItem(AUTH_KEY)!).accounts).toEqual(JSON.parse(authBefore!).accounts);
   });
 
   describe('sub-merchant gate (fixture data; creating sub-merchants is not part of Phase 1)', () => {
-    /** Adds a sub-merchant of GM-100106 with its own Philippines application in go-live verification. */
+    /** Adds a sub-merchant of GM-100106 with its own Vietnam application in go-live verification. */
     const addChild = (over: Partial<MerchantEntity> = {}) => {
       const d = db();
       const parent = d.entities!.find((e) => e.gmid === 'GM-100106' && e.kind === 'parent')!;
-      const child: MerchantEntity = { id: 'ME-000090', gmid: 'GM-100106', kind: 'sub', parentEntityId: parent.id, legalEntity: null, displayName: 'Manila Learning Hub – Makati', lifecycleStatus: 'active', createdAt: now, createdBy: 'Hafiz Ismail', ...over };
+      const child: MerchantEntity = { id: 'ME-000090', gmid: 'GM-100106', kind: 'sub', parentEntityId: parent.id, legalEntity: null, displayName: 'Hanoi Learning Hub – Cau Giay', lifecycleStatus: 'active', createdAt: now, createdBy: 'Hafiz Ismail', ...over };
       const source = structuredClone(d.applications.find((a) => a.id === 'APP-2026-0007')!);
       const app: CountryApplication = { ...source, id: 'APP-2026-0090', entityId: child.id, status: 'go_live_verification', history: source.history.filter((h) => h.toStatus !== 'operational') };
       d.entities!.push(child);
@@ -219,22 +224,22 @@ describe('go-live and live MIDs', () => {
     };
 
     it('needs the parent operational in the country, then gives the child its own MID in the same region', async () => {
-      await preparePhilippines();
+      await prepareVietnam();
       addChild();
       expect(await goLive('APP-2026-0090')).toMatchObject({ status: 409, body: { code: 'PARENT_NOT_OPERATIONAL' } });
 
       await goLive('APP-2026-0007');
       const accounts = authDb().accounts.length;
       expect((await goLive('APP-2026-0090')).body.status).toBe('operational');
-      const ph = db().mids!.filter((m) => m.regionCode === 'PH');
-      expect(ph).toHaveLength(2);
-      expect(new Set(ph.map((m) => m.entityId)).size).toBe(2);
-      expect(new Set(ph.map((m) => m.mid)).size).toBe(2);
+      const vn = db().mids!.filter((m) => m.regionCode === 'VN' && m.gmid === 'GM-100106');
+      expect(vn).toHaveLength(2);
+      expect(new Set(vn.map((m) => m.entityId)).size).toBe(2);
+      expect(new Set(vn.map((m) => m.mid)).size).toBe(2);
       expect(authDb().accounts).toHaveLength(accounts); // the child shares the parent's Global Account
     });
 
     it('is blocked while the child or the parent is suspended, and parent suspension does not suspend the child', async () => {
-      await preparePhilippines();
+      await prepareVietnam();
       await goLive('APP-2026-0007');
       addChild({ lifecycleStatus: 'suspended' });
       expect(await goLive('APP-2026-0090')).toMatchObject({ status: 409, body: { code: 'MERCHANT_SUSPENDED' } });

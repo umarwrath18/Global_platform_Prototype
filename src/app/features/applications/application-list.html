@@ -6,7 +6,11 @@
     </div>
   </div>
 
-  <section class="panel-card">
+  @if (!loading() && !error()) {
+    <app-onboarding-summary [apps]="scoped()" [activeQueue]="queue()" (queue)="select($event)" />
+  }
+
+  <section class="panel-card" id="queues">
     <div class="tabs" role="tablist" aria-label="Queues">
       @for (t of queues; track t.key) {
         <button type="button" role="tab" [class.on]="queue() === t.key" [attr.aria-selected]="queue() === t.key" (click)="select(t.key)">
@@ -43,6 +47,7 @@
               <th scope="col">Country</th>
               <th scope="col">Application</th>
               <th scope="col">Status</th>
+              <th scope="col">Priority</th>
               <th scope="col">Submissions</th>
               <th scope="col">Created</th>
               <th scope="col">Last updated</th>
@@ -58,6 +63,7 @@
                 <td>{{ countryName(a.country) }}<span class="cur">{{ a.currency }}</span></td>
                 <td class="mono muted">{{ a.id }}</td>
                 <td><app-status [status]="a.status" /></td>
+                <td><span class="prio" [class]="'prio ' + a.priority">{{ priorityLabel[a.priority] }}</span></td>
                 <td class="muted">{{ a.submissionCount }}</td>
                 <td class="muted">{{ date(a.createdAt) }}</td>
                 <td class="muted" [title]="date(a.updatedAt)">{{ rel(a.updatedAt) }}</td>

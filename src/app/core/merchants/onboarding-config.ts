@@ -31,15 +31,28 @@ export interface PaymentMethodRule {
   maxMdr: number;
 }
 
+export interface DirectorRules {
+  required: boolean;
+  minCount: number;
+  note: string;
+  /** Label of the ID / passport field, e.g. "NRIC / Passport No.". */
+  idLabel: string;
+}
+
 export interface CountryOnboardingConfig {
   code: string;
   name: string;
   currency: string;
+  /** Preset for phone numbers, e.g. +60. It can be changed per number. */
+  dialCode: string;
+  /** Company types. */
   businessTypes: string[];
   localRegistration: FieldRule;
   taxId: FieldRule;
+  /** A second tax registration, where the country has one (Malaysia: SST). */
+  secondaryTaxId?: FieldRule;
   bankFields: FieldRule[];
-  directors: { required: boolean; minCount: number; ownershipThresholdPct: number | null; note: string };
+  directors: DirectorRules;
   documents: DocumentRule[];
   paymentMethods: PaymentMethodRule[];
   /** False pauses new country applications. Existing applications continue. Default: true. */
@@ -69,19 +82,22 @@ const pm = (code: string, name: string, kind: PaymentMethodRule['kind'], default
   maxMdr,
 });
 
+// Launched countries: registration is open here. See PLANNED_COUNTRIES for the roadmap.
 export const ONBOARDING_COUNTRIES: Record<string, CountryOnboardingConfig> = {
   MY: {
     ...COUNTRY_CATALOGUE['MY'],
-    businessTypes: ['Sdn Bhd (private limited)', 'Berhad (public limited)', 'Sole proprietorship', 'Partnership', 'LLP'],
-    localRegistration: { key: 'localRegistrationNumber', label: 'SSM registration number', required: true, pattern: '^\\d{12}$', hint: '12-digit SSM number, e.g. 201901012345' },
-    taxId: { key: 'taxId', label: 'SST registration number', required: false, hint: 'Required only if the business is SST-registered' },
+    dialCode: '+60',
+    businessTypes: ['Sdn Bhd', 'Berhad', 'Sole proprietorship', 'Partnership', 'LLP'],
+    localRegistration: { key: 'localRegistrationNumber', label: 'SSM Registration No.', required: true, pattern: '^\\d{12}$', hint: '12 digits, e.g. 201901012345' },
+    taxId: { key: 'taxId', label: 'Tax Identification No. (TIN)', required: true, hint: 'Issued by LHDN' },
+    secondaryTaxId: { key: 'secondaryTaxId', label: 'SST Registration No.', required: false, hint: 'Only if the business is SST-registered' },
     bankFields: [
       { key: 'bankName', label: 'Bank name', required: true },
       { key: 'accountName', label: 'Account holder name', required: true, hint: 'Must match the registered company name' },
-      { key: 'accountNumber', label: 'Account number', required: true, pattern: '^\\d{10,16}$', hint: '10–16 digits' },
+      { key: 'accountNumber', label: 'Bank account number', required: true, pattern: '^\\d{10,16}$', hint: '10–16 digits' },
       { key: 'swiftCode', label: 'SWIFT / BIC', required: false, pattern: '^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$', hint: '8 or 11 characters' },
     ],
-    directors: { required: true, minCount: 1, ownershipThresholdPct: 25, note: 'List all directors and anyone owning 25% or more.' },
+    directors: { required: true, minCount: 1, note: 'Add every director of the company.', idLabel: 'NRIC / Passport No.' },
     documents: [
       { type: 'ssm_profile', label: 'SSM company profile (Section 14 / e-Info)', required: true },
       { type: 'director_id', label: 'Director NRIC / passport copies', required: true },
@@ -97,15 +113,17 @@ export const ONBOARDING_COUNTRIES: Record<string, CountryOnboardingConfig> = {
   },
   ID: {
     ...COUNTRY_CATALOGUE['ID'],
-    businessTypes: ['PT (Perseroan Terbatas)', 'PT PMA (foreign-owned)', 'CV (limited partnership)', 'Sole proprietorship'],
-    localRegistration: { key: 'localRegistrationNumber', label: 'NIB (business identification number)', required: true, pattern: '^\\d{13}$', hint: '13 digits' },
-    taxId: { key: 'taxId', label: 'NPWP (tax ID)', required: true, pattern: '^\\d{15,16}$', hint: '15 or 16 digits, no punctuation' },
+    dialCode: '+62',
+    businessTypes: ['PT', 'PT PMA', 'CV', 'Sole proprietorship'],
+    localRegistration: { key: 'localRegistrationNumber', label: 'NIB', required: true, pattern: '^\\d{13}$', hint: '13 digits' },
+    taxId: { key: 'taxId', label: 'NPWP', required: true, pattern: '^\\d{15,16}$', hint: '15 or 16 digits, no punctuation' },
     bankFields: [
       { key: 'bankName', label: 'Bank name', required: true },
       { key: 'accountName', label: 'Account holder name', required: true },
-      { key: 'accountNumber', label: 'Account number', required: true, pattern: '^\\d{8,16}$', hint: '8–16 digits' },
+      { key: 'accountNumber', label: 'Bank account number', required: true, pattern: '^\\d{8,16}$', hint: '8–16 digits' },
+      { key: 'bankCode', label: 'Bank code / SWIFT', required: false, hint: 'Bank code (3 digits) or SWIFT (8 or 11 characters)' },
     ],
-    directors: { required: true, minCount: 1, ownershipThresholdPct: 25, note: 'List the President Director and anyone owning 25% or more.' },
+    directors: { required: true, minCount: 1, note: 'Add every director, including the President Director.', idLabel: 'KTP / Passport No.' },
     documents: [
       { type: 'nib_certificate', label: 'NIB certificate (OSS)', required: true },
       { type: 'deed_of_establishment', label: 'Deed of establishment (Akta Pendirian)', required: true },
@@ -123,16 +141,18 @@ export const ONBOARDING_COUNTRIES: Record<string, CountryOnboardingConfig> = {
   },
   VN: {
     ...COUNTRY_CATALOGUE['VN'],
-    businessTypes: ['LLC (one member)', 'LLC (two or more members)', 'Joint stock company (JSC)', 'Private enterprise'],
-    localRegistration: { key: 'localRegistrationNumber', label: 'Enterprise registration number', required: true, pattern: '^\\d{10}(-\\d{3})?$', hint: '10 digits (branch: 10 digits + -XXX)' },
-    taxId: { key: 'taxId', label: 'Tax code', required: true, pattern: '^\\d{10}(-\\d{3})?$', hint: 'Usually the same as the enterprise registration number' },
+    dialCode: '+84',
+    businessTypes: ['Single-member LLC', 'Multi-member LLC', 'Joint Stock Company', 'Partnership', 'Private enterprise'],
+    localRegistration: { key: 'localRegistrationNumber', label: 'Enterprise Registration No. (ERC)', required: true, pattern: '^\\d{10}$', hint: '10 digits' },
+    taxId: { key: 'taxId', label: 'Tax Code (MST)', required: true, pattern: '^\\d{10}$', hint: '10 digits, usually the same as the ERC' },
     bankFields: [
       { key: 'bankName', label: 'Bank name', required: true },
       { key: 'branch', label: 'Bank branch', required: true, hint: 'Required for VND settlement in Vietnam' },
       { key: 'accountName', label: 'Account holder name', required: true },
-      { key: 'accountNumber', label: 'Account number', required: true, pattern: '^\\d{6,19}$', hint: '6–19 digits' },
+      { key: 'accountNumber', label: 'Bank account number', required: true, pattern: '^\\d{6,19}$', hint: '6–19 digits' },
+      { key: 'swiftCode', label: 'SWIFT', required: false, pattern: '^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$', hint: '8 or 11 characters' },
     ],
-    directors: { required: false, minCount: 0, ownershipThresholdPct: null, note: "Directors aren't needed for Vietnam. The legal representative is recorded under Contact information." },
+    directors: { required: true, minCount: 1, note: 'Add every director, including the legal representative.', idLabel: 'CCCD / Passport No.' },
     documents: [
       { type: 'erc', label: 'Enterprise registration certificate (ERC)', required: true },
       { type: 'legal_rep_id', label: 'Legal representative ID / passport', required: true },
@@ -145,56 +165,17 @@ export const ONBOARDING_COUNTRIES: Record<string, CountryOnboardingConfig> = {
       pm('VN_CARDS', 'International cards', 'card', 2.4, 1.8, 3.5),
     ],
   },
-  TH: {
-    ...COUNTRY_CATALOGUE['TH'],
-    businessTypes: ['Company limited', 'Public company limited', 'Limited partnership', 'Sole proprietorship'],
-    localRegistration: { key: 'localRegistrationNumber', label: 'DBD registration number', required: true, pattern: '^\\d{13}$', hint: '13 digits' },
-    taxId: { key: 'taxId', label: 'Tax ID', required: true, pattern: '^\\d{13}$', hint: '13 digits' },
-    bankFields: [
-      { key: 'bankName', label: 'Bank name', required: true },
-      { key: 'branch', label: 'Bank branch', required: true },
-      { key: 'accountName', label: 'Account holder name', required: true },
-      { key: 'accountNumber', label: 'Account number', required: true, pattern: '^\\d{10,12}$', hint: '10–12 digits' },
-    ],
-    directors: { required: true, minCount: 1, ownershipThresholdPct: 25, note: 'List authorised directors and anyone owning 25% or more.' },
-    documents: [
-      { type: 'dbd_certificate', label: 'DBD company affidavit (issued within 6 months)', required: true },
-      { type: 'vat_registration', label: 'VAT registration (Por Por 20)', required: true },
-      { type: 'director_id', label: 'Director ID / passport copies', required: true },
-      { type: 'bank_book', label: 'Bank book first page', required: true },
-    ],
-    paymentMethods: [
-      pm('TH_PROMPTPAY', 'PromptPay QR', 'qr', 0.8, 0.4, 1.5),
-      pm('TH_CARDS', 'Visa / Mastercard', 'card', 2.3, 1.6, 3.5),
-      pm('TH_TRUEMONEY', 'TrueMoney Wallet', 'ewallet', 1.7, 1.0, 2.5),
-    ],
-  },
-  PH: {
-    ...COUNTRY_CATALOGUE['PH'],
-    businessTypes: ['Stock corporation', 'One person corporation', 'Partnership', 'Sole proprietorship (DTI)'],
-    localRegistration: { key: 'localRegistrationNumber', label: 'SEC / DTI registration number', required: true },
-    taxId: { key: 'taxId', label: 'TIN', required: true, pattern: '^\\d{9}(\\d{3})?$', hint: '9 or 12 digits, no dashes' },
-    bankFields: [
-      { key: 'bankName', label: 'Bank name', required: true },
-      { key: 'accountName', label: 'Account holder name', required: true },
-      { key: 'accountNumber', label: 'Account number', required: true, pattern: '^\\d{10,16}$', hint: '10–16 digits' },
-    ],
-    directors: { required: true, minCount: 1, ownershipThresholdPct: 25, note: 'List directors as shown in the General Information Sheet and anyone owning 25% or more.' },
-    documents: [
-      { type: 'sec_certificate', label: 'SEC certificate of incorporation / DTI', required: true },
-      { type: 'bir_2303', label: 'BIR certificate of registration (Form 2303)', required: true },
-      { type: 'mayors_permit', label: "Mayor's / business permit", required: true },
-      { type: 'gis', label: 'General Information Sheet (GIS)', required: true },
-      { type: 'director_id', label: 'Director government ID copies', required: false },
-    ],
-    paymentMethods: [
-      pm('PH_GCASH', 'GCash', 'ewallet', 2.0, 1.5, 3.0),
-      pm('PH_MAYA', 'Maya', 'ewallet', 2.0, 1.5, 3.0),
-      pm('PH_QRPH', 'QR Ph', 'qr', 1.0, 0.5, 1.5),
-      pm('PH_CARDS', 'Visa / Mastercard', 'card', 2.8, 2.0, 3.8),
-    ],
-  },
 };
+
+/** Planned expansion: shown in the country picker, but registration isn't open yet. */
+export const PLANNED_COUNTRIES: { code: string; name: string; currency: string }[] = [
+  { code: 'IN', name: 'India', currency: 'INR' },
+  { code: 'PH', name: 'Philippines', currency: 'PHP' },
+  { code: 'AE', name: 'United Arab Emirates', currency: 'AED' },
+];
+
+/** Dial codes offered in phone fields. The country's own code is preset. */
+export const DIAL_CODES = ['+60', '+62', '+84', '+65', '+66', '+63', '+91', '+971', '+852', '+86', '+61', '+44', '+1'];
 
 const DEFAULT_COUNTRIES: Record<string, CountryOnboardingConfig> = JSON.parse(JSON.stringify(ONBOARDING_COUNTRIES));
 
@@ -228,9 +209,13 @@ export function resetCountryConfigs() {
   applyCountryConfigs(Object.keys(DEFAULT_COUNTRIES).map((code) => defaultCountryConfig(code)!));
 }
 
-/** Registration countries a Global Merchant may be incorporated in (onboarding is limited to the list above). */
+/** Countries a Global Merchant may be incorporated in (step 1, the Global profile). Country applications are limited to ONBOARDING_COUNTRIES. */
 export const REGISTRATION_COUNTRIES: { code: string; name: string }[] = [
-  ...Object.values(ONBOARDING_COUNTRIES).map(({ code, name }) => ({ code, name })),
+  { code: 'MY', name: 'Malaysia' },
+  { code: 'ID', name: 'Indonesia' },
+  { code: 'VN', name: 'Vietnam' },
+  { code: 'TH', name: 'Thailand' },
+  { code: 'PH', name: 'Philippines' },
   { code: 'SG', name: 'Singapore' },
   { code: 'HK', name: 'Hong Kong' },
   { code: 'AU', name: 'Australia' },
@@ -239,18 +224,25 @@ export const REGISTRATION_COUNTRIES: { code: string; name: string }[] = [
 ];
 
 export function countryName(code: string): string {
-  return REGISTRATION_COUNTRIES.find((c) => c.code === code)?.name ?? code;
+  return REGISTRATION_COUNTRIES.find((c) => c.code === code)?.name ?? PLANNED_COUNTRIES.find((c) => c.code === code)?.name ?? code;
 }
 
+/** Nature of business. */
 export const INDUSTRIES = [
   'Retail & e-commerce',
   'Food & beverage',
   'Travel & hospitality',
   'Education',
-  'Digital goods & gaming',
+  'Healthcare',
   'Professional services',
-  'Health & wellness',
-  'Logistics',
+  'Digital goods & software',
+  'Gaming',
+  'Financial services',
+  'Logistics & transport',
+  'Telecoms & utilities',
+  'Media & entertainment',
+  'Non-profit',
+  'Other',
 ];
 
 /** Sample CS readiness checklists (same in every country for this demo). */

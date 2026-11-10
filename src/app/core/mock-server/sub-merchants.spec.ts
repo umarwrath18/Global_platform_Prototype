@@ -12,8 +12,8 @@ import { signIn } from './testing/sign-in';
 
 const KEY = 'mobi.gp.merchantdb';
 
-// Seed: GM-100101 is live in MY, ID and VN (TH in setup, PH rejected). GM-100106 (Manila) is in
-// go-live verification in PH with a MY draft. GM-100108 has no applications.
+// Seed: GM-100101 is live in MY, ID and VN. GM-100102 was rejected in VN. GM-100106 (Hanoi) is in
+// go-live verification in VN with a MY draft. GM-100108 has no applications.
 
 describe('Sub-merchants', () => {
   let now: number;
@@ -32,13 +32,13 @@ describe('Sub-merchants', () => {
   const act = (id: string, action: string, body: object = {}, role: StaffRole = 'sales', s = call) => s<any>('POST', `/api/sub-merchants/${id}/${action}`, body, role);
   const db = () => JSON.parse(storage.getItem(KEY)!) as MerchantDb;
   const subs = async (gmid: string) => (await call<MerchantDetail>('GET', `/api/merchants/${gmid}`)).body.subMerchants;
-  /** A sub-merchant of GM-100106 in the Philippines, approved by Risk. */
-  const approvedPh = async (name = 'Manila Learning Hub – Makati') => {
-    const s = (await create('GM-100106', { country: 'PH', displayName: name, submit: true })).body as SubMerchantView;
+  /** A sub-merchant of GM-100106 in Vietnam, approved by Risk. */
+  const approvedPh = async (name = 'Hanoi Learning Hub – Cau Giay') => {
+    const s = (await create('GM-100106', { country: 'VN', displayName: name, submit: true })).body as SubMerchantView;
     await act(s.id, 'review', { decision: 'approve' }, 'risk');
     return s;
   };
-  /** Takes the parent's Philippines application (APP-2026-0007) live. */
+  /** Takes the parent's Vietnam application (APP-2026-0007) live. */
   const parentLiveInPh = async () => {
     for (const key of ['settlement_test', 'merchant_signoff']) await call('POST', '/api/applications/APP-2026-0007/readiness', { action: 'set_item', stage: 'go_live', key, done: true }, 'cs');
     expect((await call<CountryApplication>('POST', '/api/applications/APP-2026-0007/readiness', { action: 'confirm_go_live' }, 'cs')).body.status).toBe('operational');
@@ -81,7 +81,7 @@ describe('Sub-merchants', () => {
     it('validates the business name, email, website, trading license link and country, and only Sales / Operations can create', async () => {
       for (const role of ['risk', 'cs', 'finops'] as StaffRole[]) expect((await create('GM-100101', { country: 'MY', displayName: 'Outlet' }, role)).status).toBe(403);
       expect((await create('GM-100108', { country: 'MY', displayName: 'Outlet' })).body.message).toMatch(/has no application in Malaysia/);
-      expect((await create('GM-100101', { country: 'PH', displayName: 'Outlet' })).body.message).toMatch(/has no application in Philippines/); // only rejected there
+      expect((await create('GM-100102', { country: 'VN', displayName: 'Outlet' })).body.message).toMatch(/has no application in Vietnam/); // only rejected there
       expect((await create('GM-100101', { country: 'MY', displayName: 'X' })).body.errors).toEqual([expect.objectContaining({ field: 'displayName' })]);
       const missing = await create('GM-100101', { country: 'MY', displayName: 'Outlet', email: '', website: '' });
       expect(missing.body.errors.map((e: any) => e.message)).toEqual(['Enter the email address.', 'Enter the website.']);
@@ -133,7 +133,7 @@ describe('Sub-merchants', () => {
     it('needs the parent live in the country, then issues the child its own MID without touching Global Accounts', async () => {
       const s = await approvedPh();
       expect((await act(s.id, 'go-live', {}, 'cs')).body.code).toBe('PARENT_NOT_OPERATIONAL');
-      expect((await subs('GM-100106'))[0].goLiveBlocker).toMatch(/can't go live until Manila Learning Hub Inc. is operational/);
+      expect((await subs('GM-100106'))[0].goLiveBlocker).toMatch(/can't go live until Hanoi Learning Hub JSC is operational/);
       await parentLiveInPh();
 
       for (const role of ['sales', 'risk', 'finops'] as StaffRole[]) expect((await act(s.id, 'go-live', {}, role)).status).toBe(403);
@@ -142,10 +142,10 @@ describe('Sub-merchants', () => {
       const accounts = JSON.parse(storage.getItem('mobi.gp.mockdb')!).accounts;
       const live = (await act(s.id, 'go-live', {}, 'cs')).body as SubMerchantView;
       expect(live.status).toBe('live');
-      const mids = db().mids!.filter((m) => m.regionCode === 'PH' && m.gmid === 'GM-100106');
+      const mids = db().mids!.filter((m) => m.regionCode === 'VN' && m.gmid === 'GM-100106');
       expect(mids).toHaveLength(2);
       expect(new Set(mids.map((m) => m.mid)).size).toBe(2);
-      expect(mids.find((m) => m.entityId === s.id)).toMatchObject({ applicationId: null, country: 'PH', source: 'go_live' });
+      expect(mids.find((m) => m.entityId === s.id)).toMatchObject({ applicationId: null, country: 'VN', source: 'go_live' });
       expect(live.mid?.mid).toBe(mids.find((m) => m.entityId === s.id)!.mid);
       expect(JSON.parse(storage.getItem('mobi.gp.mockdb')!).accounts).toEqual(accounts);
 
@@ -185,13 +185,13 @@ describe('Sub-merchants', () => {
   });
 
   it('shows the parent’s products, pricing and settlement for that country', async () => {
-    await call('PUT', '/api/applications/APP-2026-0001/products', { products: [{ methodCode: 'MY_CARDS', enabled: true }, { methodCode: 'MY_FPX', enabled: true }, { methodCode: 'MY_DUITNOW', enabled: true }], settlement: { MY_FPX: 'T+1' }, revision: 0 }, 'sales');
+    await call('PUT', '/api/applications/APP-2026-0001/products', { products: [{ methodCode: 'MY_CARDS', enabled: true }, { methodCode: 'MY_FPX', enabled: true }, { methodCode: 'MY_DUITNOW', enabled: true }], settlement: { MY_CARDS: 'T+2', MY_FPX: 'T+1', MY_DUITNOW: 'T+1' }, revision: 1 }, 'sales');
     const s = (await create('GM-100101', { country: 'MY', displayName: 'Tanjung Outlet KL' })).body as SubMerchantView;
     expect(s.parentApplicationId).toBe('APP-2026-0001');
     expect(s.inherited.products).toEqual([
-      { name: 'Visa / Mastercard', mdrPct: 2.2, settlement: null },
+      { name: 'Visa / Mastercard', mdrPct: 2.2, settlement: 'T+2' },
       { name: 'FPX online banking', mdrPct: 1, settlement: 'T+1' },
-      { name: 'DuitNow QR', mdrPct: 0.8, settlement: null },
+      { name: 'DuitNow QR', mdrPct: 0.8, settlement: 'T+1' },
     ]);
   });
 

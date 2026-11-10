@@ -9,7 +9,7 @@ import { signIn } from './testing/sign-in';
 const KEY = 'mobi.gp.merchantdb';
 
 // Seed: GM-100101 is approved (APP-2026-0001 Malaysia is live; account 514012345678). GM-100104 has
-// only a draft. APP-2026-0009 (Thailand, GM-100105) is past Risk approval. APP-2026-0011 is returned.
+// only a draft. APP-2026-0009 (Indonesia, GM-100105) is past Risk approval. APP-2026-0011 is returned.
 
 describe('Changes after Risk approval', () => {
   let now: number;
@@ -95,7 +95,7 @@ describe('Changes after Risk approval', () => {
       const bank = app('APP-2026-0001').data.bank;
       const res = await requestCountry('APP-2026-0001', 'bank', { ...bank, accountNumber: '998877665544' });
       expect(res.status).toBe(201);
-      expect(res.body.changes).toEqual([{ field: 'bank.accountNumber', label: 'Account number', from: '•••• 5678', to: '•••• 5544' }]);
+      expect(res.body.changes).toEqual([{ field: 'bank.accountNumber', label: 'Bank account number', from: '•••• 5678', to: '•••• 5544' }]);
       // Everything Phase 4 adds: the request, merchant pending changes and history, the application's
       // change list, approvals, notifications and application history. (Application data itself is
       // returned to staff screens as before and shown masked there.)
@@ -131,14 +131,22 @@ describe('Changes after Risk approval', () => {
 
     it('applies approved director, business and document changes', async () => {
       const directors = app('APP-2026-0009').data.directors;
-      const d = await requestCountry('APP-2026-0009', 'directors', [{ ...directors[0], ownershipPct: 80 }, { id: 'new', name: 'Anong Chai', nationality: 'Thai', idNumber: '3100500999999', role: 'beneficial_owner', ownershipPct: 20 }]);
-      expect(d.body.changes[0].to).toBe('Somchai Prasert (Director & owner, 80%); Anong Chai (Beneficial owner, 20%)');
+      const d = await requestCountry('APP-2026-0009', 'directors', [directors[0], { id: 'new', name: 'Putu Ayu', contactNumber: '+62 812 1111 2222', nationality: 'Indonesian', profileUrl: '', idNumber: '5171010101900002' }]);
+      expect(d.body.changes[0].to).toBe('Made Wirawan (5171010101800001); Putu Ayu (5171010101900002)');
       await decide(d.body.id, 'approve');
-      expect(app('APP-2026-0009').data.directors.map((p) => [p.name, p.ownershipPct])).toEqual([['Somchai Prasert', 80], ['Anong Chai', 20]]);
+      expect(app('APP-2026-0009').data.directors.map((p) => [p.name, p.contactNumber])).toEqual([['Made Wirawan', '+62 813 3777 2211'], ['Putu Ayu', '+62 812 1111 2222']]);
 
-      const b = await requestCountry('APP-2026-0009', 'business', { ...app('APP-2026-0009').data.business, address: '99 Sukhumvit Road, Bangkok 10110' });
+      const b = await requestCountry('APP-2026-0009', 'business', { ...app('APP-2026-0009').data.business, address: '99 Jl. Sunset Road, Kuta, Bali 80361' });
       await decide(b.body.id, 'approve');
-      expect(app('APP-2026-0009').data.business.address).toBe('99 Sukhumvit Road, Bangkok 10110');
+      expect(app('APP-2026-0009').data.business.address).toBe('99 Jl. Sunset Road, Kuta, Bali 80361');
+
+      const t = await requestCountry('APP-2026-0009', 'transaction', { ...app('APP-2026-0009').data.transaction, dailyLimit: 5_000_000_000, sendReceipts: true });
+      expect(t.body.changes.map((c: any) => [c.label, c.from, c.to])).toEqual([
+        ['Daily transaction limit (IDR)', '3000000000', '5000000000'],
+        ['Send payment receipts to customers', 'Off', 'On'],
+      ]);
+      await decide(t.body.id, 'approve');
+      expect(app('APP-2026-0009').data.transaction.dailyLimit).toBe(5_000_000_000);
 
       const docs = app('APP-2026-0009').data.documents;
       const added = [...docs, { id: 'x1', type: docs[0].type, fileName: 'renewed-affidavit.pdf', sizeKb: 120, uploadedAt: now, sample: false }];
@@ -170,10 +178,10 @@ describe('Changes after Risk approval', () => {
     });
 
     it('leaves MIDs, entities, MCC, products and pricing untouched', async () => {
-      await call('PUT', '/api/applications/APP-2026-0009/products', { products: [{ methodCode: 'TH_PROMPTPAY', enabled: true }, { methodCode: 'TH_CARDS', enabled: true }, { methodCode: 'TH_TRUEMONEY', enabled: true }], settlement: { TH_CARDS: 'T+1' }, revision: 0 }, 'sales');
+      await call('PUT', '/api/applications/APP-2026-0009/products', { products: [{ methodCode: 'ID_QRIS', enabled: true }, { methodCode: 'ID_VA', enabled: true }, { methodCode: 'ID_OVO', enabled: true }, { methodCode: 'ID_DANA', enabled: true }], settlement: { ID_QRIS: 'T+1', ID_VA: 'T+1', ID_OVO: 'T+1', ID_DANA: 'T+2' }, revision: 1 }, 'sales');
       const keep = () => JSON.stringify({ mids: db().mids, entities: db().entities, mcc: db().merchants.map((m) => m.mcc ?? null), products: db().productConfigs, pricing: db().pricingVersions });
       const before = keep();
-      const r = (await requestCountry('APP-2026-0009', 'business', { ...app('APP-2026-0009').data.business, website: 'https://bangkokbites.example/th' })).body;
+      const r = (await requestCountry('APP-2026-0009', 'business', { ...app('APP-2026-0009').data.business, website: 'https://rasabali.example/id' })).body;
       await decide(r.id, 'approve');
       expect(keep()).toBe(before);
     });
@@ -182,7 +190,7 @@ describe('Changes after Risk approval', () => {
   describe('Approvals page', () => {
     it('shows each team what waits for it, and recent decisions', async () => {
       const bank = (await requestCountry('APP-2026-0001', 'bank', { ...app('APP-2026-0001').data.bank, bankName: 'RHB Bank' })).body;
-      const pricing = (await call<any>('POST', '/api/applications/APP-2026-0009/pricing', { methodCode: 'TH_CARDS', mdrPct: 2.4 }, 'sales')).body.version;
+      const pricing = (await call<any>('POST', '/api/applications/APP-2026-0009/pricing', { methodCode: 'ID_QRIS', mdrPct: 0.8 }, 'sales')).body.version;
       const d = db();
       d.mccRequests = [{ id: 'MCR-0001', merchantId: 'GM-100105', previous: null, proposed: { code: '5814', description: 'TEST – Fast food restaurants' }, reason: 'Menu change', restrictedIn: [], requestedBy: 'Sarah Lim', requestedRole: 'sales', requestedAt: now, status: 'pending', decidedBy: null, decidedRole: null, decidedAt: null, decisionComment: null }];
       storage.setItem(KEY, JSON.stringify(d));

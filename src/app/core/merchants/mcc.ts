@@ -17,11 +17,14 @@ export interface MccCatalogueEntry {
   code: string;
   /** Official description as supplied by the catalogue source. */
   description: string;
+  /** Nature of business the code is listed under, for grouping. */
+  group?: string;
   countries: Record<string, MccAvailability>;
 }
 
 export interface MccCatalogueSource {
-  kind: 'approved' | 'test_fixture';
+  /** `standard`: the shipped ISO 18245 shortlist, used until an approved catalogue is loaded. */
+  kind: 'approved' | 'standard' | 'test_fixture';
   name: string;
   version: string;
   loadedAt: number;
@@ -50,6 +53,7 @@ export interface MerchantMcc extends MccRef {
 
 export interface MccOption extends MccRef {
   availability: MccAvailability;
+  group: string;
 }
 
 export type MccRequestStatus = 'pending' | 'approved' | 'rejected';
@@ -118,7 +122,7 @@ export function mccAvailability(catalogue: MccCatalogue, code: string, country: 
 export function mccOptionsFor(catalogue: MccCatalogue, country: string): MccOption[] {
   return catalogue.entries
     .filter((e) => e.countries[country])
-    .map((e) => ({ code: e.code, description: e.description, availability: e.countries[country] }))
+    .map((e) => ({ code: e.code, description: e.description, availability: e.countries[country], group: e.group || 'Other' }))
     .sort((a, b) => a.code.localeCompare(b.code));
 }
 
@@ -167,7 +171,8 @@ export function readMccCatalogueEntries(raw: unknown): { entries: MccCatalogueEn
       else if (a !== 'available' && a !== 'restricted') errors.push(`${at}: availability in ${c} must be "available" or "restricted".`);
       else countries[c] = a;
     }
-    entries.push({ code, description: description.slice(0, 200), countries });
+    const group = typeof e?.group === 'string' ? e.group.trim().slice(0, 60) : '';
+    entries.push(group ? { code, description: description.slice(0, 200), group, countries } : { code, description: description.slice(0, 200), countries });
   });
   return { entries: errors.length ? [] : entries, errors };
 }

@@ -116,7 +116,7 @@ describe('Change request form', () => {
     expect((f.componentInstance as ChangeRequestForm).hasUnsavedChanges()).toBe(true);
 
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
-    button(el, 'Directors & beneficial owners')!.click();
+    button(el, 'Directors')!.click();
     await settle(f);
     expect(confirm).toHaveBeenCalledWith('Discard the changes to this section?');
     expect(el.querySelector('#cr-bank-accountNumber')).toBeTruthy();
@@ -128,7 +128,7 @@ describe('Approvals page', () => {
     const api = setup('finops');
     const view: ApprovalsView = {
       heading: 'Waiting for FinOps', canDecide: true, recent: [],
-      pending: [{ kind: 'pricing', id: 'PV-000009', title: 'Pricing change · Thailand', merchantId: 'GM-1', merchantName: 'Bangkok Bites Co., Ltd.', applicationId: 'APP-9', country: 'TH', summary: 'Visa / Mastercard: 2.4% MDR from 2026-10-28', requestedBy: 'Sarah Lim', requestedRole: 'sales', requestedAt: 0, status: 'pending', approverTeam: 'finops', decidedAt: null, link: ['/applications', 'APP-9', 'products'] }],
+      pending: [{ kind: 'pricing', id: 'PV-000009', title: 'Pricing change · Indonesia', merchantId: 'GM-1', merchantName: 'PT Rasa Bali Kuliner', applicationId: 'APP-9', country: 'ID', summary: 'Visa / Mastercard: 2.4% MDR from 2026-10-28', requestedBy: 'Sarah Lim', requestedRole: 'sales', requestedAt: 0, status: 'pending', approverTeam: 'finops', decidedAt: null, link: ['/applications', 'APP-9', 'products'] }],
     };
     api.getApprovals.mockResolvedValue(view);
     const f = TestBed.createComponent(Approvals);

@@ -47,6 +47,15 @@ export class ReadinessPanel {
   protected readonly dateTime = fmtDateTime;
 
   protected readonly cfg = computed(() => rulesFor(this.application()));
+  /** Unsaved IPN callback URL; null while unchanged. */
+  protected readonly ipnDraft = signal<string | null>(null);
+  protected readonly ipnEditable = computed(() => ['cs_configuration', 'keys_generated', 'integration', 'go_live_verification'].includes(this.application().status));
+
+  protected async saveIpn() {
+    const url = (this.ipnDraft() ?? '').trim();
+    await this.run({ action: 'set_ipn', url }, 'set_ipn', 'IPN callback URL saved');
+    if (!this.error()) this.ipnDraft.set(null);
+  }
 
 
   protected readonly stages = computed<StageView[]>(() => {

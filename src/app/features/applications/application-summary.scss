@@ -117,3 +117,20 @@
     }
   }
 }
+
+dd.missing,
+td.missing,
+p.missing,
+span.missing {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.sum.has-issues {
+  border-color: var(--danger-border);
+}
+
+.tag.danger {
+  background: var(--danger-bg);
+  color: var(--danger);
+}

@@ -57,96 +57,29 @@
 
       @switch (step()) {
         @case ('business') {
-          <div class="from-profile">
-            <div class="fp-head">
-              <app-icon name="building" [size]="18" />
-              <strong>From the merchant profile</strong>
-              <a [routerLink]="['/merchants', merchant().id]">Edit</a>
-            </div>
-            <dl class="kv">
-              <div><dt>Legal name</dt><dd>{{ merchant().legalName }}</dd></div>
-              <div><dt>Registration country</dt><dd>{{ countryName(merchant().registrationCountry) }}</dd></div>
-              <div><dt>Registration number</dt><dd>{{ merchant().registrationNumber }}</dd></div>
-            </dl>
-          </div>
-
           <div class="f-grid">
             <div class="f-field">
-              <label for="tradingName">Trading name in {{ c.name }} <span class="req">*</span>
-                @if (prefilled().get('business.tradingName'); as src) {<span class="tag prefill">{{ src }}</span>}
-              </label>
+              <label for="priority">Approval priority <span class="req">*</span></label>
+              <select id="priority" class="f-input" [class.invalid]="err('business.approvalPriority')" (change)="setBusiness('approvalPriority', $any($event.target).value)" aria-describedby="priority-hint">
+                @for (p of priorities; track p) {
+                  <option [value]="p" [selected]="p === d.business.approvalPriority">{{ priorityLabel[p] }}</option>
+                }
+              </select>
+              @if (err('business.approvalPriority'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
+              <p class="f-hint" id="priority-hint">Orders the Risk review queue.</p>
+            </div>
+            <div class="f-field">
+              <label for="tradingName">Merchant trading name <span class="req">*</span>@if (prefilled().get('business.tradingName'); as src) {<span class="tag prefill">{{ src }}</span>}</label>
               <input id="tradingName" class="f-input" [class.invalid]="err('business.tradingName')" [value]="d.business.tradingName" (input)="setBusiness('tradingName', $any($event.target).value)" (blur)="touch('business.tradingName')" />
               @if (err('business.tradingName'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
             </div>
             <div class="f-field">
-              <label for="businessType">Business type <span class="req">*</span><span class="tag country">{{ c.code }}-specific</span></label>
-              <select id="businessType" class="f-input" [class.invalid]="err('business.businessType')" (change)="setBusiness('businessType', $any($event.target).value); touch('business.businessType')">
-                <option value="" [selected]="!d.business.businessType">Select business type</option>
-                @for (t of c.businessTypes; track t) {
-                  <option [value]="t" [selected]="t === d.business.businessType">{{ t }}</option>
-                }
-              </select>
-              @if (err('business.businessType'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
+              <label for="businessName">Business name <span class="req">*</span><span class="tag prefill">From profile</span></label>
+              <input id="businessName" class="f-input" [value]="merchant().legalName" readonly aria-describedby="businessName-hint" />
+              <p class="f-hint" id="businessName-hint">The legal name from the merchant profile. <a [routerLink]="['/merchants', merchant().id]">Edit profile</a></p>
             </div>
             <div class="f-field">
-              <label for="merchantCategory">Merchant category <span class="req">*</span>
-                @if (prefilled().get('business.merchantCategory'); as src) {<span class="tag prefill">{{ src }}</span>}
-              </label>
-              <select id="merchantCategory" class="f-input" [class.invalid]="err('business.merchantCategory')" (change)="setBusiness('merchantCategory', $any($event.target).value); touch('business.merchantCategory')" aria-describedby="merchantCategory-hint">
-                <option value="" [selected]="!d.business.merchantCategory">Select merchant category</option>
-                @for (k of merchantCategories; track k) {
-                  <option [value]="k" [selected]="k === d.business.merchantCategory">{{ merchantCategoryLabel[k] }}</option>
-                }
-              </select>
-              @if (err('business.merchantCategory'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
-              @else {<p class="f-hint" id="merchantCategory-hint">Mobi's internal classification. Separate from industry and MCC.</p>}
-            </div>
-            <div class="f-field">
-              <label for="industry">Industry <span class="req">*</span>
-                @if (prefilled().get('business.industry'); as src) {<span class="tag prefill">{{ src }}</span>}
-              </label>
-              <select id="industry" class="f-input" [class.invalid]="err('business.industry')" (change)="setBusiness('industry', $any($event.target).value); touch('business.industry')">
-                <option value="" [selected]="!d.business.industry">Select industry</option>
-                @for (t of industries; track t) {
-                  <option [value]="t" [selected]="t === d.business.industry">{{ t }}</option>
-                }
-              </select>
-              @if (err('business.industry'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
-            </div>
-            <div class="f-field">
-              <label for="mcc">Merchant category code (MCC) @if (mccConfigured() && !mccLocked()) {<span class="req">*</span>}</label>
-              @if (mccLocked()) {
-                <p class="f-static">{{ currentMcc() ? currentMcc()!.code + ' – ' + currentMcc()!.description : 'Not captured' }}</p>
-                <p class="f-hint">Risk has approved this merchant, so the MCC can only change through a Risk-approved request. <a [routerLink]="['/merchants', merchant().id]">Request a change</a></p>
-              } @else if (!mccConfigured()) {
-                <select id="mcc" class="f-input" disabled aria-describedby="mcc-empty">
-                  <option selected>{{ currentMcc() ? currentMcc()!.code + ' – ' + currentMcc()!.description : 'No MCCs available' }}</option>
-                </select>
-                <p class="f-hint" id="mcc-empty">No MCC catalogue covers {{ cfg().name }} yet, so the MCC can be left empty.</p>
-              } @else {
-                <select id="mcc" class="f-input" [class.invalid]="err('business.mcc') || mccError()" [disabled]="mccSaving()" (change)="setMcc($any($event.target).value)" aria-describedby="mcc-hint">
-                  <option value="" [selected]="!currentMcc()">Select MCC</option>
-                  @for (o of mccOptions(); track o.code) {
-                    <option [value]="o.code" [selected]="o.code === currentMcc()?.code">{{ o.code }} – {{ o.description }}{{ o.availability === 'restricted' ? ' (restricted)' : '' }}</option>
-                  }
-                </select>
-                <p class="f-hint" id="mcc-hint">Set once for the parent merchant; its sub-merchants use the same MCC. Only MCCs available in {{ cfg().name }} are listed.@if (mcc.isTestFixture()) {{{ ' ' }}<strong>Test fixture – not an approved catalogue.</strong>}</p>
-              }
-              @if (mccRestricted()) {<p class="f-hint warn"><app-icon name="alert-circle" [size]="14" />Restricted in {{ cfg().name }}: it will be flagged for Risk review.</p>}
-              @if (mccSaving()) {<p class="f-hint" role="status"><span class="spinner" aria-hidden="true"></span>Saving MCC…</p>}
-              @else if (mccSavedNote(); as n) {<p class="f-hint saved" role="status"><app-icon name="check-circle" [size]="14" />{{ n }} It's saved straight away, separately from the draft.</p>}
-              @if (mccError(); as m) {<p class="f-error" role="alert"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
-              @else if (err('business.mcc'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
-            </div>
-            <div class="f-field">
-              <label for="website">Website
-                @if (prefilled().get('business.website'); as src) {<span class="tag prefill">{{ src }}</span>}
-              </label>
-              <input id="website" class="f-input" type="url" placeholder="https://" [class.invalid]="err('business.website')" [value]="d.business.website" (input)="setBusiness('website', $any($event.target).value)" (blur)="touch('business.website')" />
-              @if (err('business.website'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
-            </div>
-            <div class="f-field">
-              <label for="localReg">{{ c.localRegistration.label }} <span class="req">*</span><span class="tag country">{{ c.code }}-specific</span>
+              <label for="localReg">{{ c.localRegistration.label }} <span class="req">*</span>
                 @if (sameCountry()) {<span class="tag prefill">From profile</span>}
               </label>
               @if (sameCountry()) {
@@ -158,17 +91,67 @@
               }
             </div>
             <div class="f-field">
-              <label for="taxId">{{ c.taxId.label }} @if (c.taxId.required) {<span class="req">*</span>}<span class="tag country">{{ c.code }}-specific</span></label>
+              <label for="incorporated">Date of incorporation <span class="req">*</span>@if (prefilled().get('business.incorporationDate'); as src) {<span class="tag prefill">{{ src }}</span>}</label>
+              <input id="incorporated" type="date" class="f-input" [max]="today" [class.invalid]="err('business.incorporationDate')" [value]="d.business.incorporationDate" (change)="setBusiness('incorporationDate', $any($event.target).value)" (blur)="touch('business.incorporationDate')" />
+              @if (err('business.incorporationDate'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
+            </div>
+            <div class="f-field">
+              <label for="businessType">Company type <span class="req">*</span></label>
+              <select id="businessType" class="f-input" [class.invalid]="err('business.businessType')" (change)="setBusiness('businessType', $any($event.target).value); touch('business.businessType')">
+                <option value="" [selected]="!d.business.businessType">Select company type</option>
+                @for (t of c.businessTypes; track t) {
+                  <option [value]="t" [selected]="t === d.business.businessType">{{ t }}</option>
+                }
+              </select>
+              @if (err('business.businessType'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
+            </div>
+            <div class="f-field">
+              <label for="taxId">{{ c.taxId.label }} @if (c.taxId.required) {<span class="req">*</span>}</label>
               <input id="taxId" class="f-input" [class.invalid]="err('business.taxId')" [value]="d.business.taxId" (input)="setBusiness('taxId', $any($event.target).value)" (blur)="touch('business.taxId')" />
               @if (err('business.taxId'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>} @else if (c.taxId.hint) {<p class="f-hint">{{ c.taxId.hint }}</p>}
             </div>
+            @if (c.secondaryTaxId; as st) {
+              <div class="f-field">
+                <label for="taxId2">{{ st.label }} @if (st.required) {<span class="req">*</span>}</label>
+                <input id="taxId2" class="f-input" [class.invalid]="err('business.secondaryTaxId')" [value]="d.business.secondaryTaxId" (input)="setBusiness('secondaryTaxId', $any($event.target).value)" (blur)="touch('business.secondaryTaxId')" />
+                @if (err('business.secondaryTaxId'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>} @else if (st.hint) {<p class="f-hint">{{ st.hint }}</p>}
+              </div>
+            }
             <div class="f-field">
-              <label for="volume">Expected monthly volume ({{ c.currency }}) <span class="req">*</span></label>
-              <input id="volume" class="f-input" type="number" min="0" step="1000" [class.invalid]="err('business.expectedMonthlyVolume')" [value]="d.business.expectedMonthlyVolume ?? ''" (input)="setBusiness('expectedMonthlyVolume', $any($event.target).value)" (blur)="touch('business.expectedMonthlyVolume')" />
-              @if (err('business.expectedMonthlyVolume'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
+              <label for="website">Website URL@if (prefilled().get('business.website'); as src) {<span class="tag prefill">{{ src }}</span>}</label>
+              <input id="website" class="f-input" type="url" placeholder="https://" [class.invalid]="err('business.website')" [value]="d.business.website" (input)="setBusiness('website', $any($event.target).value)" (blur)="touch('business.website')" />
+              @if (err('business.website'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>} @else {<p class="f-hint">Required for online businesses.</p>}
+            </div>
+            <div class="f-field">
+              <label for="industry">Nature of business <span class="req">*</span>@if (prefilled().get('business.industry'); as src) {<span class="tag prefill">{{ src }}</span>}</label>
+              <select id="industry" class="f-input" [class.invalid]="err('business.industry')" (change)="setBusiness('industry', $any($event.target).value); touch('business.industry')">
+                <option value="" [selected]="!d.business.industry">Select nature of business</option>
+                @for (t of industries; track t) {
+                  <option [value]="t" [selected]="t === d.business.industry">{{ t }}</option>
+                }
+              </select>
+              @if (err('business.industry'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
             </div>
             <div class="f-field full">
-              <label for="address">Business address in {{ c.name }} <span class="req">*</span></label>
+              <label for="mcc">Merchant category code (MCC) @if (mccConfigured() && !mccLocked()) {<span class="req">*</span>}</label>
+              @if (currentMcc(); as cm) {<p class="f-static">Selected: <strong>{{ cm.code }} – {{ cm.description }}</strong></p>}
+              @if (mccLocked()) {
+                @if (!currentMcc()) {<p class="f-static">Not captured</p>}
+                <p class="f-hint">Risk has approved this merchant, so the MCC can only change through a Risk-approved request. <a [routerLink]="['/merchants', merchant().id]">Request a change</a></p>
+              } @else if (!mccConfigured()) {
+                <p class="f-hint" id="mcc-empty">No MCC catalogue covers {{ cfg().name }} yet, so the MCC can be left empty.</p>
+              } @else {
+                <app-mcc-picker inputId="mcc" [options]="mccOptions()" [value]="currentMcc()?.code ?? null" [preferredGroup]="d.business.industry" [disabled]="mccSaving()" [invalid]="!!(err('business.mcc') || mccError())" describedBy="mcc-hint" (selected)="setMcc($event)" />
+                <p class="f-hint" id="mcc-hint">Search by code or description. Codes for the nature of business are listed first. Set once for the parent merchant; its sub-merchants use the same MCC.@if (mcc.isTestFixture()) {{{ ' ' }}<strong>Test fixture – not an approved catalogue.</strong>}</p>
+              }
+              @if (mccRestricted()) {<p class="f-hint warn"><app-icon name="alert-circle" [size]="14" />Restricted in {{ cfg().name }}: it will be flagged for Risk review.</p>}
+              @if (mccSaving()) {<p class="f-hint" role="status"><span class="spinner" aria-hidden="true"></span>Saving MCC…</p>}
+              @else if (mccSavedNote(); as n) {<p class="f-hint saved" role="status"><app-icon name="check-circle" [size]="14" />{{ n }} It's saved straight away, separately from the draft.</p>}
+              @if (mccError(); as m) {<p class="f-error" role="alert"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
+              @else if (err('business.mcc'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
+            </div>
+            <div class="f-field full">
+              <label for="address">Registered address <span class="req">*</span></label>
               <textarea id="address" class="f-input" rows="2" [class.invalid]="err('business.address')" [value]="d.business.address" (input)="setBusiness('address', $any($event.target).value)" (blur)="touch('business.address')"></textarea>
               @if (err('business.address'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
             </div>
@@ -176,40 +159,48 @@
         }
 
         @case ('contact') {
-          @if (!c.directors.required) {
-            <p class="section-note"><app-icon name="info" [size]="16" />In {{ c.name }}, this person is also the legal representative.</p>
-          }
           <div class="f-grid">
-            <div class="f-field full">
-              <label for="cname">Contact name <span class="req">*</span>
-                @if (prefilled().get('contact.name'); as src) {<span class="tag prefill">{{ src }}</span>}
-              </label>
-              <input id="cname" class="f-input" [class.invalid]="err('contact.name')" [value]="d.contact.name" (input)="setContact('name', $any($event.target).value)" (blur)="touch('contact.name')" />
-              @if (err('contact.name'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
-            </div>
             <div class="f-field">
-              <label for="cemail">Email <span class="req">*</span>
-                @if (prefilled().get('contact.email'); as src) {<span class="tag prefill">{{ src }}</span>}
-              </label>
-              <input id="cemail" type="email" class="f-input" [class.invalid]="err('contact.email')" [value]="d.contact.email" (input)="setContact('email', $any($event.target).value)" (blur)="touch('contact.email')" />
-              @if (err('contact.email'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
-            </div>
-            <div class="f-field">
-              <label for="cphone">Phone <span class="req">*</span>
-                @if (prefilled().get('contact.phone'); as src) {<span class="tag prefill">{{ src }}</span>}
-              </label>
-              <input id="cphone" type="tel" class="f-input" [class.invalid]="err('contact.phone')" [value]="d.contact.phone" (input)="setContact('phone', $any($event.target).value)" (blur)="touch('contact.phone')" />
+              <label for="cphone">Phone number <span class="req">*</span>@if (prefilled().get('contact.phone'); as src) {<span class="tag prefill">{{ src }}</span>}</label>
+              <app-phone-field inputId="cphone" [value]="d.contact.phone" [defaultCode]="c.dialCode" [invalid]="!!err('contact.phone')" (valueChange)="setContact('phone', $event)" (blurred)="touch('contact.phone')" />
               @if (err('contact.phone'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
             </div>
             <div class="f-field">
-              <label for="csupport">Customer support email
-                @if (prefilled().get('contact.supportEmail'); as src) {<span class="tag prefill">{{ src }}</span>}
-              </label>
-              <input id="csupport" type="email" class="f-input" [class.invalid]="err('contact.supportEmail')" [value]="d.contact.supportEmail" (input)="setContact('supportEmail', $any($event.target).value)" (blur)="touch('contact.supportEmail')" />
-              @if (err('contact.supportEmail'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>} @else {<p class="f-hint">Optional. Shown to customers on receipts.</p>}
+              <label for="cemail">Email address <span class="req">*</span>@if (prefilled().get('contact.email'); as src) {<span class="tag prefill">{{ src }}</span>}</label>
+              <input id="cemail" type="email" class="f-input" [class.invalid]="err('contact.email')" [value]="d.contact.email" (input)="setContact('email', $any($event.target).value)" (blur)="touch('contact.email')" />
+              @if (err('contact.email'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
             </div>
+            <div class="f-field full">
+              <label for="caddress">Current address <span class="req">*</span></label>
+              <label class="check">
+                <input type="checkbox" [checked]="d.contact.sameAsRegistered" (change)="setSameAddress($any($event.target).checked)" />
+                Same as registered address
+              </label>
+              @if (d.contact.sameAsRegistered) {
+                <p class="f-static">{{ d.business.address || 'No registered address entered yet.' }}</p>
+              } @else {
+                <textarea id="caddress" class="f-input" rows="2" [class.invalid]="err('contact.currentAddress')" [value]="d.contact.currentAddress" (input)="setContact('currentAddress', $any($event.target).value)" (blur)="touch('contact.currentAddress')"></textarea>
+              }
+              @if (err('contact.currentAddress'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
+            </div>
+            <fieldset class="f-field full emails">
+              <legend>Settlement email(s) <span class="req">*</span>@if (prefilled().get('contact.settlementEmails'); as src) {<span class="tag prefill">{{ src }}</span>}</legend>
+              <p class="f-hint" id="settle-hint">Who receives settlement reports. Add up to {{ maxSettlementEmails }}.</p>
+              @for (e of d.contact.settlementEmails; track $index; let i = $index) {
+                <div class="email-row">
+                  <input [id]="'settle-' + i" type="email" class="f-input" [class.invalid]="err('contact.settlementEmails.' + i)" [value]="e" (input)="setSettlementEmail(i, $any($event.target).value)" (blur)="touch('contact.settlementEmails.' + i)" [attr.aria-label]="'Settlement email ' + (i + 1)" aria-describedby="settle-hint" />
+                  @if (d.contact.settlementEmails.length > 1) {
+                    <button type="button" class="btn ghost sm" (click)="removeSettlementEmail(i)" [attr.aria-label]="'Remove settlement email ' + (i + 1)"><app-icon name="trash" [size]="15" /></button>
+                  }
+                </div>
+                @if (err('contact.settlementEmails.' + i); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
+              }
+              @if (err('contact.settlementEmails'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
+              @if (d.contact.settlementEmails.length < maxSettlementEmails) {
+                <button type="button" class="btn sm add-email" (click)="addSettlementEmail()"><app-icon name="plus" [size]="14" />Add email</button>
+              }
+            </fieldset>
           </div>
-          <p class="f-hint">Filled in from the merchant profile. Change it only if someone else handles {{ c.name }}.</p>
         }
 
         @case ('bank') {
@@ -217,11 +208,64 @@
           <div class="f-grid">
             @for (f of c.bankFields; track f.key) {
               <div class="f-field">
-                <label [for]="'bank-' + f.key">{{ f.label }} @if (f.required) {<span class="req">*</span>}<span class="tag country">{{ c.code }}-specific</span></label>
+                <label [for]="'bank-' + f.key">{{ f.label }} @if (f.required) {<span class="req">*</span>}</label>
                 <input [id]="'bank-' + f.key" class="f-input" [class.invalid]="err('bank.' + f.key)" [value]="d.bank[f.key] || ''" (input)="setBank(f.key, $any($event.target).value)" (blur)="touch('bank.' + f.key)" />
                 @if (err('bank.' + f.key); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>} @else if (f.hint) {<p class="f-hint">{{ f.hint }}</p>}
               </div>
             }
+          </div>
+        }
+
+        @case ('transaction') {
+          <div class="f-grid">
+            <div class="f-field">
+              <label for="dailyLimit">Daily transaction limit ({{ c.currency }}) <span class="req">*</span></label>
+              <input id="dailyLimit" class="f-input" type="number" min="0" step="1" inputmode="decimal" [class.invalid]="err('transaction.dailyLimit')" [value]="d.transaction.dailyLimit ?? ''" (input)="setAmount('dailyLimit', $any($event.target).value)" (blur)="touch('transaction.dailyLimit')" />
+              @if (err('transaction.dailyLimit'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
+            </div>
+            <div class="f-field">
+              <label for="minValue">Minimum transaction value ({{ c.currency }})</label>
+              <input id="minValue" class="f-input" type="number" min="0" step="any" inputmode="decimal" [class.invalid]="err('transaction.minTransactionValue')" [value]="d.transaction.minTransactionValue ?? ''" (input)="setAmount('minTransactionValue', $any($event.target).value)" (blur)="touch('transaction.minTransactionValue')" />
+              @if (err('transaction.minTransactionValue'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>} @else {<p class="f-hint">Optional. The smallest amount accepted per transaction.</p>}
+            </div>
+            <div class="f-field">
+              <label for="merchantCategory">Merchant category <span class="req">*</span>
+                <span class="info-tip" tabindex="0" role="img" [attr.aria-label]="merchantCategoryHint" [title]="merchantCategoryHint"><app-icon name="info" [size]="14" /></span>
+                @if (prefilled().get('transaction.merchantCategory'); as src) {<span class="tag prefill">{{ src }}</span>}
+              </label>
+              <select id="merchantCategory" class="f-input" [class.invalid]="err('transaction.merchantCategory')" (change)="setTransaction('merchantCategory', $any($event.target).value); touch('transaction.merchantCategory')" aria-describedby="merchantCategory-hint">
+                <option value="" [selected]="!d.transaction.merchantCategory">Select merchant category</option>
+                @for (k of merchantCategories; track k) {
+                  <option [value]="k" [selected]="k === d.transaction.merchantCategory">{{ merchantCategoryLabel[k] }}</option>
+                }
+              </select>
+              @if (err('transaction.merchantCategory'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
+              @else {<p class="f-hint" id="merchantCategory-hint">{{ merchantCategoryHint }}</p>}
+            </div>
+            <div class="f-field">
+              <label for="connectionType">Merchant connection type <span class="req">*</span>@if (prefilled().get('transaction.connectionType'); as src) {<span class="tag prefill">{{ src }}</span>}</label>
+              <select id="connectionType" class="f-input" [class.invalid]="err('transaction.connectionType')" (change)="setTransaction('connectionType', $any($event.target).value); touch('transaction.connectionType')">
+                <option value="" [selected]="!d.transaction.connectionType">Select connection type</option>
+                @for (k of connectionTypes; track k) {
+                  <option [value]="k" [selected]="k === d.transaction.connectionType">{{ connectionTypeLabel[k] }}</option>
+                }
+              </select>
+              @if (err('transaction.connectionType'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
+            </div>
+            <div class="f-field full">
+              <label for="ipn">IPN callback URL@if (prefilled().get('transaction.ipnCallbackUrl'); as src) {<span class="tag prefill">{{ src }}</span>}</label>
+              <input id="ipn" class="f-input" type="url" placeholder="https://" [class.invalid]="err('transaction.ipnCallbackUrl')" [value]="d.transaction.ipnCallbackUrl" (input)="setTransaction('ipnCallbackUrl', $any($event.target).value)" (blur)="touch('transaction.ipnCallbackUrl')" aria-describedby="ipn-hint" />
+              @if (err('transaction.ipnCallbackUrl'); as m) {<p class="f-error"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
+              @else {<p class="f-hint" id="ipn-hint">Where Mobi sends payment notifications. https only. Optional now, required before go-live.</p>}
+            </div>
+            <div class="f-field full">
+              <label class="toggle">
+                <input type="checkbox" role="switch" [checked]="d.transaction.sendReceipts" (change)="setReceipts($any($event.target).checked)" />
+                <span class="track" aria-hidden="true"></span>
+                Send payment receipts to customers
+              </label>
+              <p class="f-hint">Customers get an email receipt after each successful payment.</p>
+            </div>
           </div>
         }
 
@@ -239,21 +283,18 @@
             @if (err('directors'); as m) {<p class="f-error block"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
             @for (p of d.directors; track p.id; let i = $index) {
               <fieldset class="person">
-                <legend>{{ p.name || 'Person ' + (i + 1) }}</legend>
-                <button type="button" class="btn ghost sm remove" (click)="removePerson(p.id)" [attr.aria-label]="'Remove person ' + (i + 1)"><app-icon name="trash" [size]="15" />Remove</button>
+                <legend>{{ p.name || 'Director ' + (i + 1) }}</legend>
+                <button type="button" class="btn ghost sm remove" (click)="removePerson(p.id)" [attr.aria-label]="'Remove director ' + (i + 1)"><app-icon name="trash" [size]="15" />Remove</button>
                 <div class="f-grid">
                   <div class="f-field">
-                    <label [for]="'pn' + i">Full name <span class="req">*</span></label>
+                    <label [for]="'pn' + i">Director name <span class="req">*</span></label>
                     <input [id]="'pn' + i" class="f-input" [class.invalid]="err('directors.' + i + '.name')" [value]="p.name" (input)="setPerson(p.id, 'name', $any($event.target).value)" (blur)="touch('directors.' + i + '.name')" />
                     @if (err('directors.' + i + '.name'); as m) {<p class="f-error">{{ m }}</p>}
                   </div>
                   <div class="f-field">
-                    <label [for]="'pr' + i">Role <span class="req">*</span></label>
-                    <select [id]="'pr' + i" class="f-input" (change)="setPerson(p.id, 'role', $any($event.target).value)">
-                      <option value="director" [selected]="p.role === 'director'">Director</option>
-                      <option value="beneficial_owner" [selected]="p.role === 'beneficial_owner'">Beneficial owner</option>
-                      <option value="director_and_owner" [selected]="p.role === 'director_and_owner'">Director &amp; beneficial owner</option>
-                    </select>
+                    <label [for]="'pc' + i">Contact number <span class="req">*</span></label>
+                    <app-phone-field [inputId]="'pc' + i" label="Contact number" [value]="p.contactNumber" [defaultCode]="c.dialCode" [invalid]="!!err('directors.' + i + '.contactNumber')" (valueChange)="setPerson(p.id, 'contactNumber', $event)" (blurred)="touch('directors.' + i + '.contactNumber')" />
+                    @if (err('directors.' + i + '.contactNumber'); as m) {<p class="f-error">{{ m }}</p>}
                   </div>
                   <div class="f-field">
                     <label [for]="'pnat' + i">Nationality <span class="req">*</span></label>
@@ -261,26 +302,24 @@
                     @if (err('directors.' + i + '.nationality'); as m) {<p class="f-error">{{ m }}</p>}
                   </div>
                   <div class="f-field">
-                    <label [for]="'pid' + i">ID / passport number <span class="req">*</span></label>
+                    <label [for]="'pid' + i">{{ c.directors.idLabel }} <span class="req">*</span></label>
                     <input [id]="'pid' + i" class="f-input" [class.invalid]="err('directors.' + i + '.idNumber')" [value]="p.idNumber" (input)="setPerson(p.id, 'idNumber', $any($event.target).value)" (blur)="touch('directors.' + i + '.idNumber')" />
                     @if (err('directors.' + i + '.idNumber'); as m) {<p class="f-error">{{ m }}</p>}
                   </div>
-                  @if (p.role !== 'director') {
-                    <div class="f-field">
-                      <label [for]="'po' + i">Ownership % <span class="req">*</span></label>
-                      <input [id]="'po' + i" type="number" min="0" max="100" step="1" class="f-input" [class.invalid]="err('directors.' + i + '.ownershipPct')" [value]="p.ownershipPct ?? ''" (input)="setPerson(p.id, 'ownershipPct', $any($event.target).value)" (blur)="touch('directors.' + i + '.ownershipPct')" />
-                      @if (err('directors.' + i + '.ownershipPct'); as m) {<p class="f-error">{{ m }}</p>}
-                    </div>
-                  }
+                  <div class="f-field full">
+                    <label [for]="'pw' + i">Website / LinkedIn</label>
+                    <input [id]="'pw' + i" class="f-input" type="url" placeholder="https://" [class.invalid]="err('directors.' + i + '.profileUrl')" [value]="p.profileUrl" (input)="setPerson(p.id, 'profileUrl', $any($event.target).value)" (blur)="touch('directors.' + i + '.profileUrl')" />
+                    @if (err('directors.' + i + '.profileUrl'); as m) {<p class="f-error">{{ m }}</p>} @else {<p class="f-hint">Optional.</p>}
+                  </div>
                 </div>
               </fieldset>
             }
-            <button type="button" class="btn" (click)="addPerson()"><app-icon name="plus" [size]="16" />Add person</button>
+            <button type="button" class="btn" (click)="addPerson()"><app-icon name="plus" [size]="16" />Add Director</button>
           }
         }
 
         @case ('documents') {
-          <p class="section-note"><app-icon name="file" [size]="16" />Upload each document as a PDF, JPG or PNG, up to 10 MB.</p>
+          <p class="section-note"><app-icon name="file" [size]="16" />Upload one file per document: PDF, JPG or PNG, up to 10 MB.</p>
           <ul class="doc-list">
             @for (rule of c.documents; track rule.type) {
               @let files = filesFor(rule.type);
@@ -292,8 +331,8 @@
                   </span>
                   <span class="doc-actions">
                     <label class="btn sm">
-                      <app-icon name="upload" [size]="14" />{{ files.length ? 'Add another' : 'Upload' }}
-                      <input type="file" class="sr-only" accept=".pdf,.jpg,.jpeg,.png" (change)="attachFile(rule.type, $any($event.target))" />
+                      <app-icon name="upload" [size]="14" />{{ files.length ? 'Replace' : 'Upload' }}
+                      <input type="file" class="sr-only" accept=".pdf,.jpg,.jpeg,.png" (change)="attachFile(rule.type, $any($event.target))" [attr.aria-label]="(files.length ? 'Replace ' : 'Upload ') + rule.label" />
                     </label>
                   </span>
                 </div>
@@ -312,30 +351,6 @@
               </li>
             }
           </ul>
-        }
-
-        @case ('pricing') {
-          <p class="section-note"><app-icon name="card" [size]="16" />Choose what {{ merchant().legalName }} will accept in {{ c.name }}, and set the rate (MDR) for each.</p>
-          @if (err('pricing'); as m) {<p class="f-error block"><app-icon name="alert-circle" [size]="16" />{{ m }}</p>}
-          <div class="table-wrap">
-            <table class="data-table pricing">
-              <thead><tr><th scope="col"><span class="sr-only">Offer</span></th><th scope="col">Payment method</th><th scope="col">MDR (%)</th><th scope="col">Allowed</th></tr></thead>
-              <tbody>
-                @for (m of c.paymentMethods; track m.code) {
-                  @let l = line(m.code);
-                  <tr [class.off]="!l.enabled">
-                    <td><input type="checkbox" [id]="'pm-' + m.code" [checked]="l.enabled" (change)="setPricing(m.code, 'enabled', $any($event.target).checked)" /></td>
-                    <td><label [for]="'pm-' + m.code">{{ m.name }}</label></td>
-                    <td>
-                      <input class="f-input mdr" type="number" step="0.05" [min]="m.minMdr" [max]="m.maxMdr" [disabled]="!l.enabled" [class.invalid]="err('pricing.' + m.code)" [value]="l.mdr ?? ''" (input)="setPricing(m.code, 'mdr', $any($event.target).value)" (blur)="touch('pricing.' + m.code)" [attr.aria-label]="m.name + ' MDR percent'" />
-                      @if (err('pricing.' + m.code); as e) {<p class="f-error">{{ e }}</p>}
-                    </td>
-                    <td class="muted">{{ m.minMdr }}–{{ m.maxMdr }}%</td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
         }
 
         @case ('review') {
@@ -359,7 +374,7 @@
           } @else if (!issues().length) {
             <div class="alert success compact" role="status">
               <app-icon name="check-circle" />
-              <div>Everything's complete. Check the summary below, then submit.</div>
+              <div>Everything's complete. Check the details below, then submit.</div>
             </div>
           }
           @if (confirmIncomplete() && issues().length) {
@@ -375,7 +390,7 @@
             </div>
           }
           <div class="summary-wrap">
-            <app-application-summary [application]="a" [merchant]="merchant()" [data]="d" [editable]="true" (edit)="go($event)" />
+            <app-application-summary [application]="a" [merchant]="merchant()" [data]="d" [editable]="true" [issues]="issues()" [currentMcc]="currentMcc()" (edit)="go($event)" />
           </div>
         }
       }
@@ -388,12 +403,27 @@
         @if (saving()) {<span class="spinner" aria-hidden="true"></span>}Save draft
       </button>
       @if (step() === 'review') {
-        <button type="button" class="btn primary" (click)="submit()" [disabled]="submitting() || saving()">
-          @if (submitting()) {<span class="spinner" aria-hidden="true"></span>Submitting…} @else { {{ confirmIncomplete() && issues().length ? 'Submit anyway' : a.status === 'returned' ? 'Resubmit to Risk' : 'Submit to Risk' }} }
+        <button type="button" id="submit-application" class="btn primary" (click)="submit()" [disabled]="submitting() || saving()">
+          {{ confirmIncomplete() && issues().length ? 'Submit anyway' : a.status === 'returned' ? 'Resubmit to Risk' : 'Submit to Risk' }}
         </button>
       } @else {
-        <button type="button" class="btn primary" (click)="next()">Continue<app-icon name="arrow-right" [size]="16" /></button>
+        <button type="button" class="btn primary" (click)="next()">{{ step() === 'documents' ? 'Preview' : 'Continue' }}<app-icon name="arrow-right" [size]="16" /></button>
       }
     </div>
   </section>
 </div>
+
+@if (confirmOpen()) {
+  <div class="modal-backdrop" (click)="closeConfirm()">
+    <section class="confirm-modal panel-card" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" aria-describedby="confirm-text" (click)="$event.stopPropagation()" (keydown.escape)="closeConfirm()">
+      <h2 id="confirm-title">Confirmation</h2>
+      <p id="confirm-text">You're about to register this merchant. Please confirm to proceed.</p>
+      <div class="confirm-actions">
+        <button type="button" class="btn" (click)="closeConfirm()" [disabled]="submitting()">No</button>
+        <button type="button" id="confirm-register" class="btn primary" (click)="confirmSubmit()" [disabled]="submitting()">
+          @if (submitting()) {<span class="spinner" aria-hidden="true"></span>}Confirm &amp; Register
+        </button>
+      </div>
+    </section>
+  </div>
+}

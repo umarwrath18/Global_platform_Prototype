@@ -419,3 +419,35 @@ fieldset {
     padding-left: 18px;
   }
 }
+
+.ipn {
+  margin: 10px 0 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-page);
+
+  &.missing {
+    border-color: var(--warning-border);
+    background: var(--warning-bg);
+  }
+
+  label {
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  p {
+    margin: 6px 0 0;
+  }
+}
+
+.ipn-row {
+  display: flex;
+  gap: 8px;
+
+  .f-input {
+    flex: 1;
+    min-width: 0;
+  }
+}

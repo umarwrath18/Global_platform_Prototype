@@ -184,3 +184,22 @@ Automated: `npm test` runs 14 merchant-server unit tests (plus the 30 Batch 1 au
 18. Product & Payment Config decisions: "Issue production keys" is the onboarding handoff (to be confirmed against the intended process); FinOps approval is a prototype "View as" option only, with in-app notifications and no email; settlement changes never need approval; a product with active pricing can't be switched off after onboarding (ending pricing would be a later feature).
 19. Separation of duties (prototype limitation): Risk and FinOps approvals are checked by team only. One login can switch teams in "View as" and approve its own change, MCC or pricing request. Production needs person-level checks.
 20. Sub-merchants (decided): lightweight children with one parent, optional separate legal entity, lightweight Risk approval, CS go-live after two checks (live low-value transaction, merchant sign-off) once the parent is live in the country and neither is suspended; own live MID; parent's products, pricing and settlement. Creation routes are set per country (default: Sales / Operations only). Open: how a sub-merchant's MID is passed in API calls (needs the integration spec); editing or closing a sub-merchant after creation; whether sub-merchant changes should use the change-request flow.
+
+## Update: registration per country (November 2026)
+
+- Registration is open for Malaysia, Indonesia and Vietnam only. India, the Philippines and the UAE
+  are shown as Planned (disabled). Thailand is removed. Demo data uses MY / ID / VN only.
+- The country application follows the approved field table: Business information (with Approval
+  priority, Date of incorporation, Nature of business and the per-country registration and tax
+  numbers), Contact information (phone with country code, current address, 1–4 settlement emails),
+  Bank details, Transaction settings (daily limit, minimum value, merchant category Enterprise /
+  SME / Micro, connection type, IPN callback URL, payment receipts), Directors (no role or
+  ownership %), Documents (one file per type). The Payment methods & pricing section is removed:
+  products, pricing and settlement are set in Product & Payment Config.
+- "Review & submit" is now **Preview**, with missing fields highlighted, and submitting asks for
+  confirmation ("Confirmation – You're about to register this merchant. Please confirm to proceed.").
+- The IPN callback URL is optional at submission and required at go-live; CS can set it during
+  readiness.
+- MCC uses a standard ISO 18245 shortlist, searchable and grouped by nature of business, until an
+  approved catalogue is supplied.
+- Onboarding statistics moved from the Operations Dashboard to the Applications page.

@@ -11,7 +11,7 @@ export interface Region {
   countries: string[];
 }
 
-export const REGIONS: Region[] = ['MY', 'ID', 'VN', 'TH', 'PH'].map((code) => ({ code, name: COUNTRY_CATALOGUE[code].name, countries: [code] }));
+export const REGIONS: Region[] = ['MY', 'ID', 'VN'].map((code) => ({ code, name: COUNTRY_CATALOGUE[code].name, countries: [code] }));
 
 export function regionForCountry(country: string): string | null {
   return REGIONS.find((r) => r.countries.includes(country))?.code ?? null;

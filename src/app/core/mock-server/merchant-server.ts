@@ -1,5 +1,6 @@
-import { emptyApplicationData, registeredInCountry, SECTION_ORDER, validateApplication, validateRegistrationNumber, isEmail, isPhone } from '../merchants/application-rules';
+import { emptyApplicationData, ipnIssue, registeredInCountry, SECTION_ORDER, validateApplication, validateRegistrationNumber, isEmail, isPhone } from '../merchants/application-rules';
 import {
+  APPROVAL_PRIORITIES,
   ApplicationData,
   ApplicationDetail,
   ApplicationStatus,
@@ -12,6 +13,8 @@ import {
   GlobalMerchant,
   GlobalMerchantStatus,
   HistoryEvent,
+  connectionTypeLabel,
+  MAX_SETTLEMENT_EMAILS,
   merchantCategoryLabel,
   MerchantDetail,
   MerchantLifecycleEvent,
@@ -46,7 +49,14 @@ import { simulateVerification } from './verification';
 // runs in the browser for the prototype, but enforces every rule itself: role permissions,
 // status transitions, validation and duplicate checks are never left to the UI.
 
-const DB_VERSION = 2;
+/**
+ * 3: registration form per country (MY / ID / VN only; transaction settings; no pricing in the
+ * application). Version 2 data is kept as a backup and replaced with the new demo data.
+ */
+const DB_VERSION = 3;
+export const MERCHANT_DB_VERSION = DB_VERSION;
+/** Versions replaced on load with fresh demo data, after a backup, because their records can't be converted. */
+const REPLACED_VERSIONS = [2];
 
 export type MerchantRecord = Omit<GlobalMerchant, 'globalStatus' | 'lifecycleStatus'> & Partial<Pick<GlobalMerchant, 'lifecycleStatus' | 'lifecycleReason' | 'lifecycleUpdatedAt' | 'lifecycleUpdatedBy'>>;
 
@@ -525,8 +535,9 @@ export class MerchantServer {
 
     data.business.tradingName = merchant.legalName;
     fromProfile('business.tradingName');
-    data.contact = { ...merchant.primaryContact, supportEmail: '' };
-    ['contact.name', 'contact.email', 'contact.phone'].forEach(fromProfile);
+    data.contact.email = merchant.primaryContact.email;
+    data.contact.phone = merchant.primaryContact.phone;
+    ['contact.email', 'contact.phone'].forEach(fromProfile);
     if (registeredInCountry(merchant, country)) {
       data.business.localRegistrationNumber = merchant.registrationNumber;
       fromProfile('business.localRegistrationNumber');
@@ -537,10 +548,15 @@ export class MerchantServer {
       .sort((a, b) => b.updatedAt - a.updatedAt)[0];
     if (source) {
       const from = (field: string) => prefill.push({ field, from: 'application', applicationId: source.id, country: source.country });
-      if (source.data.business.merchantCategory) (data.business.merchantCategory = source.data.business.merchantCategory), from('business.merchantCategory');
-      if (source.data.business.industry) (data.business.industry = source.data.business.industry), from('business.industry');
-      if (source.data.business.website) (data.business.website = source.data.business.website), from('business.website');
-      if (source.data.contact.supportEmail) (data.contact.supportEmail = source.data.contact.supportEmail), from('contact.supportEmail');
+      const sb = source.data.business;
+      if (sb.incorporationDate) (data.business.incorporationDate = sb.incorporationDate), from('business.incorporationDate');
+      if (sb.industry) (data.business.industry = sb.industry), from('business.industry');
+      if (sb.website) (data.business.website = sb.website), from('business.website');
+      const st = source.data.transaction;
+      if (st?.merchantCategory) (data.transaction.merchantCategory = st.merchantCategory), from('transaction.merchantCategory');
+      if (st?.connectionType) (data.transaction.connectionType = st.connectionType), from('transaction.connectionType');
+      if (st?.ipnCallbackUrl) (data.transaction.ipnCallbackUrl = st.ipnCallbackUrl), from('transaction.ipnCallbackUrl');
+      if (source.data.contact.settlementEmails?.some(Boolean)) (data.contact.settlementEmails = [...source.data.contact.settlementEmails]), from('contact.settlementEmails');
       if (ONBOARDING_COUNTRIES[country].directors.required && source.data.directors.length) {
         data.directors = source.data.directors.map((d) => ({ ...d, id: randomToken(6) }));
         from('directors');
@@ -623,7 +639,7 @@ export class MerchantServer {
     if (req.decision === 'return' && !req.sections?.length) errors.push({ section: 'business', field: 'sections', message: 'Select at least one section to correct.' });
     if (errors.length && (this.strict || errors.some((e) => e.field === 'decision'))) fail(422, 'VALIDATION_FAILED', { errors });
     if (req.decision === 'return' && !req.sections?.length) {
-      const open = [...new Set(validateApplication(app.country, app.data, merchant).map((e) => e.section))];
+      const open = [...new Set(validateApplication(app.country, app.data, merchant).map((e) => e.section))].filter((x): x is SectionKey => x !== 'pricing');
       req.sections = open.length ? open : ['documents'];
     }
     if (!req.comment && req.decision === 'return') req.comment = 'Please review and update the highlighted sections, then resubmit.';
@@ -729,6 +745,17 @@ export class MerchantServer {
       case 'start_integration':
         move('keys_generated', 'integration', 'Merchant integration started');
         break;
+      case 'set_ipn': {
+        if (!['cs_configuration', 'keys_generated', 'integration', 'go_live_verification'].includes(app.status)) fail(409, 'INVALID_TRANSITION', { message: 'The IPN callback URL can be set during readiness only.' });
+        const url = str(body.url, 600).trim();
+        const problem = url ? ipnIssue(url) : 'Enter the IPN callback URL.';
+        if (problem) fail(422, 'VALIDATION_FAILED', { errors: [{ section: 'transaction', field: 'transaction.ipnCallbackUrl', message: problem }], message: problem });
+        if (url === app.data.transaction.ipnCallbackUrl) break;
+        const before = app.data.transaction.ipnCallbackUrl;
+        app.data.transaction.ipnCallbackUrl = url;
+        this.event(app, caller, role, before ? 'IPN callback URL changed' : 'IPN callback URL set', null, null, `${before ? `${before} → ` : ''}${url}`);
+        break;
+      }
       case 'request_go_live':
         requireDone('integration');
         move('integration', 'go_live_verification', 'Integration complete; go-live verification started');
@@ -758,6 +785,7 @@ export class MerchantServer {
     if (this.upgradePending || (db.schemaRevision ?? 0) < SCHEMA_REVISION) {
       fail(503, 'MIGRATION_PENDING', { message: 'Merchant data could not be upgraded yet, so go-live is paused. Nothing has changed; try again shortly.' });
     }
+    if (!app.data.transaction?.ipnCallbackUrl) fail(409, 'IPN_REQUIRED', { message: 'Set the IPN callback URL before go-live.' });
     const entityId = this.goLiveChecks(db, app).entityId;
     const open = app.readiness.go_live.filter((i) => !i.done);
     if (open.length && this.strict) fail(409, 'CHECKLIST_INCOMPLETE', { message: `Complete: ${open.map((i) => i.label).join('; ')}.` });
@@ -1079,7 +1107,7 @@ export class MerchantServer {
 
   private summary(db: MerchantDb, a: CountryApplication, m: MerchantRecord): ApplicationSummary {
     const mid = (db.mids ?? []).find((x) => x.applicationId === a.id);
-    return { id: a.id, merchantId: a.merchantId, merchantName: m.legalName, country: a.country, currency: a.currency, status: a.status, submissionCount: a.submissionCount, createdAt: a.createdAt, updatedAt: a.updatedAt, liveMid: mid ? { mid: mid.mid, source: mid.source } : null };
+    return { id: a.id, merchantId: a.merchantId, merchantName: m.legalName, country: a.country, currency: a.currency, status: a.status, priority: a.data.business.approvalPriority ?? 'medium', submissionCount: a.submissionCount, createdAt: a.createdAt, updatedAt: a.updatedAt, liveMid: mid ? { mid: mid.mid, source: mid.source } : null };
   }
 
   private event(app: CountryApplication, caller: Caller | null, role: StaffRole | 'system', action: string, from: ApplicationStatus | null, to: ApplicationStatus | null, comment?: string, sections?: SectionKey[]) {
@@ -1095,38 +1123,54 @@ export class MerchantServer {
     const base = emptyApplicationData(country);
     const b = raw?.business ?? {};
     const c = raw?.contact ?? {};
+    const t = raw?.transaction ?? {};
     base.business = {
+      approvalPriority: APPROVAL_PRIORITIES.includes(b.approvalPriority) ? b.approvalPriority : 'medium',
       tradingName: str(b.tradingName, 160),
-      businessType: str(b.businessType, 80),
-      merchantCategory: merchantCategoryLabel(b.merchantCategory) ? b.merchantCategory : '',
-      industry: str(b.industry, 80),
-      website: str(b.website, 200).trim(),
-      address: str(b.address, 400),
       localRegistrationNumber: str(b.localRegistrationNumber, 40).trim(),
+      incorporationDate: str(b.incorporationDate, 10).trim(),
+      businessType: str(b.businessType, 80),
       taxId: str(b.taxId, 40).trim(),
-      expectedMonthlyVolume: num(b.expectedMonthlyVolume),
+      secondaryTaxId: cfg.secondaryTaxId ? str(b.secondaryTaxId, 40).trim() : '',
+      website: str(b.website, 200).trim(),
+      industry: str(b.industry, 80),
+      address: str(b.address, 400),
     };
-    base.contact = { name: str(c.name, 120), email: str(c.email, 254).trim(), phone: str(c.phone, 30).trim(), supportEmail: str(c.supportEmail, 254).trim() };
+    const settlementEmails = (Array.isArray(c.settlementEmails) ? c.settlementEmails : []).slice(0, MAX_SETTLEMENT_EMAILS).map((e: unknown) => str(e, 254).trim());
+    base.contact = {
+      phone: str(c.phone, 30).trim(),
+      email: str(c.email, 254).trim(),
+      currentAddress: c.sameAsRegistered === true ? '' : str(c.currentAddress, 400),
+      sameAsRegistered: c.sameAsRegistered === true,
+      settlementEmails: settlementEmails.length ? settlementEmails : [''],
+    };
     for (const f of cfg.bankFields) base.bank[f.key] = str(raw?.bank?.[f.key], 120).trim();
+    base.transaction = {
+      dailyLimit: num(t.dailyLimit),
+      minTransactionValue: num(t.minTransactionValue),
+      merchantCategory: merchantCategoryLabel(t.merchantCategory) ? t.merchantCategory : '',
+      connectionType: connectionTypeLabel(t.connectionType) ? t.connectionType : '',
+      ipnCallbackUrl: str(t.ipnCallbackUrl, 500).trim(),
+      sendReceipts: t.sendReceipts === true,
+    };
     base.directors = (Array.isArray(raw?.directors) ? raw.directors : []).slice(0, 20).map(
       (d: any): Director => ({
         id: str(d?.id, 20) || randomToken(6),
         name: str(d?.name, 120),
+        contactNumber: str(d?.contactNumber, 30).trim(),
         nationality: str(d?.nationality, 60),
+        profileUrl: str(d?.profileUrl, 200).trim(),
         idNumber: str(d?.idNumber, 40),
-        role: ['director', 'beneficial_owner', 'director_and_owner'].includes(d?.role) ? d.role : 'director',
-        ownershipPct: num(d?.ownershipPct),
       }),
     );
+    // One file per document type: a later file replaces an earlier one.
     const docTypes = new Set(cfg.documents.map((d) => d.type));
-    base.documents = (Array.isArray(raw?.documents) ? raw.documents : [])
-      .filter((d: any) => docTypes.has(d?.type))
-      .slice(0, 40)
-      .map((d: any): DocumentRecord => ({ id: str(d.id, 20) || randomToken(6), type: d.type, fileName: str(d.fileName, 160), sizeKb: num(d.sizeKb) ?? 0, uploadedAt: num(d.uploadedAt) ?? this.now(), sample: d.sample !== false }));
-    base.pricing = cfg.paymentMethods.map((m) => {
-      const line = (Array.isArray(raw?.pricing) ? raw.pricing : []).find((p: any) => p?.code === m.code);
-      return { code: m.code, enabled: line?.enabled === true, mdr: line ? num(line.mdr) : m.defaultMdr };
-    });
+    const docs = new Map<string, DocumentRecord>();
+    for (const d of (Array.isArray(raw?.documents) ? raw.documents : []).slice(0, 40)) {
+      if (!docTypes.has(d?.type)) continue;
+      docs.set(d.type, { id: str(d.id, 20) || randomToken(6), type: d.type, fileName: str(d.fileName, 160), sizeKb: num(d.sizeKb) ?? 0, uploadedAt: num(d.uploadedAt) ?? this.now(), sample: d.sample !== false });
+    }
+    base.documents = [...docs.values()];
     return base;
   }
 
@@ -1195,8 +1239,9 @@ export class MerchantServer {
   }
 
   /**
-   * Seeds only a browser that has no merchant data. Existing data is never reseeded: unreadable
-   * data or data from another version is left in place (and backed up) and requests fail clearly.
+   * Seeds a browser that has no merchant data. Version 2 data (the earlier registration form) is
+   * backed up and replaced with the new demo data, once. Unreadable data or data from any other
+   * version is left in place (and backed up) and requests fail clearly.
    */
   private ensureSeeded() {
     const raw = this.opts.storage.getItem(this.storageKey);
@@ -1210,6 +1255,13 @@ export class MerchantServer {
       version = JSON.parse(raw)?.version;
     } catch {
       fail(500, 'DATA_UNREADABLE', { message: 'Stored merchant data could not be read. It has been left unchanged.' });
+    }
+    if (typeof version === 'number' && REPLACED_VERSIONS.includes(version)) {
+      const key = `${this.storageKey}.backup.v${version}`;
+      if (this.opts.storage.getItem(key) === null) this.opts.storage.setItem(key, raw);
+      const now = this.now();
+      this.save(normaliseMerchantDb(buildMerchantSeed(now, DB_VERSION), now).db);
+      return;
     }
     if (version !== DB_VERSION) {
       const key = `${this.storageKey}.backup.v${String(version)}`;
@@ -1259,6 +1311,9 @@ export class MerchantServer {
       if (!clash) {
         db.merchants.push(merchant);
         db.applications.push(...apps);
+        const products = extra.products.filter((p) => p && apps.some((a) => a.id === p.config.applicationId));
+        (db.productConfigs ??= []).push(...products.map((p) => p!.config));
+        (db.pricingVersions ??= []).push(...products.flatMap((p) => p!.versions));
       }
       done.add(id);
     }

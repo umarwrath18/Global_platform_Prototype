@@ -48,10 +48,9 @@ const pct = (n: number) => `${Number(n.toFixed(2))}%`;
 const day = (at: number) => new Date(at).toISOString().slice(0, 10);
 
 /**
- * Products, settlement and pricing for an application. Until products are first saved they are
- * worked out from the application: methods enabled in its pricing section are switched on, and the
- * Risk-approved MDR becomes a legacy pricing version only where the history records the approval
- * and the MDR is within the country's range. No settlement cycle is ever assumed.
+ * Products, settlement and pricing for an application. CS sets them in Product & Payment Config
+ * (the registration form no longer collects them): until products are first saved, every product
+ * is switched off and there is no pricing. No settlement cycle is ever assumed.
  */
 export function productState(db: MerchantDb, app: CountryApplication): ProductState {
   const methods = countryProducts(ONBOARDING_COUNTRIES[app.country]);
@@ -64,47 +63,13 @@ export function productState(db: MerchantDb, app: CountryApplication): ProductSt
   }
   const config: ProductConfig = {
     applicationId: app.id,
-    products: methods.map((m) => ({ methodCode: m.code, flow: m.flow, enabled: app.data.pricing.some((p) => p.code === m.code && p.enabled) })),
+    products: methods.map((m) => ({ methodCode: m.code, flow: m.flow, enabled: false })),
     settlement: {},
     revision: 0,
     savedAt: null,
     savedBy: null,
   };
-  return { config, versions: READINESS_STATUSES.includes(app.status) ? legacyVersions(app, methods) : [], inferred: true, methods };
-}
-
-function legacyVersions(app: CountryApplication, methods: ProductMethod[]): PricingVersion[] {
-  const approval = riskApproval(app);
-  if (!approval) return [];
-  return app.data.pricing
-    .filter((line) => line.enabled && line.mdr !== null)
-    .flatMap((line) => {
-      const m = methods.find((x) => x.code === line.code);
-      if (!m || line.mdr! < m.minMdr || line.mdr! > m.maxMdr) return [];
-      return [
-        {
-          id: `LEGACY-${app.id}-${m.code}`,
-          applicationId: app.id,
-          methodCode: m.code,
-          flow: m.flow,
-          mdrPct: line.mdr!,
-          effectiveFrom: approval.at,
-          state: 'approved' as const,
-          settlementCycleAtCreation: null,
-          source: 'legacy_application' as const,
-          createdBy: approval.by,
-          createdRole: 'risk',
-          createdAt: approval.at,
-          decidedBy: approval.by,
-          decidedRole: 'risk',
-          decidedAt: approval.at,
-          decisionComment: 'Risk-approved MDR from the country application',
-          cancelledBy: null,
-          cancelledAt: null,
-          cancelReason: null,
-        },
-      ];
-    });
+  return { config, versions: [], inferred: true, methods };
 }
 
 /** Stores worked-out products and legacy pricing the first time anything is saved, exactly as shown. */

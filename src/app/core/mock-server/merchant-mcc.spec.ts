@@ -71,7 +71,7 @@ describe('MCC management', () => {
       mcc.loadTestFixture();
       const cat: MccCatalogue = mcc.catalogue();
       expect(mccOptionsFor(cat, 'VN').map((o) => o.code)).toEqual(['5411', '8299']);
-      expect(mccOptionsFor(cat, 'TH').find((o) => o.code === '5814')?.availability).toBe('restricted');
+      expect(mccOptionsFor(cat, 'ID').find((o) => o.code === '5814')?.availability).toBe('restricted');
       expect(mccOptionsFor(cat, 'MY').find((o) => o.code === '7995')?.availability).toBe('restricted');
       expect(catalogueCovers(cat, 'SG')).toBe(false);
     });
@@ -101,8 +101,8 @@ describe('MCC management', () => {
     it('requires an MCC at submission only in countries the catalogue covers', async () => {
       mcc.load([{ code: '5411', description: 'Spec data – grocery', countries: { MY: 'available' } }], { kind: 'approved', name: 'Spec catalogue (test data)', version: '1' });
       const m = await newMerchant('Kedai Buku Sdn Bhd', '202401000101');
-      const ph = (await call<CountryApplication>('POST', `/api/merchants/${m.id}/applications`, { country: 'PH' })).body;
-      expect((await call<CountryApplication>('POST', `/api/applications/${ph.id}/submit`, { data: completeApplicationData('PH', m.legalName) })).body.status).toBe('pending_risk_review');
+      const id = (await call<CountryApplication>('POST', `/api/merchants/${m.id}/applications`, { country: 'ID' })).body;
+      expect((await call<CountryApplication>('POST', `/api/applications/${id.id}/submit`, { data: completeApplicationData('ID', m.legalName) })).body.status).toBe('pending_risk_review');
 
       const my = (await call<CountryApplication>('POST', `/api/merchants/${m.id}/applications`, { country: 'MY' })).body;
       const blocked = await call('POST', `/api/applications/${my.id}/submit`, { data: completeApplicationData('MY', m.legalName) });
@@ -117,9 +117,9 @@ describe('MCC management', () => {
 
     it('refuses a new country where the merchant’s MCC is not available', async () => {
       const m = await newMerchant('Gadget Hub Sdn Bhd', '202401000102');
-      await setMcc(m.id, '5732'); // available in Malaysia and Thailand only
+      await setMcc(m.id, '5732'); // available in Malaysia and Indonesia only
       expect(await call('POST', `/api/merchants/${m.id}/applications`, { country: 'VN' })).toMatchObject({ status: 422, body: { code: 'MCC_NOT_AVAILABLE' } });
-      expect((await call('POST', `/api/merchants/${m.id}/applications`, { country: 'TH' })).status).toBe(201);
+      expect((await call('POST', `/api/merchants/${m.id}/applications`, { country: 'ID' })).status).toBe(201);
     });
 
     it('allows a restricted MCC but records that it is restricted', async () => {
@@ -133,7 +133,7 @@ describe('MCC management', () => {
     beforeEach(() => mcc.loadTestFixture());
 
     it('changes the MCC only when Risk approves, recording a complete audit trail', async () => {
-      // GM-100101 is approved, with applications in MY, ID, VN and TH.
+      // GM-100101 is approved, with applications in MY, ID and VN.
       expect(await setMcc('GM-100101', '5411')).toMatchObject({ status: 409, body: { code: 'MCC_CHANGE_REQUIRED' } });
       expect((await request('GM-100101', '5411', 'too short')).status).toBe(422);
       expect((await request('GM-100101', '5411', undefined, 'risk')).status).toBe(403);
@@ -179,26 +179,26 @@ describe('MCC management', () => {
     });
 
     it('flags a restricted MCC to Risk without blocking it', async () => {
-      // GM-100105 is approved, with one application in Thailand, where 5814 is restricted.
+      // GM-100105 is approved, with applications in Indonesia (where 5814 is restricted) and Malaysia.
       const req = (await request('GM-100105', '5814')).body;
-      expect(req.restrictedIn).toEqual(['TH']);
+      expect(req.restrictedIn).toEqual(['ID']);
       expect((await decide('GM-100105', req.id, 'approve')).body.status).toBe('approved');
-      expect((await detail('GM-100105')).mccEvents[0]).toMatchObject({ outcome: 'change_approved', restrictedIn: ['TH'] });
+      expect((await detail('GM-100105')).mccEvents[0]).toMatchObject({ outcome: 'change_approved', restrictedIn: ['ID'] });
     });
 
     it('re-checks availability when Risk decides', async () => {
-      const req = (await request('GM-100105', '5732')).body; // TH available today
+      const req = (await request('GM-100105', '5732')).body; // available in ID and MY today
       mcc.load(MCC_TEST_FIXTURE.map((e) => (e.code === '5732' ? { ...e, countries: { MY: 'available' as const } } : e)), { kind: 'test_fixture', name: 'TEST FIXTURE – changed', version: 'test-2' });
       expect(await decide('GM-100105', req.id, 'approve')).toMatchObject({ status: 422, body: { code: 'MCC_NOT_AVAILABLE' } });
       expect((await detail('GM-100105')).mccRequest?.status).toBe('pending');
-      expect((await decide('GM-100105', req.id, 'reject', 'No longer available in Thailand')).body.status).toBe('rejected');
+      expect((await decide('GM-100105', req.id, 'reject', 'No longer available in Indonesia')).body.status).toBe('rejected');
     });
 
     it('allows MCC requests and decisions while suspended, but still blocks new countries', async () => {
       await call('POST', '/api/merchants/GM-100101/lifecycle', { action: 'suspend', reason: 'Chargeback ratio above threshold' }, 'risk');
       const req = (await request('GM-100101', '8299')).body;
       expect((await decide('GM-100101', req.id, 'approve')).body.status).toBe('approved');
-      expect(await call('POST', '/api/merchants/GM-100101/applications', { country: 'PH' })).toMatchObject({ status: 409, body: { code: 'MERCHANT_SUSPENDED' } });
+      expect(await call('POST', '/api/merchants/GM-100101/applications', { country: 'MY' })).toMatchObject({ status: 409, body: { code: 'MERCHANT_SUSPENDED' } });
     });
   });
 

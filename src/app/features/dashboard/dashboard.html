@@ -3,13 +3,7 @@
     <div class="portal-head">
       <div>
         <h1>Overview</h1>
-        <p class="sub">Merchant onboarding across {{ context()?.country ? context()!.country!.name : 'all countries' }} · {{ rangeLabel() }}</p>
-      </div>
-      <div class="head-side">
-        <span class="updated">Updated {{ rel(loadedAt()) }}</span>
-        <button type="button" class="btn sm" (click)="loadData()" [disabled]="dataLoading()" aria-label="Refresh">
-          <app-icon name="rotate" [size]="15" />Refresh
-        </button>
+        <p class="sub">Transactions across {{ context()?.country ? context()!.country!.name : 'all countries' }} · {{ rangeLabel() }}</p>
       </div>
     </div>
 
@@ -37,116 +31,23 @@
       </section>
     }
 
-    @if (dataLoading() && !merchants().length) {
-      <section class="kpis" aria-busy="true" aria-label="Loading">
-        @for (i of [1, 2, 3, 4, 5, 6]; track i) {<div class="kpi skel"><span></span><span></span></div>}
-      </section>
-    } @else if (dataError()) {
-      <section class="notice warn" role="alert">
-        <app-icon name="alert-circle" [size]="18" />
-        <div><strong>We couldn't load onboarding data.</strong> Check your connection and <button type="button" class="link-button" (click)="loadData()">try again</button>.</div>
-      </section>
-    } @else {
-      <section class="kpis" aria-label="Key figures">
-        @for (k of kpis(); track k.label) {
-          <a class="kpi" [routerLink]="k.link" [queryParams]="k.queue ? { queue: k.queue } : null">
-            <span class="k-label">{{ k.label }}</span>
-            <span class="k-value">{{ k.value }}</span>
-            <span class="k-foot">
-              @if (k.delta) {
-                <span class="k-delta" [class.up]="k.trend === 'up'">@if (k.trend === 'up') {<app-icon name="trend-up" [size]="14" />}{{ k.delta }}</span>
-              }
-              <span class="k-note">{{ k.note }}</span>
-            </span>
-            @if (k.spark) {
-              <svg class="spark" viewBox="0 0 140 36" preserveAspectRatio="none" aria-hidden="true"><path [attr.d]="sparkPath(k.spark)" /></svg>
-            }
-          </a>
-        }
-      </section>
+    <section class="kpis tx" aria-label="Transactions">
+      @for (k of kpis; track k) {
+        <div class="kpi">
+          <span class="k-label">{{ k }}@if (k === 'Volume') {<span class="k-cur"> ({{ volumeCurrency() }})</span>}</span>
+          <span class="k-value" aria-label="No data">—</span>
+          <span class="k-foot"><span class="k-note">No transaction data yet</span></span>
+        </div>
+      }
+    </section>
 
-      <div class="grid-main">
-        <section class="panel-card">
-          <div class="panel-head">
-            <div>
-              <h2>Pipeline</h2>
-              <p>{{ apps().length }} applications</p>
-            </div>
-            <a class="btn ghost sm" routerLink="/applications" [queryParams]="{ queue: 'all' }">View all<app-icon name="arrow-right" [size]="14" /></a>
-          </div>
-          <div class="stages">
-            @for (st of stages(); track st.label) {
-              <a class="stage" routerLink="/applications" [queryParams]="{ queue: st.queue }">
-                <span class="st-icon" [class]="'st-icon ' + st.tone"><app-icon [name]="st.icon" [size]="16" /></span>
-                <span class="st-label">{{ st.label }}</span>
-                <strong>{{ st.value }}</strong>
-              </a>
-            }
-            <div class="stage rate">
-              <span class="st-icon success"><app-icon name="check-circle" [size]="16" /></span>
-              <span class="st-label">Approval rate</span>
-              <strong>{{ approvalRate() !== null ? approvalRate() + '%' : '—' }}</strong>
-            </div>
-          </div>
-
-          <div class="by-country">
-            <div class="bc-head">
-              <h3>By country</h3>
-              <ul class="legend" aria-hidden="true">
-                @for (seg of segments; track seg.key) {<li><span class="sw" [class]="'sw ' + seg.key"></span>{{ seg.label }}</li>}
-              </ul>
-            </div>
-            @if (byCountry().length) {
-              <ul class="bars">
-                @for (r of byCountry(); track r.code) {
-                  <li>
-                    <span class="bar-label">{{ r.name }}</span>
-                    <span class="bar-track" role="img" [attr.aria-label]="r.name + ': ' + r.total + ' applications'">
-                      <span class="bar-fill" [style.width.%]="(r.total / maxCountry()) * 100">
-                        @for (p of r.parts; track p.key) {
-                          @if (p.value) {<span [class]="'seg ' + p.key" [style.flex]="p.value" [title]="p.label + ': ' + p.value"></span>}
-                        }
-                      </span>
-                    </span>
-                    <span class="bar-total">{{ r.total }}</span>
-                  </li>
-                }
-              </ul>
-            } @else {
-              <p class="muted-line">No applications match your filters. <button type="button" class="link-button" (click)="filters.clear()">Reset filters</button></p>
-            }
-          </div>
-        </section>
-
-        <section class="panel-card">
-          <div class="panel-head">
-            <div>
-              <h2>Needs attention</h2>
-              <p>{{ attention().length ? attention().length + ' open' : 'Nothing waiting' }}</p>
-            </div>
-          </div>
-          <ul class="att-list">
-            @for (a of attention().slice(0, 5); track a.app.id) {
-              <li>
-                <a [routerLink]="['/applications', a.app.id]">
-                  <span class="att-icon" [class]="'att-icon ' + a.tone"><app-icon [name]="a.icon" [size]="16" /></span>
-                  <span class="att-text">
-                    <strong>{{ a.title }}</strong>
-                    <span>{{ a.meta }} · {{ a.impact }}</span>
-                  </span>
-                  <app-icon name="chevron-right" [size]="16" class="chev" />
-                </a>
-              </li>
-            } @empty {
-              <li class="att-empty"><app-icon name="check-circle" [size]="18" />You're all caught up.</li>
-            }
-          </ul>
-          @if (attention().length > 5) {
-            <a class="att-more" routerLink="/applications" [queryParams]="{ queue: 'all' }">View {{ attention().length - 5 }} more</a>
-          }
-        </section>
+    <section class="panel-card tx-empty">
+      <div class="empty-state">
+        <div class="icon-tile"><app-icon name="card" /></div>
+        <h3>No transaction data yet</h3>
+        <p>Transaction figures appear here once merchants start processing payments. Merchant onboarding is on the <a routerLink="/applications">Applications</a> page.</p>
       </div>
-    }
+    </section>
 
     <section class="panel-card access">
       <div class="panel-head">

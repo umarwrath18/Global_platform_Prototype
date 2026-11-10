@@ -23,14 +23,16 @@ export function simulateVerification(merchant: Pick<GlobalMerchant, 'legalName' 
     detail: regNo ? `Registry record found for ${regNo}; the name matches "${merchant.legalName}".` : 'No registration number to look up.',
   });
 
-  const people = data.directors.length ? data.directors.map((d) => d.name) : [data.contact.name];
+  const people = data.directors.map((d) => d.name).filter((n) => n.trim());
   const flagged = people.filter((n) => WATCHLIST.includes(n.trim().toLowerCase()));
   checks.push({
     name: 'Sanctions & PEP screening',
-    result: flagged.length ? 'review' : 'pass',
+    result: flagged.length || !people.length ? 'review' : 'pass',
     detail: flagged.length
       ? `Possible watchlist match for ${flagged.join(', ')}. Review before deciding.`
-      : `No matches for ${people.length} ${people.length === 1 ? 'person' : 'people'} screened.`,
+      : people.length
+        ? `No matches for ${people.length} ${people.length === 1 ? 'person' : 'people'} screened.`
+        : 'No directors to screen.',
   });
 
   const holder = norm(data.bank['accountName'] ?? '');

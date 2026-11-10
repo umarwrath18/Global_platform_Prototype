@@ -33,7 +33,7 @@ export interface ChangeContext {
   notify: (event: 'change_requested' | 'change_decided', merchant: MerchantRecord, app: CountryApplication | null, audience: StaffRole[], title: string, body: string) => void;
 }
 
-const COUNTRY_SECTIONS: ChangeSection[] = ['business', 'bank', 'directors', 'documents'];
+const COUNTRY_SECTIONS: ChangeSection[] = ['business', 'bank', 'transaction', 'directors', 'documents'];
 const normReg = (s: string) => s.replace(/[^a-z0-9]/gi, '').toUpperCase();
 const str = (v: unknown, max = 200) => (typeof v === 'string' ? v.slice(0, max) : '');
 
@@ -128,7 +128,7 @@ export function requestCountryChange(ctx: ChangeContext, applicationId: string, 
   if (app.status === 'draft' || app.status === 'returned') fail(409, 'INVALID_TRANSITION', { message: 'This application is still editable; change it directly.' });
   if (!READINESS_STATUSES.includes(app.status)) fail(409, 'INVALID_TRANSITION', { message: 'Changes can be requested once Risk has approved this country.' });
   const section = body?.section as ChangeSection;
-  if (!COUNTRY_SECTIONS.includes(section)) fail(422, 'VALIDATION_FAILED', { message: 'Choose business details, bank account, directors or documents.' });
+  if (!COUNTRY_SECTIONS.includes(section)) fail(422, 'VALIDATION_FAILED', { message: 'Choose business details, bank account, transaction settings, directors or documents.' });
 
   const proposed = readCountrySection(ctx, app, section, body?.value);
   const cfg = ONBOARDING_COUNTRIES[app.country];

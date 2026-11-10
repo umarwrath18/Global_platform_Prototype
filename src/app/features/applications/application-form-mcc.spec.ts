@@ -13,7 +13,7 @@ const FIXTURE: MccCatalogue = {
   source: { kind: 'test_fixture', name: 'TEST FIXTURE – not an approved catalogue', version: 'test-1', loadedAt: 0 },
   entries: [
     { code: '5411', description: 'TEST – Grocery stores', countries: { MY: 'available' } },
-    { code: '5732', description: 'TEST – Electronics stores', countries: { TH: 'available' } },
+    { code: '5732', description: 'TEST – Electronics stores', countries: { VN: 'available' } },
   ],
 };
 
@@ -37,7 +37,7 @@ async function render(catalogue: MccCatalogue, locked = false, merchantMcc: { co
   f.componentRef.setInput('mccLocked', locked);
   await f.whenStable();
   const el = f.nativeElement as HTMLElement;
-  const field = () => el.querySelector('.f-field:has(#mcc), .f-field:has(label[for="mcc"])') as HTMLElement;
+  const field = () => el.querySelector('.f-field:has(label[for="mcc"])') as HTMLElement;
   return { f, el, api, field };
 }
 
@@ -45,9 +45,7 @@ describe('Application form – MCC field', () => {
   it('leaves MCC optional with an empty state when no catalogue covers the country, without inventing options', async () => {
     const { f, el, field } = await render(EMPTY_MCC_CATALOGUE);
     expect(field().querySelector('label .req')).toBeNull();
-    const select = el.querySelector('#mcc') as HTMLSelectElement;
-    expect(select.disabled).toBe(true);
-    expect([...select.options].map((o) => o.textContent?.trim())).toEqual(['No MCCs available']);
+    expect(el.querySelector('#mcc-options')).toBeNull();
     expect(field().textContent).toContain('No MCC catalogue covers Malaysia yet, so the MCC can be left empty.');
     expect((f.componentInstance as any).issues().some((i: any) => i.field === 'business.mcc')).toBe(false);
   });
@@ -58,40 +56,72 @@ describe('Application form – MCC field', () => {
     expect((f.componentInstance as any).issues().some((i: any) => i.field === 'business.mcc')).toBe(true);
   });
 
-  it('sits with the other Business information fields, after Industry', async () => {
+  it('sits with the other Business information fields, after Nature of business', async () => {
     const { el } = await render(FIXTURE);
-    const labels = [...el.querySelectorAll('.f-grid label')].map((l) => l.getAttribute('for'));
-    expect(labels.slice(0, 6)).toEqual(['tradingName', 'businessType', 'merchantCategory', 'industry', 'mcc', 'website']);
+    const labels = [...el.querySelectorAll('.f-grid > .f-field > label')].map((l) => l.getAttribute('for'));
+    expect(labels).toEqual(['priority', 'tradingName', 'businessName', 'localReg', 'incorporated', 'businessType', 'taxId', 'taxId2', 'website', 'industry', 'mcc', 'address']);
   });
 
-  it('submits with MCC empty when no catalogue covers the country', async () => {
-    const { f, api } = await render(EMPTY_MCC_CATALOGUE);
+  it('submits with MCC empty when no catalogue covers the country, after the confirmation', async () => {
+    const { f, el, api } = await render(EMPTY_MCC_CATALOGUE);
     const form = f.componentInstance as any;
-    await form.submit(); // guided mode: the first click asks to confirm the other missing items
-    await form.submit();
+    form.submit(); // guided mode: the first click asks to confirm the other missing items
+    form.submit();
+    f.detectChanges();
+    const dialog = el.querySelector('[role="alertdialog"]') as HTMLElement;
+    expect(dialog.querySelector('h2')?.textContent).toBe('Confirmation');
+    expect(dialog.textContent).toContain("You're about to register this merchant. Please confirm to proceed.");
+    expect([...dialog.querySelectorAll('button')].map((b) => b.textContent?.trim())).toEqual(['No', 'Confirm & Register']);
+    expect(api.submit).not.toHaveBeenCalled();
+    await form.confirmSubmit();
     expect(api.submit).toHaveBeenCalledTimes(1);
   });
 
-  it('offers the three merchant categories, requires one and saves the choice with the application', async () => {
+  it('closes the confirmation with No and submits nothing', async () => {
+    const { f, el, api } = await render(EMPTY_MCC_CATALOGUE);
+    const form = f.componentInstance as any;
+    form.confirmIncomplete.set(true);
+    form.submit();
+    f.detectChanges();
+    ([...el.querySelectorAll('[role="alertdialog"] button')] as HTMLButtonElement[]).find((b) => b.textContent?.trim() === 'No')!.click();
+    f.detectChanges();
+    expect(el.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(api.submit).not.toHaveBeenCalled();
+  });
+
+  it('offers Enterprise, SME and Micro as the merchant category, requires one and saves the choice', async () => {
     const { f, el } = await render(EMPTY_MCC_CATALOGUE);
     const form = f.componentInstance as any;
+    form.go('transaction');
+    f.detectChanges();
     const select = el.querySelector('#merchantCategory') as HTMLSelectElement;
-    expect([...select.options].map((o) => o.textContent?.trim())).toEqual(['Select merchant category', 'Payment Gateway & Business Entity (PGBE)', 'Payment Service Provider', 'Merchant']);
-    expect(form.issues().find((i: any) => i.field === 'business.merchantCategory')?.message).toBe('Select the merchant category.');
-    for (const value of ['pgbe', 'psp', 'merchant']) {
+    expect([...select.options].map((o) => o.textContent?.trim())).toEqual(['Select merchant category', 'Enterprise', 'SME', 'Micro']);
+    expect(el.querySelector('#merchantCategory-hint')?.textContent).toBe("The merchant's business size, used for risk monitoring and limits.");
+    expect(form.issues().find((i: any) => i.field === 'transaction.merchantCategory')?.message).toBe('Select the merchant category.');
+    for (const value of ['enterprise', 'sme', 'micro']) {
       select.value = value;
       select.dispatchEvent(new Event('change'));
       f.detectChanges();
-      expect(form.data().business.merchantCategory).toBe(value);
-      expect(form.issues().some((i: any) => i.field === 'business.merchantCategory')).toBe(false);
+      expect(form.data().transaction.merchantCategory).toBe(value);
+      expect(form.issues().some((i: any) => i.field === 'transaction.merchantCategory')).toBe(false);
     }
+    const conn = el.querySelector('#connectionType') as HTMLSelectElement;
+    expect([...conn.options].map((o) => o.textContent?.trim())).toEqual(['Select connection type', 'Direct Merchant', 'PSP', 'Payment Facilitator (aggregator)', 'Marketplace', 'Platform (SaaS)']);
   });
 
-  it("offers only the country's codes and confirms the save (regression: no confirmation was shown)", async () => {
+  it("offers only the country's codes, searchable, and confirms the save (regression: no confirmation was shown)", async () => {
     const { f, el, api } = await render(FIXTURE);
-    const options = [...el.querySelectorAll('#mcc option')].map((o) => o.textContent?.trim());
-    expect(options).toEqual(['Select MCC', '5411 – TEST – Grocery stores']);
-    const select = el.querySelector('#mcc') as HTMLSelectElement;
+    const options = [...el.querySelectorAll('#mcc-options option')].map((o) => o.textContent?.trim());
+    expect(options).toEqual(['5411 – TEST – Grocery stores']);
+    const search = el.querySelector('#mcc') as HTMLInputElement;
+    search.value = 'nothing like this';
+    search.dispatchEvent(new Event('input'));
+    f.detectChanges();
+    expect(el.querySelectorAll('#mcc-options option')).toHaveLength(0);
+    search.value = 'groc';
+    search.dispatchEvent(new Event('input'));
+    f.detectChanges();
+    const select = el.querySelector('#mcc-options') as HTMLSelectElement;
     select.value = '5411';
     select.dispatchEvent(new Event('change'));
     await vi.waitFor(async () => {
@@ -104,7 +134,7 @@ describe('Application form – MCC field', () => {
 
   it('after approval, sends MCC changes to a Risk request instead', async () => {
     const { el } = await render(FIXTURE, true);
-    expect(el.querySelector('#mcc')).toBeNull();
+    expect(el.querySelector('#mcc-options')).toBeNull();
     expect(el.textContent).toContain('the MCC can only change through a Risk-approved request');
   });
 });

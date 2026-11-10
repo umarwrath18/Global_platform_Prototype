@@ -11,7 +11,8 @@ import { AuthBridge, Caller, ServerReply } from './merchant-server';
 /** The only team that may change country configuration. */
 export const COUNTRY_CONFIG_EDITOR: StaffRole = 'sales';
 
-const DB_VERSION = 1;
+// 2: directors rules carry the ID label; ownership threshold removed. Older configuration is reset to the defaults.
+const DB_VERSION = 2;
 
 interface StoredCountry {
   config: CountryOnboardingConfig;

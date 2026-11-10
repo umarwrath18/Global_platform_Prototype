@@ -2,88 +2,126 @@
 @let data = d();
 @let c = cfg();
 
-<section class="sum" [class.flag]="flagged().has('business')">
+<section class="sum" [class.flag]="flagged().has('business')" [class.has-issues]="sectionIssues().business">
   <header>
     <h3>{{ label.business }}</h3>
     @if (flagged().has('business')) {<span class="tag warn">Update requested</span>}
+    @if (sectionIssues().business; as n) {<span class="tag danger">{{ n }} missing</span>}
     @if (editable()) {<button type="button" class="btn ghost sm" (click)="edit.emit('business')">Edit</button>}
   </header>
   <dl class="kv">
-    <div><dt>Legal name</dt><dd>{{ profile().legalName }}</dd></div>
-    <div><dt>Registered in</dt><dd>{{ countryName(profile().registrationCountry) }} · {{ profile().registrationNumber }}</dd></div>
-    <div><dt>Trading name</dt><dd>{{ data.business.tradingName || '—' }}</dd></div>
-    <div><dt>Business type</dt><dd>{{ data.business.businessType || '—' }}</dd></div>
-    <div><dt>Merchant category</dt><dd>{{ categoryLabel(data.business.merchantCategory) ?? '—' }}</dd></div>
-    <div><dt>Industry</dt><dd>{{ data.business.industry || '—' }}</dd></div>
+    <div><dt>Approval priority</dt><dd>{{ priorityLabel[data.business.approvalPriority] }}</dd></div>
+    <div><dt>Merchant trading name</dt><dd [class.missing]="miss('business.tradingName')">{{ miss('business.tradingName') ?? data.business.tradingName }}</dd></div>
+    <div><dt>Business name</dt><dd>{{ profile().legalName }}</dd></div>
+    <div><dt>{{ c.localRegistration.label }}</dt><dd [class.missing]="miss('business.localRegistrationNumber')">{{ miss('business.localRegistrationNumber') ?? (sameCountry() ? profile().registrationNumber : data.business.localRegistrationNumber || '—') }}</dd></div>
+    <div><dt>Date of incorporation</dt><dd [class.missing]="miss('business.incorporationDate')">{{ miss('business.incorporationDate') ?? (data.business.incorporationDate ? isoDate(data.business.incorporationDate) : '—') }}</dd></div>
+    <div><dt>Company type</dt><dd [class.missing]="miss('business.businessType')">{{ miss('business.businessType') ?? data.business.businessType }}</dd></div>
+    <div><dt>{{ c.taxId.label }}</dt><dd [class.missing]="miss('business.taxId')">{{ miss('business.taxId') ?? (data.business.taxId || '—') }}</dd></div>
+    @if (c.secondaryTaxId; as st) {
+      <div><dt>{{ st.label }}</dt><dd [class.missing]="miss('business.secondaryTaxId')">{{ miss('business.secondaryTaxId') ?? (data.business.secondaryTaxId || '—') }}</dd></div>
+    }
+    <div><dt>Website URL</dt><dd [class.missing]="miss('business.website')">{{ miss('business.website') ?? (data.business.website || '—') }}</dd></div>
+    <div><dt>Nature of business</dt><dd [class.missing]="miss('business.industry')">{{ miss('business.industry') ?? data.business.industry }}</dd></div>
     <div>
       <dt>MCC</dt>
-      <dd>
-        @if (mcc(); as m) {{{ m.code }} – {{ m.description }}} @else {Not captured}
+      <dd [class.missing]="miss('business.mcc')">
+        @if (miss('business.mcc'); as m) {{{ m }}} @else if (mcc(); as m) {{{ m.code }} – {{ m.description }}} @else {Not captured}
         @if (mccRestricted()) {<span class="tag warn">Restricted in {{ c.name }} – Risk review</span>}
       </dd>
     </div>
-    <div><dt>Website</dt><dd>{{ data.business.website || '—' }}</dd></div>
-    <div><dt>{{ c.localRegistration.label }}</dt><dd>{{ sameCountry() ? profile().registrationNumber : data.business.localRegistrationNumber || '—' }}</dd></div>
-    <div><dt>{{ c.taxId.label }}</dt><dd>{{ data.business.taxId || '—' }}</dd></div>
-    <div><dt>Expected monthly volume</dt><dd>{{ data.business.expectedMonthlyVolume !== null ? (c.currency + ' ' + data.business.expectedMonthlyVolume.toLocaleString('en-GB')) : '—' }}</dd></div>
-    <div class="wide"><dt>Business address in {{ c.name }}</dt><dd>{{ data.business.address || '—' }}</dd></div>
+    <div class="wide"><dt>Registered address</dt><dd [class.missing]="miss('business.address')">{{ miss('business.address') ?? data.business.address }}</dd></div>
   </dl>
 </section>
 
-<section class="sum" [class.flag]="flagged().has('contact')">
+<section class="sum" [class.flag]="flagged().has('contact')" [class.has-issues]="sectionIssues().contact">
   <header>
     <h3>{{ label.contact }}</h3>
     @if (flagged().has('contact')) {<span class="tag warn">Update requested</span>}
+    @if (sectionIssues().contact; as n) {<span class="tag danger">{{ n }} missing</span>}
     @if (editable()) {<button type="button" class="btn ghost sm" (click)="edit.emit('contact')">Edit</button>}
   </header>
   <dl class="kv">
-    <div><dt>{{ c.directors.required ? 'Contact' : 'Contact (legal representative)' }}</dt><dd>{{ data.contact.name || '—' }}</dd></div>
-    <div><dt>Email</dt><dd>{{ data.contact.email || '—' }}</dd></div>
-    <div><dt>Phone</dt><dd>{{ data.contact.phone || '—' }}</dd></div>
-    <div><dt>Support email</dt><dd>{{ data.contact.supportEmail || '—' }}</dd></div>
+    <div><dt>Phone number</dt><dd [class.missing]="miss('contact.phone')">{{ miss('contact.phone') ?? data.contact.phone }}</dd></div>
+    <div><dt>Email address</dt><dd [class.missing]="miss('contact.email')">{{ miss('contact.email') ?? data.contact.email }}</dd></div>
+    <div class="wide"><dt>Current address</dt><dd [class.missing]="miss('contact.currentAddress')">{{ miss('contact.currentAddress') ?? (data.contact.sameAsRegistered ? 'Same as registered address' : data.contact.currentAddress) }}</dd></div>
+    <div class="wide">
+      <dt>Settlement email(s)</dt>
+      <dd [class.missing]="miss('contact.settlementEmails')">
+        @if (miss('contact.settlementEmails'); as m) {{{ m }}} @else {{{ settlementEmails().join(', ') }}}
+      </dd>
+    </div>
   </dl>
 </section>
 
-<section class="sum" [class.flag]="flagged().has('bank')">
+<section class="sum" [class.flag]="flagged().has('bank')" [class.has-issues]="sectionIssues().bank">
   <header>
     <h3>{{ label.bank }}</h3>
     @if (flagged().has('bank')) {<span class="tag warn">Update requested</span>}
+    @if (sectionIssues().bank; as n) {<span class="tag danger">{{ n }} missing</span>}
     @if (editable()) {<button type="button" class="btn ghost sm" (click)="edit.emit('bank')">Edit</button>}
   </header>
   <dl class="kv">
     <div><dt>Settlement currency</dt><dd>{{ a.currency }}</dd></div>
     @for (f of c.bankFields; track f.key) {
-      <div><dt>{{ f.label }}</dt><dd>{{ f.key === 'accountNumber' ? maskAccount(data.bank[f.key]) : bankValue(f.key) }}</dd></div>
+      <div><dt>{{ f.label }}</dt><dd [class.missing]="miss('bank.' + f.key)">{{ miss('bank.' + f.key) ?? (f.key === 'accountNumber' ? maskAccount(data.bank[f.key]) : bankValue(f.key)) }}</dd></div>
     }
   </dl>
 </section>
 
-<section class="sum" [class.flag]="flagged().has('directors')">
+<section class="sum" [class.flag]="flagged().has('transaction')" [class.has-issues]="sectionIssues().transaction">
+  <header>
+    <h3>{{ label.transaction }}</h3>
+    @if (flagged().has('transaction')) {<span class="tag warn">Update requested</span>}
+    @if (sectionIssues().transaction; as n) {<span class="tag danger">{{ n }} missing</span>}
+    @if (editable()) {<button type="button" class="btn ghost sm" (click)="edit.emit('transaction')">Edit</button>}
+  </header>
+  @let t = data.transaction;
+  <dl class="kv">
+    <div><dt>Daily transaction limit</dt><dd [class.missing]="miss('transaction.dailyLimit')">{{ miss('transaction.dailyLimit') ?? (c.currency + ' ' + (t.dailyLimit | number)) }}</dd></div>
+    <div><dt>Minimum transaction value</dt><dd [class.missing]="miss('transaction.minTransactionValue')">{{ miss('transaction.minTransactionValue') ?? (t.minTransactionValue !== null ? c.currency + ' ' + (t.minTransactionValue | number) : '—') }}</dd></div>
+    <div><dt>Merchant category</dt><dd [class.missing]="miss('transaction.merchantCategory')">{{ miss('transaction.merchantCategory') ?? categoryLabel(t.merchantCategory) }}</dd></div>
+    <div><dt>Merchant connection type</dt><dd [class.missing]="miss('transaction.connectionType')">{{ miss('transaction.connectionType') ?? connectionLabel(t.connectionType) }}</dd></div>
+    <div class="wide"><dt>IPN callback URL</dt><dd [class.missing]="miss('transaction.ipnCallbackUrl')">{{ miss('transaction.ipnCallbackUrl') ?? (t.ipnCallbackUrl || 'Not set yet (required before go-live)') }}</dd></div>
+    <div><dt>Send payment receipts to customers</dt><dd>{{ t.sendReceipts ? 'On' : 'Off' }}</dd></div>
+  </dl>
+</section>
+
+<section class="sum" [class.flag]="flagged().has('directors')" [class.has-issues]="sectionIssues().directors">
   <header>
     <h3>{{ label.directors }}</h3>
     @if (flagged().has('directors')) {<span class="tag warn">Update requested</span>}
+    @if (sectionIssues().directors; as n) {<span class="tag danger">{{ n }} missing</span>}
     @if (editable() && c.directors.required) {<button type="button" class="btn ghost sm" (click)="edit.emit('directors')">Edit</button>}
   </header>
   @if (!c.directors.required) {
     <p class="muted">{{ c.directors.note }}</p>
   } @else if (data.directors.length) {
-    <table class="data-table">
-      <thead><tr><th scope="col">Name</th><th scope="col">Role</th><th scope="col">Nationality</th><th scope="col">ID / passport</th><th scope="col">Ownership</th></tr></thead>
-      <tbody>
-        @for (p of data.directors; track p.id) {
-          <tr><td>{{ p.name || '—' }}</td><td>{{ roleLabel[p.role] }}</td><td>{{ p.nationality || '—' }}</td><td>{{ p.idNumber || '—' }}</td><td>{{ p.ownershipPct !== null ? p.ownershipPct + '%' : '—' }}</td></tr>
-        }
-      </tbody>
-    </table>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th scope="col">Director name</th><th scope="col">Contact number</th><th scope="col">Nationality</th><th scope="col">{{ c.directors.idLabel }}</th><th scope="col">Website / LinkedIn</th></tr></thead>
+        <tbody>
+          @for (p of data.directors; track p.id; let i = $index) {
+            <tr>
+              <td [class.missing]="miss('directors.' + i + '.name')">{{ p.name || 'Missing' }}</td>
+              <td [class.missing]="miss('directors.' + i + '.contactNumber')">{{ p.contactNumber || 'Missing' }}</td>
+              <td [class.missing]="miss('directors.' + i + '.nationality')">{{ p.nationality || 'Missing' }}</td>
+              <td [class.missing]="miss('directors.' + i + '.idNumber')">{{ p.idNumber || 'Missing' }}</td>
+              <td>{{ p.profileUrl || '—' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
   } @else {
-    <p class="muted">No one added yet.</p>
+    <p class="muted" [class.missing]="miss('directors')">{{ miss('directors') ?? 'No directors added yet.' }}</p>
   }
 </section>
 
-<section class="sum" [class.flag]="flagged().has('documents')">
+<section class="sum" [class.flag]="flagged().has('documents')" [class.has-issues]="sectionIssues().documents">
   <header>
     <h3>{{ label.documents }}</h3>
     @if (flagged().has('documents')) {<span class="tag warn">Update requested</span>}
+    @if (sectionIssues().documents; as n) {<span class="tag danger">{{ n }} missing</span>}
     @if (editable()) {<button type="button" class="btn ghost sm" (click)="edit.emit('documents')">Edit</button>}
   </header>
   <ul class="docs">
@@ -95,30 +133,10 @@
           @for (f of x.files; track f.id) {
             <span>{{ f.fileName }} · {{ f.sizeKb }} KB · {{ date(f.uploadedAt) }}</span>
           } @empty {
-            <span class="muted">{{ x.rule.required ? 'Not uploaded' : 'Not provided' }}</span>
+            <span [class.muted]="!x.rule.required" [class.missing]="x.rule.required">{{ x.rule.required ? 'Not uploaded' : 'Not provided' }}</span>
           }
         </span>
       </li>
     }
   </ul>
-</section>
-
-<section class="sum" [class.flag]="flagged().has('pricing')">
-  <header>
-    <h3>{{ label.pricing }}</h3>
-    @if (flagged().has('pricing')) {<span class="tag warn">Update requested</span>}
-    @if (editable()) {<button type="button" class="btn ghost sm" (click)="edit.emit('pricing')">Edit</button>}
-  </header>
-  @if (pricing().length) {
-    <table class="data-table">
-      <thead><tr><th scope="col">Payment method</th><th scope="col">MDR</th><th scope="col">Allowed</th></tr></thead>
-      <tbody>
-        @for (x of pricing(); track x.m.code) {
-          <tr><td>{{ x.m.name }}</td><td class="mono">{{ x.line!.mdr }}%</td><td class="muted">{{ x.m.minMdr }}–{{ x.m.maxMdr }}%</td></tr>
-        }
-      </tbody>
-    </table>
-  } @else {
-    <p class="muted">No payment methods selected.</p>
-  }
 </section>

@@ -1,12 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MerchantApi, MerchantClientError, toMerchantError } from '../../core/merchants/merchant-api.service';
-import { ApplicationStatus, ApplicationSummary, StaffRole } from '../../core/merchants/merchant-models';
+import { APPROVAL_PRIORITY_LABEL, ApplicationStatus, ApplicationSummary, priorityRank, StaffRole } from '../../core/merchants/merchant-models';
 import { countryName } from '../../core/merchants/onboarding-config';
 import { StaffRoleService } from '../../core/merchants/staff-role.service';
 import { GlobalFilters } from '../../core/merchants/global-filters.service';
 import { Icon } from '../../shared/icon';
 import { StatusBadge, fmtDate, fmtRelative } from '../../shared/merchant-ui';
+import { OnboardingSummary } from './onboarding-summary';
 
 type QueueKey = 'sales' | 'risk' | 'cs' | 'rejected' | 'operational' | 'all';
 
@@ -26,7 +27,7 @@ const queueFor = (role: StaffRole): QueueKey => (role === 'finops' ? 'all' : rol
 @Component({
   selector: 'app-application-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Icon, StatusBadge],
+  imports: [RouterLink, Icon, StatusBadge, OnboardingSummary],
   templateUrl: './application-list.html',
   styles: `
     .tabs { display: flex; flex-wrap: wrap; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--border-soft); }
@@ -41,6 +42,9 @@ const queueFor = (role: StaffRole): QueueKey => (role === 'finops' ? 'all' : rol
     .toolbar .grow { flex: 1 1 260px; height: 36px; font-size: 13px; }
     .meta { margin-top: 2px; font-size: 12px; color: var(--text-muted); }
     .cur { margin-left: 4px; font-size: 12px; color: var(--text-muted); }
+    .prio { padding: 1px 8px; border-radius: 999px; background: var(--surface-muted); font-size: 12px; font-weight: 600; color: var(--text-muted); white-space: nowrap; }
+    .prio.urgent { background: var(--danger-bg); color: var(--danger); }
+    .prio.high { background: var(--warning-bg); color: var(--warning); }
   `,
 })
 export class ApplicationList {
@@ -58,6 +62,7 @@ export class ApplicationList {
 
   protected readonly queues = QUEUES;
   protected readonly countryName = countryName;
+  protected readonly priorityLabel = APPROVAL_PRIORITY_LABEL;
   protected readonly date = fmtDate;
   protected readonly rel = fmtRelative;
 
@@ -67,11 +72,13 @@ export class ApplicationList {
   protected readonly rows = computed(() => {
     const qd = this.current();
     const q = this.q().trim().toLowerCase();
-    return this.scoped().filter(
+    const rows = this.scoped().filter(
       (a) =>
         (!qd.statuses || qd.statuses.includes(a.status)) &&
         (!q || [a.id, a.merchantId, a.merchantName].join(' ').toLowerCase().includes(q)),
     );
+    // The Risk queue is ordered by approval priority, then the longest waiting.
+    return qd.key === 'risk' ? [...rows].sort((x, y) => priorityRank(x.priority) - priorityRank(y.priority) || x.updatedAt - y.updatedAt) : rows;
   });
 
   constructor() {

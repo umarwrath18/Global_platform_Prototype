@@ -3,6 +3,7 @@ import { ApplicationData, CountryApplication, StaffRole } from '../../merchants/
 import { ProductPricingView } from '../../merchants/products';
 import { ONBOARDING_COUNTRIES } from '../../merchants/onboarding-config';
 import { buildMerchantSeed } from '../merchant-seed';
+import { MERCHANT_DB_VERSION } from '../merchant-server';
 import type { MerchantDb, MerchantRecord } from '../merchant-server';
 
 // Test-only helpers for the merchant data upgrade and go-live retries.
@@ -38,8 +39,9 @@ export const FIXTURE_NOW = Date.UTC(2026, 8, 1);
 const DAY = 24 * 60 * 60_000;
 
 /**
- * Merchant data as the Phase 0 build stores it (version 2, no schemaRevision), built from the
- * demo seed plus the kinds of records a real browser can hold:
+ * Merchant data before the schema revision 3 upgrade (no schemaRevision, no entities or MIDs),
+ * in the current storage version, built from the demo seed plus the kinds of records a real
+ * browser can hold:
  * - GM-100109: created in the portal, live in MY with a Global Account created at go-live (GA-5001)
  * - GM-100101 suspended, with its lifecycle event
  * - APP-2026-0016: operational but with no go-live event in its history (edited or partial data)
@@ -47,7 +49,7 @@ const DAY = 24 * 60 * 60_000;
  * - APP-2026-0018: a second operational application for GM-100101 in Malaysia
  */
 export function v2Fixture(): MerchantDb {
-  const db = buildMerchantSeed(FIXTURE_NOW, 2);
+  const db = buildMerchantSeed(FIXTURE_NOW, MERCHANT_DB_VERSION);
   const ago = (d: number) => FIXTURE_NOW - d * DAY;
   const template = db.applications.find((a) => a.id === 'APP-2026-0001')!;
   const clone = (id: string, merchantId: string, country: string, history: CountryApplication['history']): CountryApplication => ({
@@ -100,13 +102,24 @@ export function v2Fixture(): MerchantDb {
 export function completeApplicationData(country: string, legalName: string): ApplicationData {
   const cfg = ONBOARDING_COUNTRIES[country];
   const d = emptyApplicationData(country);
-  const reg: Record<string, [string, string]> = { MY: ['', ''], ID: ['9120001234567', '012345678901000'], VN: ['0312345678', '0312345678'], TH: ['0105561234567', '0105561234567'], PH: ['CS201912345', '123456789'] };
-  d.business = { tradingName: legalName, businessType: cfg.businessTypes[0], merchantCategory: 'merchant', industry: 'Education', website: 'https://example.test', address: '1 Demo Street', localRegistrationNumber: reg[country][0], taxId: reg[country][1], expectedMonthlyVolume: 1000 };
-  d.contact = { name: 'Test Person', email: 'test@example.test', phone: '+60 12 345 6789', supportEmail: '' };
-  d.bank = Object.fromEntries(cfg.bankFields.map((f) => [f.key, f.key === 'accountNumber' ? '1234567890' : f.key === 'accountName' ? legalName : f.key === 'swiftCode' ? '' : 'Demo']));
-  d.directors = [{ id: 'x', name: 'Test Person', nationality: 'Malaysian', idNumber: 'A1', role: 'director_and_owner', ownershipPct: 100 }];
+  const reg: Record<string, [string, string]> = { MY: ['', 'C2584563202'], ID: ['9120001234567', '012345678901000'], VN: ['0312345678', '0312345678'] };
+  d.business = {
+    approvalPriority: 'medium',
+    tradingName: legalName,
+    localRegistrationNumber: reg[country][0],
+    incorporationDate: '2019-05-01',
+    businessType: cfg.businessTypes[0],
+    taxId: reg[country][1],
+    secondaryTaxId: '',
+    website: 'https://example.test',
+    industry: 'Education',
+    address: '1 Demo Street',
+  };
+  d.contact = { phone: `${cfg.dialCode} 12 345 6789`, email: 'test@example.test', currentAddress: '', sameAsRegistered: true, settlementEmails: ['finance@example.test'] };
+  d.bank = Object.fromEntries(cfg.bankFields.map((f) => [f.key, f.key === 'accountNumber' ? '1234567890' : f.key === 'accountName' ? legalName : f.required ? 'Demo' : '']));
+  d.transaction = { dailyLimit: 50000, minTransactionValue: null, merchantCategory: 'sme', connectionType: 'direct', ipnCallbackUrl: 'https://example.test/ipn', sendReceipts: false };
+  d.directors = [{ id: 'x', name: 'Test Person', contactNumber: `${cfg.dialCode} 12 345 6789`, nationality: 'Malaysian', profileUrl: '', idNumber: 'A1' }];
   d.documents = cfg.documents.filter((x) => x.required).map((x, i) => ({ id: `d${i}`, type: x.type, fileName: 'a.pdf', sizeKb: 10, uploadedAt: 0, sample: true }));
-  d.pricing = cfg.paymentMethods.map((m, i) => ({ code: m.code, enabled: i === 0, mdr: m.defaultMdr }));
   return d;
 }
 

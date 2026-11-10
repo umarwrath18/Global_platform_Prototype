@@ -46,7 +46,7 @@ describe('CountryConfigServer', () => {
   it('lets any signed-in user read the configuration of every onboarding country', async () => {
     expect((await config.handle('GET', '/api/config/countries', null, null)).status).toBe(401);
     const list = (await get<CountryConfigView[]>('/api/config/countries')).body;
-    expect(list.map((c) => c.config.code)).toEqual(['MY', 'ID', 'VN', 'TH', 'PH']);
+    expect(list.map((c) => c.config.code)).toEqual(['MY', 'ID', 'VN']);
     expect(list.every((c) => c.onboardingEnabled && c.version === 1 && c.updatedBy === null)).toBe(true);
     expect((await get('/api/config/countries/SG')).status).toBe(404);
   });
@@ -110,7 +110,7 @@ describe('CountryConfigServer', () => {
     expect(await fields((i) => i.documents.push({ type: 'Bad Type!', label: 'X', required: false }))).toContain('documents.4.type');
     expect(await fields((i) => (i.bankFields = i.bankFields.filter((f: any) => f.key !== 'swiftCode')))).toContain('bankFields');
     expect(await fields((i) => (i.directors.minCount = 0))).toContain('directors.minCount');
-    expect(await fields((i) => (i.directors.ownershipThresholdPct = 150))).toContain('directors.ownershipThresholdPct');
+    expect(await fields((i) => (i.directors.minCount = 25))).toContain('directors.minCount');
     expect(await fields((i) => (i.onboardingEnabled = false), { reason: 'no' })).toEqual(['reason']);
     expect((await put('MY', () => {})).body).toMatchObject({ code: 'VALIDATION_FAILED', message: 'There are no changes to save.' });
     // Nothing above was saved.
@@ -119,22 +119,22 @@ describe('CountryConfigServer', () => {
 
   it('records who changed what and why, and rejects edits based on an old version', async () => {
     now += 60_000;
-    await put('TH', (i) => {
-      i.bankFields.push({ key: 'promptPayId', label: 'PromptPay ID', required: false });
-      i.directors.ownershipThresholdPct = 10;
+    await put('ID', (i) => {
+      i.bankFields.push({ key: 'branchCode', label: 'Branch code', required: false });
+      i.directors.minCount = 2;
     });
-    const stale = await put('TH', (i) => (i.onboardingEnabled = false));
+    const stale = await put('ID', (i) => (i.onboardingEnabled = false));
     expect(stale).toMatchObject({ status: 409, body: { code: 'CONFIG_CONFLICT' } });
 
-    const detail = (await get<CountryConfigDetail>('/api/config/countries/TH')).body;
+    const detail = (await get<CountryConfigDetail>('/api/config/countries/ID')).body;
     expect(detail).toMatchObject({ version: 2, updatedBy: 'Sarah Lim', updatedAt: now });
     expect(detail.history).toEqual([
-      { at: now, country: 'TH', by: 'Sarah Lim', role: 'sales', reason: 'Approved by Risk policy update', version: 2, changes: ['Bank field added: PromptPay ID', 'Director and owner rules updated'] },
+      { at: now, country: 'ID', by: 'Sarah Lim', role: 'sales', reason: 'Approved by Risk policy update', version: 2, changes: ['Bank field added: Branch code', 'Director rules updated'] },
     ]);
     // A new bank field becomes part of the application data shape.
-    const m = (await call<GlobalMerchant>('POST', '/api/merchants', { legalName: 'Siam Tea Co Ltd', registrationCountry: 'TH', registrationNumber: '0105561234999', primaryContact: { name: 'Nok', email: 'nok@siamtea.test', phone: '+66 2 000 0000' } })).body;
-    const app = (await call<CountryApplication>('POST', `/api/merchants/${m.id}/applications`, { country: 'TH' })).body;
-    expect(app.data.bank).toHaveProperty('promptPayId', '');
+    const m = (await call<GlobalMerchant>('POST', '/api/merchants', { legalName: 'PT Teh Nusantara', registrationCountry: 'ID', registrationNumber: '9120001234999', primaryContact: { name: 'Nok', email: 'nok@teh.test', phone: '+62 21 000 0000' } })).body;
+    const app = (await call<CountryApplication>('POST', `/api/merchants/${m.id}/applications`, { country: 'ID' })).body;
+    expect(app.data.bank).toHaveProperty('branchCode', '');
   });
 
   it('keeps changes in storage, so they survive a reload', async () => {

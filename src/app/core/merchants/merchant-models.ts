@@ -108,25 +108,39 @@ export const GLOBAL_STATUS_LABEL: Record<GlobalMerchantStatus, string> = {
   no_active_applications: 'No active applications',
 };
 
-export type SectionKey = 'business' | 'contact' | 'bank' | 'directors' | 'documents' | 'pricing';
+export type SectionKey = 'business' | 'contact' | 'bank' | 'transaction' | 'directors' | 'documents';
+
+/** Where a field problem is. `pricing` is used by Product & Payment Config (Stage 4), not the application form. */
+export type IssueSection = SectionKey | 'pricing';
 
 export const SECTION_LABEL: Record<SectionKey | 'review', string> = {
   business: 'Business information',
   contact: 'Contact information',
   bank: 'Bank details',
-  directors: 'Directors & beneficial owners',
+  transaction: 'Transaction settings',
+  directors: 'Directors',
   documents: 'Documents',
-  pricing: 'Payment methods & pricing',
-  review: 'Review & submit',
+  review: 'Preview',
 };
+
+/** Orders the Risk review queue. Default: Medium. */
+export type ApprovalPriority = 'urgent' | 'high' | 'medium' | 'low';
+
+export const APPROVAL_PRIORITY_LABEL: Record<ApprovalPriority, string> = { urgent: 'Urgent', high: 'High', medium: 'Medium', low: 'Low' };
+export const APPROVAL_PRIORITIES = Object.keys(APPROVAL_PRIORITY_LABEL) as ApprovalPriority[];
+/** Sort rank: Urgent first. Unknown values sort as Medium. */
+export const priorityRank = (p: string | null | undefined) => ({ urgent: 0, high: 1, medium: 2, low: 3 })[p as ApprovalPriority] ?? 2;
 
 export interface Director {
   id: string;
   name: string;
+  /** Phone number including the country code, e.g. +60 12 345 6789. */
+  contactNumber: string;
   nationality: string;
+  /** Optional website or LinkedIn profile. */
+  profileUrl: string;
+  /** ID or passport number. The label depends on the country (NRIC, KTP, CCCD). */
   idNumber: string;
-  role: 'director' | 'beneficial_owner' | 'director_and_owner';
-  ownershipPct: number | null;
 }
 
 export interface DocumentRecord {
@@ -139,45 +153,75 @@ export interface DocumentRecord {
   sample: boolean;
 }
 
-export interface PricingLine {
-  code: string;
-  enabled: boolean;
-  /** Merchant discount rate, percent. */
-  mdr: number | null;
-}
+/** The merchant's business size, used for risk monitoring and limits. */
+export type MerchantCategory = 'enterprise' | 'sme' | 'micro';
 
-/** Mobi's internal merchant classification. Not the same as Industry or MCC. */
-export type MerchantCategory = 'pgbe' | 'psp' | 'merchant';
-
-export const MERCHANT_CATEGORY_LABEL: Record<MerchantCategory, string> = {
-  pgbe: 'Payment Gateway & Business Entity (PGBE)',
-  psp: 'Payment Service Provider',
-  merchant: 'Merchant',
-};
-
+export const MERCHANT_CATEGORY_LABEL: Record<MerchantCategory, string> = { enterprise: 'Enterprise', sme: 'SME', micro: 'Micro' };
+export const MERCHANT_CATEGORY_HINT = "The merchant's business size, used for risk monitoring and limits.";
 export const MERCHANT_CATEGORIES = Object.keys(MERCHANT_CATEGORY_LABEL) as MerchantCategory[];
 
 /** The label for a stored category, or null when it is empty or not one of the categories. */
 export const merchantCategoryLabel = (c: string | null | undefined): string | null => MERCHANT_CATEGORY_LABEL[c as MerchantCategory] ?? null;
 
+/** How the merchant connects to Mobi. */
+export type ConnectionType = 'direct' | 'psp' | 'payfac' | 'marketplace' | 'platform';
+
+export const CONNECTION_TYPE_LABEL: Record<ConnectionType, string> = {
+  direct: 'Direct Merchant',
+  psp: 'PSP',
+  payfac: 'Payment Facilitator (aggregator)',
+  marketplace: 'Marketplace',
+  platform: 'Platform (SaaS)',
+};
+export const CONNECTION_TYPES = Object.keys(CONNECTION_TYPE_LABEL) as ConnectionType[];
+export const connectionTypeLabel = (c: string | null | undefined): string | null => CONNECTION_TYPE_LABEL[c as ConnectionType] ?? null;
+
+export const MAX_SETTLEMENT_EMAILS = 4;
+
 export interface ApplicationData {
   business: {
+    approvalPriority: ApprovalPriority;
     tradingName: string;
-    businessType: string;
-    /** Absent on applications saved before the category was collected. */
-    merchantCategory?: MerchantCategory | '';
-    industry: string;
-    website: string;
-    address: string;
+    /** Local registration number (e.g. SSM, NIB, ERC). Taken from the profile when registered in the same country. */
     localRegistrationNumber: string;
+    /** YYYY-MM-DD. */
+    incorporationDate: string;
+    /** Company type. Options depend on the country. */
+    businessType: string;
     taxId: string;
-    expectedMonthlyVolume: number | null;
+    /** A second tax registration where the country has one (Malaysia: SST). */
+    secondaryTaxId: string;
+    website: string;
+    /** Nature of business. */
+    industry: string;
+    /** Registered address. */
+    address: string;
   };
-  contact: PrimaryContact & { supportEmail: string };
+  contact: {
+    /** Including the country code, e.g. +60 12 345 6789. */
+    phone: string;
+    email: string;
+    currentAddress: string;
+    /** The current address is the registered address. */
+    sameAsRegistered: boolean;
+    /** Who receives settlement reports. 1 to 4. */
+    settlementEmails: string[];
+  };
   bank: Record<string, string>;
+  transaction: {
+    /** Local currency. */
+    dailyLimit: number | null;
+    /** Local currency. Optional. */
+    minTransactionValue: number | null;
+    merchantCategory: MerchantCategory | '';
+    connectionType: ConnectionType | '';
+    /** https only. Required before go-live, not at submission. */
+    ipnCallbackUrl: string;
+    /** Send payment receipts to customers. */
+    sendReceipts: boolean;
+  };
   directors: Director[];
   documents: DocumentRecord[];
-  pricing: PricingLine[];
 }
 
 /** Where a field value was copied from when the application was created. */
@@ -268,6 +312,8 @@ export interface ApplicationSummary {
   country: string;
   currency: string;
   status: ApplicationStatus;
+  /** Approval priority from the application. Orders the Risk review queue. */
+  priority: ApprovalPriority;
   submissionCount: number;
   createdAt: number;
   updatedAt: number;
@@ -345,6 +391,7 @@ export type ReadinessAction =
   | { action: 'set_item'; stage: ReadinessStage; key: string; done: boolean }
   | { action: 'generate_keys' }
   | { action: 'start_integration' }
+  | { action: 'set_ipn'; url: string }
   | { action: 'request_go_live' }
   | { action: 'confirm_go_live' };
 
@@ -395,6 +442,7 @@ export type MerchantApiErrorCode =
   | 'INVALID_TRANSITION'
   | 'APPLICATION_INCOMPLETE'
   | 'CHECKLIST_INCOMPLETE'
+  | 'IPN_REQUIRED'
   | 'MERCHANT_SUSPENDED'
   | 'PERMISSION_REQUIRED'
   | 'CONFIG_CONFLICT'
@@ -424,7 +472,7 @@ export interface MerchantApiError {
 }
 
 export interface FieldIssue {
-  section: SectionKey;
+  section: IssueSection;
   field: string;
   message: string;
 }

@@ -1,20 +1,21 @@
-import { ApplicationData, Director, DocumentRecord, GlobalMerchant, merchantCategoryLabel, StaffRole } from './merchant-models';
+import { APPROVAL_PRIORITY_LABEL, ApplicationData, ApprovalPriority, connectionTypeLabel, Director, DocumentRecord, GlobalMerchant, merchantCategoryLabel, StaffRole } from './merchant-models';
 import { CountryOnboardingConfig, countryName } from './onboarding-config';
 
 // Changes after Risk approval. Once Risk has approved a merchant, anything Risk reviewed (legal
 // identity, and each country's business details, bank / settlement account, directors and
-// beneficial owners, and documents) changes only through a request that Risk approves. Contact
+// transaction settings, and documents) changes only through a request that Risk approves. Contact
 // details stay directly editable and are recorded. MCC, products and pricing keep their own flows.
 
 export type ChangeScope = 'merchant_profile' | 'country_details';
-export type ChangeSection = 'identity' | 'business' | 'bank' | 'directors' | 'documents';
+export type ChangeSection = 'identity' | 'business' | 'bank' | 'transaction' | 'directors' | 'documents';
 export type ChangeStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn';
 
 export const CHANGE_SECTION_LABEL: Record<ChangeSection, string> = {
   identity: 'Legal identity',
   business: 'Business details',
   bank: 'Bank / settlement account',
-  directors: 'Directors & beneficial owners',
+  transaction: 'Transaction settings',
+  directors: 'Directors',
   documents: 'Documents',
 };
 
@@ -29,7 +30,7 @@ export interface FieldChange {
 }
 
 export type IdentityValue = Pick<GlobalMerchant, 'legalName' | 'registrationCountry' | 'registrationNumber'>;
-export type SectionValue = IdentityValue | ApplicationData['business'] | ApplicationData['bank'] | Director[] | DocumentRecord[];
+export type SectionValue = IdentityValue | ApplicationData['business'] | ApplicationData['bank'] | ApplicationData['transaction'] | Director[] | DocumentRecord[];
 
 /** A change request as the server stores it. `proposed` (the full new value) is never sent to the browser. */
 export interface ChangeRequestRecord {
@@ -94,19 +95,28 @@ export function maskValue(value: string): string {
 const shown = (v: string | number | null | undefined) => (v === null || v === undefined || v === '' ? 'Not set' : String(v));
 
 const BUSINESS_LABEL: Record<keyof ApplicationData['business'], string> = {
-  tradingName: 'Trading name',
-  businessType: 'Business type',
-  merchantCategory: 'Merchant category',
-  industry: 'Industry',
-  website: 'Website',
-  address: 'Business address',
-  localRegistrationNumber: 'Local registration number',
-  taxId: 'Tax ID',
-  expectedMonthlyVolume: 'Expected monthly volume',
+  approvalPriority: 'Approval priority',
+  tradingName: 'Merchant trading name',
+  localRegistrationNumber: 'Business registration number',
+  incorporationDate: 'Date of incorporation',
+  businessType: 'Company type',
+  taxId: 'Tax registration number',
+  secondaryTaxId: 'Second tax registration number',
+  website: 'Website URL',
+  industry: 'Nature of business',
+  address: 'Registered address',
 };
 
-const ROLE_LABEL: Record<Director['role'], string> = { director: 'Director', beneficial_owner: 'Beneficial owner', director_and_owner: 'Director & owner' };
-const person = (d: Director) => `${d.name || 'Unnamed'} (${ROLE_LABEL[d.role]}${d.ownershipPct !== null ? `, ${d.ownershipPct}%` : ''})`;
+const TRANSACTION_LABEL: Record<keyof ApplicationData['transaction'], string> = {
+  dailyLimit: 'Daily transaction limit',
+  minTransactionValue: 'Minimum transaction value',
+  merchantCategory: 'Merchant category',
+  connectionType: 'Merchant connection type',
+  ipnCallbackUrl: 'IPN callback URL',
+  sendReceipts: 'Send payment receipts to customers',
+};
+
+const person = (d: Director) => `${d.name || 'Unnamed'} (${d.idNumber || 'no ID'})`;
 
 /** Field-by-field description of a change, with bank account numbers masked. */
 export function describeChange(section: ChangeSection, before: SectionValue, after: SectionValue, cfg?: CountryOnboardingConfig): FieldChange[] {
@@ -122,9 +132,18 @@ export function describeChange(section: ChangeSection, before: SectionValue, aft
     const a = before as ApplicationData['business'];
     const b = after as ApplicationData['business'];
     for (const key of Object.keys(BUSINESS_LABEL) as (keyof ApplicationData['business'])[]) {
-      const label = key === 'localRegistrationNumber' && cfg ? cfg.localRegistration.label : key === 'taxId' && cfg ? cfg.taxId.label : BUSINESS_LABEL[key];
-      const value = (v: (typeof a)[typeof key]) => (key === 'merchantCategory' ? (merchantCategoryLabel(v as string) ?? shown(v)) : shown(v));
-      add(`business.${key}`, label, value(a[key]), value(b[key]));
+      const label =
+        key === 'localRegistrationNumber' && cfg ? cfg.localRegistration.label : key === 'taxId' && cfg ? cfg.taxId.label : key === 'secondaryTaxId' && cfg?.secondaryTaxId ? cfg.secondaryTaxId.label : BUSINESS_LABEL[key];
+      const value = (v: string) => (key === 'approvalPriority' ? (APPROVAL_PRIORITY_LABEL[v as ApprovalPriority] ?? shown(v)) : shown(v));
+      add(`business.${key}`, label, value(a[key] ?? ''), value(b[key] ?? ''));
+    }
+  } else if (section === 'transaction') {
+    const a = before as ApplicationData['transaction'];
+    const b = after as ApplicationData['transaction'];
+    const value = (key: keyof ApplicationData['transaction'], v: unknown) =>
+      key === 'merchantCategory' ? (merchantCategoryLabel(v as string) ?? shown(v as string)) : key === 'connectionType' ? (connectionTypeLabel(v as string) ?? shown(v as string)) : key === 'sendReceipts' ? (v ? 'On' : 'Off') : shown(v as string | number | null);
+    for (const key of Object.keys(TRANSACTION_LABEL) as (keyof ApplicationData['transaction'])[]) {
+      add(`transaction.${key}`, key === 'dailyLimit' || key === 'minTransactionValue' ? `${TRANSACTION_LABEL[key]}${cfg ? ` (${cfg.currency})` : ''}` : TRANSACTION_LABEL[key], value(key, a?.[key]), value(key, b?.[key]));
     }
   } else if (section === 'bank') {
     const a = before as ApplicationData['bank'];
@@ -140,7 +159,7 @@ export function describeChange(section: ChangeSection, before: SectionValue, aft
     const a = (before as Director[]).map(person).join('; ');
     const b = (after as Director[]).map(person).join('; ');
     const idsChanged = JSON.stringify((before as Director[]).map(({ id: _, ...d }) => d)) !== JSON.stringify((after as Director[]).map(({ id: _, ...d }) => d));
-    if (idsChanged) out.push({ field: 'directors', label: 'Directors & beneficial owners', from: a || 'None', to: b || 'None' });
+    if (idsChanged) out.push({ field: 'directors', label: 'Directors', from: a || 'None', to: b || 'None' });
   } else {
     const list = (docs: DocumentRecord[]) => docs.map((d) => `${cfg?.documents.find((r) => r.type === d.type)?.label ?? d.type}: ${d.fileName}`).join('; ');
     const a = list(before as DocumentRecord[]);

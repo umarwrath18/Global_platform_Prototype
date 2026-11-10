@@ -5,6 +5,7 @@ import { DemoInboxService } from '../../shared/demo-inbox.service';
 import { AuthServer } from './auth-server';
 import { CountryConfigServer } from './country-config-server';
 import { MccCatalogueServer } from './mcc-catalogue-server';
+import { MCC_STANDARD_LIST, MCC_STANDARD_NAME, MCC_STANDARD_VERSION } from '../merchants/mcc-standard';
 import { MerchantPortalServer } from './merchant-portal-server';
 import { MerchantServer } from './merchant-server';
 import { isStrictValidation, setStrictValidation } from '../merchants/validation-mode';
@@ -25,7 +26,11 @@ export class MockBackend {
 
   readonly countryConfig = new CountryConfigServer({ storage: localStorage, auth: this.server });
 
-  readonly mcc = new MccCatalogueServer({ storage: localStorage, auth: this.server });
+  readonly mcc = new MccCatalogueServer({
+    storage: localStorage,
+    auth: this.server,
+    defaultCatalogue: { source: { kind: 'standard', name: MCC_STANDARD_NAME, version: MCC_STANDARD_VERSION, loadedAt: 0 }, entries: MCC_STANDARD_LIST },
+  });
 
   readonly merchants: MerchantServer = new MerchantServer({ storage: localStorage, auth: this.server, strictValidation: isStrictValidation, countryConfig: this.countryConfig, mcc: this.mcc });
 

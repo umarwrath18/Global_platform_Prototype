@@ -5,7 +5,7 @@ import { mccCountryCheck } from '../../core/merchants/mcc';
 import { MccService } from '../../core/merchants/mcc.service';
 import { MerchantApi, MerchantClientError, toMerchantError } from '../../core/merchants/merchant-api.service';
 import { ApplicationStatus, GlobalMerchant } from '../../core/merchants/merchant-models';
-import { ONBOARDING_COUNTRIES } from '../../core/merchants/onboarding-config';
+import { ONBOARDING_COUNTRIES, PLANNED_COUNTRIES } from '../../core/merchants/onboarding-config';
 import { StaffRoleService } from '../../core/merchants/staff-role.service';
 import { Icon } from '../../shared/icon';
 import { StatusBadge } from '../../shared/merchant-ui';
@@ -15,7 +15,6 @@ interface CountryOption {
   name: string;
   currency: string;
   documents: number;
-  methods: number;
   directors: boolean;
   paused: boolean;
   /** The merchant's MCC isn't available in this country. */
@@ -48,12 +47,22 @@ interface CountryOption {
           } @else if (c.mccBlocked) {
             <span class="c-note warn">MCC {{ merchant().mcc?.code }} isn't available in {{ c.name }}.</span>
           } @else {
-            <span class="c-note">{{ c.documents }} documents · {{ c.methods }} payment methods{{ c.directors ? ' · directors' : '' }}</span>
+            <span class="c-note">{{ c.documents }} required documents{{ c.directors ? ' · directors' : '' }}</span>
             @if (c.rejected) {
               <span class="c-note warn">{{ c.rejected }} was rejected. This starts a new application.</span>
             }
           }
         </label>
+      }
+      @for (p of planned; track p.code) {
+        <div class="c-card disabled planned" role="group" [attr.aria-label]="p.name + ' (planned)'">
+          <span class="c-top">
+            <span class="cc">{{ p.code }}</span>
+            <span class="c-name">{{ p.name }}</span>
+            <span class="tag">Planned</span>
+          </span>
+          <span class="c-note">Registration isn't open yet.</span>
+        </div>
       }
     </fieldset>
     @if (error(); as e) {
@@ -103,6 +112,10 @@ interface CountryOption {
     .c-card.disabled {
       background: var(--surface-page);
       cursor: default;
+    }
+    .c-card.planned {
+      color: var(--text-subtle);
+      border-style: dashed;
     }
     .c-card:focus-within {
       border-color: var(--mobi-blue);
@@ -157,6 +170,7 @@ export class CountryPicker {
   readonly applications = input.required<{ id: string; country: string; status: ApplicationStatus; createdAt: number }[]>();
   readonly opened = output<string>();
 
+  protected readonly planned = PLANNED_COUNTRIES;
   protected readonly selected = signal('');
   protected readonly busy = signal(false);
   protected readonly error = signal<MerchantClientError | null>(null);
@@ -173,7 +187,6 @@ export class CountryPicker {
         name: c.name,
         currency: c.currency,
         documents: c.documents.filter((d) => d.required).length,
-        methods: c.paymentMethods.length,
         directors: c.directors.required,
         paused: c.onboardingEnabled === false,
         mccBlocked: !!mcc && mccCountryCheck(this.mcc.catalogue(), mcc.code, [c.code]).unavailable.length > 0,

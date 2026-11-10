@@ -1,10 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { emptyApplicationData } from '../merchants/application-rules';
-import { ApplicationData, CountryApplication, GlobalMerchant, MerchantDetail, MerchantSummary, StaffRole } from '../merchants/merchant-models';
-import { ONBOARDING_COUNTRIES } from '../merchants/onboarding-config';
+import { CountryApplication, GlobalMerchant, MerchantDetail, MerchantSummary, StaffRole } from '../merchants/merchant-models';
 import { AuthServer } from './auth-server';
 import { MerchantServer } from './merchant-server';
-import { completeProductConfig } from './testing/merchant-test-data';
+import { completeApplicationData, completeProductConfig } from './testing/merchant-test-data';
 import { signIn } from './testing/sign-in';
 
 class MemoryStorage {
@@ -14,28 +12,14 @@ class MemoryStorage {
   removeItem = (k: string) => void this.data.delete(k);
 }
 
-function completeData(country: string, legalName: string): ApplicationData {
-  const cfg = ONBOARDING_COUNTRIES[country];
-  const d = emptyApplicationData(country);
-  d.business = { tradingName: legalName, businessType: cfg.businessTypes[0], merchantCategory: 'merchant', industry: 'Education', website: 'https://example.test', address: '1 Demo Street', localRegistrationNumber: '', taxId: '', expectedMonthlyVolume: 1000 };
-  if (country === 'TH') {
-    d.business.localRegistrationNumber = '0105561234567';
-    d.business.taxId = '0105561234567';
-  }
-  d.contact = { name: 'Test Person', email: 'test@example.test', phone: '+60 12 345 6789', supportEmail: '' };
-  d.bank = { bankName: 'Demo Bank', accountName: legalName, accountNumber: '1234567890', branch: 'Main' };
-  if (!cfg.bankFields.some((f) => f.key === 'branch')) delete d.bank['branch'];
-  d.directors = [{ id: 'x', name: 'Test Person', nationality: 'Malaysian', idNumber: 'A1', role: 'director_and_owner', ownershipPct: 100 }];
-  d.documents = cfg.documents.filter((x) => x.required).map((x, i) => ({ id: `d${i}`, type: x.type, fileName: 'a.pdf', sizeKb: 10, uploadedAt: 0, sample: true }));
-  d.pricing = cfg.paymentMethods.map((m, i) => ({ code: m.code, enabled: i === 0, mdr: m.defaultMdr }));
-  return d;
-}
+const completeData = completeApplicationData;
 
 describe('MerchantServer', () => {
   let now: number;
   let auth: AuthServer;
   let server: MerchantServer;
   let token: string;
+  let storage: MemoryStorage;
 
   const call = <T = any>(method: string, path: string, body: unknown = null, role: StaffRole = 'sales') =>
     server.handle(method, path, body, token, role) as Promise<{ status: number; body: T }>;
@@ -45,7 +29,7 @@ describe('MerchantServer', () => {
 
   beforeEach(async () => {
     now = Date.UTC(2026, 9, 25);
-    const storage = new MemoryStorage();
+    storage = new MemoryStorage();
     auth = new AuthServer({ storage, now: () => now, pbkdf2Iterations: 1000, sendEmail: () => {} });
     server = new MerchantServer({ storage, now: () => now, auth });
     token = await signIn(auth, '123');
@@ -62,8 +46,10 @@ describe('MerchantServer', () => {
     expect(trading.linkedAccountId).toBe('GA-1001');
     expect(trading.globalStatus).toBe('active');
     expect(Object.fromEntries(trading.applications.map((a) => [a.country, a.status]))).toEqual({
-      MY: 'operational', ID: 'operational', VN: 'operational', PH: 'rejected', TH: 'cs_configuration',
+      MY: 'operational', ID: 'operational', VN: 'operational',
     });
+    // Only launched countries have applications.
+    expect(new Set(list.flatMap((m) => m.applications.map((a) => a.country)))).toEqual(new Set(['MY', 'ID', 'VN']));
     expect(list.find((m) => m.id === 'GM-100108')!.applications).toHaveLength(0);
   });
 
@@ -105,18 +91,18 @@ describe('MerchantServer', () => {
     expect(again.body).toMatchObject({ code: 'APPLICATION_EXISTS', existingApplicationId: app.id });
 
     // Country expansion: same merchant, new application, no new Global Merchant.
-    const th = (await call<CountryApplication>('POST', `/api/merchants/${m.id}/applications`, { country: 'TH' })).body;
-    expect(th.merchantId).toBe(m.id);
-    expect(th.data.business.localRegistrationNumber).toBe('');
-    expect(th.data.bank).toEqual({ bankName: '', branch: '', accountName: '', accountNumber: '' });
+    const id = (await call<CountryApplication>('POST', `/api/merchants/${m.id}/applications`, { country: 'ID' })).body;
+    expect(id.merchantId).toBe(m.id);
+    expect(id.data.business.localRegistrationNumber).toBe('');
+    expect(id.data.bank).toEqual({ bankName: '', accountName: '', accountNumber: '', bankCode: '' });
     const detail = (await call<MerchantDetail>('GET', `/api/merchants/${m.id}`)).body;
-    expect(detail.applications.map((a) => a.country)).toEqual(['MY', 'TH']);
+    expect(detail.applications.map((a) => a.country)).toEqual(['MY', 'ID']);
     expect((await call<MerchantSummary[]>('GET', '/api/merchants')).body).toHaveLength(10);
   });
 
   it('copies directors from an existing application when expanding', async () => {
-    const res = await call<CountryApplication>('POST', '/api/merchants/GM-100105/applications', { country: 'MY' });
-    expect(res.body.data.directors.map((d) => d.name)).toEqual(['Somchai Prasert']);
+    const res = await call<CountryApplication>('POST', '/api/merchants/GM-100105/applications', { country: 'VN' });
+    expect(res.body.data.directors.map((d) => d.name)).toEqual(['Made Wirawan']);
     expect(res.body.data.bank['accountNumber']).toBe('');
     expect(res.body.data.documents).toEqual([]);
   });
@@ -128,26 +114,60 @@ describe('MerchantServer', () => {
     expect(res.status).toBe(422);
     expect(res.body.code).toBe('APPLICATION_INCOMPLETE');
     const fields = res.body.errors.map((e: any) => e.field);
-    expect(fields).toEqual(expect.arrayContaining(['documents.ssm_profile', 'bank.accountNumber', 'pricing', 'business.merchantCategory']));
+    expect(fields).toEqual(expect.arrayContaining(['documents.ssm_profile', 'bank.accountNumber', 'business.incorporationDate', 'transaction.dailyLimit', 'transaction.merchantCategory', 'transaction.connectionType', 'directors']));
+    expect(fields).not.toContain('transaction.ipnCallbackUrl');
 
     const data = completeData('MY', m.legalName);
-    data.pricing[0].mdr = 9;
+    data.transaction.minTransactionValue = 999_999;
     const bad = await call('POST', `/api/applications/${app.id}/submit`, { data });
-    expect(bad.body.errors).toEqual([expect.objectContaining({ field: 'pricing.MY_CARDS' })]);
+    expect(bad.body.errors).toEqual([expect.objectContaining({ field: 'transaction.minTransactionValue' })]);
   });
 
-  it('stores the merchant category with the application and keeps it in what Risk reviews', async () => {
+  it('stores the transaction settings with the application and keeps them in what Risk reviews', async () => {
     const m = await newMerchant();
     const id = (await call<CountryApplication>('POST', `/api/merchants/${m.id}/applications`, { country: 'MY' })).body.id;
     const data = completeData('MY', m.legalName);
-    (data.business as any).merchantCategory = 'not-a-category';
-    expect((await call<CountryApplication>('PUT', `/api/applications/${id}`, { data })).body.data.business.merchantCategory).toBe('');
-    data.business.merchantCategory = 'psp';
+    (data.transaction as any).merchantCategory = 'not-a-category';
+    (data.transaction as any).connectionType = 'nope';
+    const saved = (await call<CountryApplication>('PUT', `/api/applications/${id}`, { data })).body.data.transaction;
+    expect([saved.merchantCategory, saved.connectionType]).toEqual(['', '']);
+    data.transaction.merchantCategory = 'enterprise';
+    data.transaction.connectionType = 'payfac';
+    data.transaction.sendReceipts = true;
     await call('PUT', `/api/applications/${id}`, { data });
     const submitted = (await call<CountryApplication>('POST', `/api/applications/${id}/submit`, {})).body;
     expect(submitted.status).toBe('pending_risk_review');
     const risk = (await call<any>('GET', `/api/applications/${id}`, null, 'risk')).body.application as CountryApplication;
-    expect(risk.data.business.merchantCategory).toBe('psp');
+    expect(risk.data.transaction).toEqual(expect.objectContaining({ merchantCategory: 'enterprise', connectionType: 'payfac', sendReceipts: true }));
+  });
+
+  it('validates country-specific fields, dates, settlement emails and the IPN URL', async () => {
+    const m = await newMerchant();
+    const id = (await call<CountryApplication>('POST', `/api/merchants/${m.id}/applications`, { country: 'MY' })).body.id;
+    const data = completeData('MY', m.legalName);
+    data.business.incorporationDate = '2999-01-01';
+    data.contact.settlementEmails = ['a@x.test', 'a@x.test', 'b@x.test', 'c@x.test', 'd@x.test'];
+    data.transaction.ipnCallbackUrl = 'http://insecure.test/ipn';
+    const res = await call<CountryApplication>('PUT', `/api/applications/${id}`, { data });
+    expect(res.body.data.contact.settlementEmails).toHaveLength(4);
+    const fields = (await call('POST', `/api/applications/${id}/submit`, {})).body.errors.map((e: any) => e.field);
+    expect(fields).toEqual(expect.arrayContaining(['business.incorporationDate', 'contact.settlementEmails.1', 'transaction.ipnCallbackUrl']));
+  });
+
+  it('keeps one file per document type', async () => {
+    const m = await newMerchant();
+    const id = (await call<CountryApplication>('POST', `/api/merchants/${m.id}/applications`, { country: 'MY' })).body.id;
+    const data = completeData('MY', m.legalName);
+    data.documents.push({ id: 'new', type: 'ssm_profile', fileName: 'newer.pdf', sizeKb: 12, uploadedAt: 1, sample: false });
+    const saved = (await call<CountryApplication>('PUT', `/api/applications/${id}`, { data })).body.data.documents;
+    expect(saved.filter((d) => d.type === 'ssm_profile').map((d) => d.fileName)).toEqual(['newer.pdf']);
+  });
+
+  it('only offers launched countries', async () => {
+    const m = await newMerchant();
+    for (const country of ['TH', 'PH', 'IN', 'AE']) {
+      expect((await call('POST', `/api/merchants/${m.id}/applications`, { country })).body.code).toBe('COUNTRY_NOT_SUPPORTED');
+    }
   });
 
   it('runs the full journey: return, resubmit with the same ID, approve, CS readiness, go-live', async () => {
@@ -202,40 +222,51 @@ describe('MerchantServer', () => {
   });
 
   it('activates the country on the linked Global Account at go-live only', async () => {
-    const countries = async () => ((await auth.handle('GET', '/api/auth/session', null, token)).body as any).countries.map((c: any) => `${c.code}:${c.status}`);
-    expect(await countries()).toContain('TH:pending');
-    const id = 'APP-2026-0010';
+    const countries = () => JSON.parse(storage.getItem('mobi.gp.mockdb')!).accounts.find((x: any) => x.id === 'GA-4004').countries.map((c: any) => `${c.code}:${c.status}`);
+    expect(countries()).toContain('MY:pending');
+    const id = 'APP-2026-0012';
+    await call('POST', `/api/applications/${id}/review`, { decision: 'approve', evidenceReviewed: true }, 'risk');
+    await call('POST', `/api/applications/${id}/readiness`, { action: 'start_configuration' }, 'cs');
     await completeProductConfig(call, id);
-    for (const key of ['merchant_portal']) await call('POST', `/api/applications/${id}/readiness`, { action: 'set_item', stage: 'configuration', key, done: true }, 'cs');
+    for (const key of ['settlement_account', 'merchant_portal']) await call('POST', `/api/applications/${id}/readiness`, { action: 'set_item', stage: 'configuration', key, done: true }, 'cs');
     await call('POST', `/api/applications/${id}/readiness`, { action: 'generate_keys' }, 'cs');
     await call('POST', `/api/applications/${id}/readiness`, { action: 'start_integration' }, 'cs');
-    expect(await countries()).toContain('TH:pending');
+    expect(countries()).toContain('MY:pending');
     for (const key of ['docs_shared', 'sandbox_tests', 'webhook_verified']) await call('POST', `/api/applications/${id}/readiness`, { action: 'set_item', stage: 'integration', key, done: true }, 'cs');
     await call('POST', `/api/applications/${id}/readiness`, { action: 'request_go_live' }, 'cs');
     for (const key of ['live_transaction', 'settlement_test', 'merchant_signoff']) await call('POST', `/api/applications/${id}/readiness`, { action: 'set_item', stage: 'go_live', key, done: true }, 'cs');
+
+    // The IPN callback URL is required before go-live; CS can set it during readiness.
+    expect((await call('POST', `/api/applications/${id}/readiness`, { action: 'confirm_go_live' }, 'cs')).body).toMatchObject({ code: 'IPN_REQUIRED' });
+    expect((await call('POST', `/api/applications/${id}/readiness`, { action: 'set_ipn', url: 'http://lumihome.example/ipn' }, 'cs')).status).toBe(422);
+    expect((await call('POST', `/api/applications/${id}/readiness`, { action: 'set_ipn', url: 'https://lumihome.example/ipn' }, 'sales')).status).toBe(403);
+    const set = (await call<CountryApplication>('POST', `/api/applications/${id}/readiness`, { action: 'set_ipn', url: 'https://lumihome.example/ipn' }, 'cs')).body;
+    expect(set.data.transaction.ipnCallbackUrl).toBe('https://lumihome.example/ipn');
+    expect(set.history.map((h) => h.action)).toContain('IPN callback URL set');
+
     await call('POST', `/api/applications/${id}/readiness`, { action: 'confirm_go_live' }, 'cs');
-    expect(await countries()).toContain('TH:active');
+    expect(countries()).toContain('MY:active');
     // Other countries are untouched.
-    expect(await countries()).toContain('PH:failed');
+    expect(countries()).toContain('VN:failed');
   });
 
   it('keeps rejected applications and starts a new one on retry', async () => {
-    const res = await call<CountryApplication>('POST', '/api/merchants/GM-100101/applications', { country: 'PH' });
+    const res = await call<CountryApplication>('POST', '/api/merchants/GM-100102/applications', { country: 'VN' });
     expect(res.status).toBe(201);
-    expect(res.body.id).not.toBe('APP-2026-0006');
-    expect(res.body.previousApplicationId).toBe('APP-2026-0006');
-    const old = (await call<any>('GET', '/api/applications/APP-2026-0006')).body.application as CountryApplication;
+    expect(res.body.id).not.toBe('APP-2026-0008');
+    expect(res.body.previousApplicationId).toBe('APP-2026-0008');
+    const old = (await call<any>('GET', '/api/applications/APP-2026-0008')).body.application as CountryApplication;
     expect(old.status).toBe('rejected');
 
     // A rejected application is final.
-    expect((await call('POST', '/api/applications/APP-2026-0006/submit', {})).status).toBe(409);
-    expect((await call('PUT', '/api/applications/APP-2026-0006', { data: old.data })).status).toBe(409);
+    expect((await call('POST', '/api/applications/APP-2026-0008/submit', {})).status).toBe(409);
+    expect((await call('PUT', '/api/applications/APP-2026-0008', { data: old.data })).status).toBe(409);
   });
 
   it('rejects and approves independently per country', async () => {
     await call('POST', '/api/applications/APP-2026-0012/review', { decision: 'reject', comment: 'Not within risk appetite.', evidenceReviewed: true }, 'risk');
     const detail = (await call<MerchantDetail>('GET', '/api/merchants/GM-100102')).body;
-    expect(detail.applications.map((a) => a.status)).toEqual(['rejected', 'rejected']);
+    expect(detail.applications.map((a) => a.status).sort()).toEqual(['rejected', 'rejected']);
     expect(detail.merchant.globalStatus).toBe('no_active_applications');
     const trading = (await call<MerchantDetail>('GET', '/api/merchants/GM-100101')).body;
     expect(trading.applications.filter((a) => a.status === 'operational')).toHaveLength(3);
@@ -310,26 +341,26 @@ describe('MerchantServer', () => {
     });
 
     it('blocks new countries and go-live while suspended, but lets existing applications continue review', async () => {
-      const ph = (await call<CountryApplication>('POST', '/api/merchants/GM-100101/applications', { country: 'PH' })).body.id;
-      const data = completeData('PH', 'Tanjung Global Trading Sdn Bhd');
-      data.business.localRegistrationNumber = 'CS201912345';
-      data.business.taxId = '123456789';
-      await lifecycle('GM-100101', 'suspend', 'risk');
+      // GM-109001 (Nusantara) is live in MY and ID; it applies for VN, then is suspended.
+      const vn = (await call<CountryApplication>('POST', '/api/merchants/GM-109001/applications', { country: 'VN' })).body.id;
+      const data = completeData('VN', 'Nusantara Home Retail Sdn Bhd');
+      await lifecycle('GM-109001', 'suspend', 'risk');
 
       // New merchant-level activity is refused.
-      expect((await call('POST', '/api/merchants/GM-100101/applications', { country: 'TH' })).body).toMatchObject({ code: 'MERCHANT_SUSPENDED' });
+      expect((await call('POST', '/api/merchants/GM-109001/applications', { country: 'MY' })).body).toMatchObject({ code: 'MERCHANT_SUSPENDED' });
 
-      // The existing PH application can be edited, submitted and approved by Risk.
-      expect((await call('PUT', `/api/applications/${ph}`, { data })).status).toBe(200);
-      expect((await call<CountryApplication>('POST', `/api/applications/${ph}/submit`, {})).body.status).toBe('pending_risk_review');
-      expect((await call<CountryApplication>('POST', `/api/applications/${ph}/review`, { decision: 'approve', evidenceReviewed: true }, 'risk')).body.status).toBe('risk_approved');
+      // The existing VN application can be edited, submitted and approved by Risk.
+      expect((await call('PUT', `/api/applications/${vn}`, { data })).status).toBe(200);
+      expect((await call<CountryApplication>('POST', `/api/applications/${vn}/submit`, {})).body.status).toBe('pending_risk_review');
+      expect((await call<CountryApplication>('POST', `/api/applications/${vn}/review`, { decision: 'approve', evidenceReviewed: true }, 'risk')).body.status).toBe('risk_approved');
 
-      // CS can work through readiness for APP-2026-0010, up to go-live.
-      const ready = (action: object) => call<CountryApplication>('POST', '/api/applications/APP-2026-0010/readiness', action, 'cs');
+      // CS can work through readiness, up to go-live.
+      const ready = (action: object) => call<CountryApplication>('POST', `/api/applications/${vn}/readiness`, action, 'cs');
       const tick = async (stage: string, keys: string[]) => {
         for (const key of keys) expect((await ready({ action: 'set_item', stage, key, done: true })).status).toBe(200);
       };
-      await completeProductConfig(call, 'APP-2026-0010');
+      expect((await ready({ action: 'start_configuration' })).body.status).toBe('cs_configuration');
+      await completeProductConfig(call, vn);
       await tick('configuration', ['settlement_account', 'merchant_portal']);
       expect((await ready({ action: 'generate_keys' })).body.status).toBe('keys_generated');
       expect((await ready({ action: 'start_integration' })).body.status).toBe('integration');
@@ -339,29 +370,27 @@ describe('MerchantServer', () => {
 
       // Go-live itself is refused and changes nothing.
       expect(await ready({ action: 'confirm_go_live' })).toMatchObject({ status: 409, body: { code: 'MERCHANT_SUSPENDED' } });
-      const held = (await call<any>('GET', '/api/applications/APP-2026-0010')).body.application as CountryApplication;
+      const held = (await call<any>('GET', `/api/applications/${vn}`)).body.application as CountryApplication;
       expect(held.status).toBe('go_live_verification');
       expect(held.history.some((h) => /activated on Global Account/.test(h.action))).toBe(false);
 
-      await lifecycle('GM-100101', 'reactivate', 'risk', 'Reviewed and cleared');
+      await lifecycle('GM-109001', 'reactivate', 'risk', 'Reviewed and cleared');
       expect((await ready({ action: 'confirm_go_live' })).body.status).toBe('operational');
-      expect((await call<MerchantDetail>('GET', '/api/merchants/GM-100101')).body.merchant.lifecycleStatus).toBe('active');
+      expect((await call<MerchantDetail>('GET', '/api/merchants/GM-109001')).body.merchant.lifecycleStatus).toBe('active');
     });
 
     it('lets Risk return or reject applications of a suspended merchant', async () => {
-      const id = (await call<CountryApplication>('POST', '/api/merchants/GM-100101/applications', { country: 'PH' })).body.id;
-      const data = completeData('PH', 'Tanjung Global Trading Sdn Bhd');
-      data.business.localRegistrationNumber = 'CS201912345';
-      data.business.taxId = '123456789';
+      const id = (await call<CountryApplication>('POST', '/api/merchants/GM-109001/applications', { country: 'VN' })).body.id;
+      const data = completeData('VN', 'Nusantara Home Retail Sdn Bhd');
       await call('POST', `/api/applications/${id}/submit`, { data });
-      await lifecycle('GM-100101', 'suspend', 'sales');
+      await lifecycle('GM-109001', 'suspend', 'sales');
       const returned = await call<CountryApplication>('POST', `/api/applications/${id}/review`, { decision: 'return', comment: 'Hold until the suspension review ends.', sections: ['documents'], evidenceReviewed: true }, 'risk');
       expect(returned.body.status).toBe('returned');
       expect((await call<CountryApplication>('POST', `/api/applications/${id}/submit`, {})).body.status).toBe('pending_risk_review');
       const rejected = await call<CountryApplication>('POST', `/api/applications/${id}/review`, { decision: 'reject', comment: 'Merchant exited during suspension review.', evidenceReviewed: true }, 'risk');
       expect(rejected.body.status).toBe('rejected');
       // Starting a replacement application is new activity, so it waits for reactivation.
-      expect((await call('POST', '/api/merchants/GM-100101/applications', { country: 'PH' })).body).toMatchObject({ code: 'MERCHANT_SUSPENDED' });
+      expect((await call('POST', '/api/merchants/GM-109001/applications', { country: 'VN' })).body).toMatchObject({ code: 'MERCHANT_SUSPENDED' });
     });
   });
 });

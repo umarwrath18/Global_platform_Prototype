@@ -21,7 +21,8 @@
     }
 
     <dl class="kv review-mcc">
-      <div><dt>Merchant category</dt><dd>{{ categoryLabel(application().data.business.merchantCategory) ?? 'Not captured' }}</dd></div>
+      <div><dt>Approval priority</dt><dd>{{ priorityLabel[application().data.business.approvalPriority] }}</dd></div>
+      <div><dt>Merchant category</dt><dd>{{ categoryLabel(application().data.transaction.merchantCategory) ?? 'Not captured' }}</dd></div>
       <div><dt>Submitted MCC</dt><dd>@if (submittedMcc(); as m) {{{ m.code }} – {{ m.description }}} @else {Not captured at submission}</dd></div>
     </dl>
 
