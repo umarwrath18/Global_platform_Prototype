@@ -262,13 +262,17 @@ describe('Product & Payment Config', () => {
       expect((await call<Result>('POST', `/api/applications/APP-2026-0009/pricing/${pending.id}/cancel`, {}, 'sales')).body.version.status).toBe('cancelled');
     });
 
-    it('lists pending and decided changes for FinOps, with current vs proposed (§8.7)', async () => {
-      const q = (await asChecker<PricingApprovalsView>('GET', '/api/pricing/approvals', null, 'finops')).body;
+    it('lists every Ops change for FinOps, pending first, with current vs proposed (§7.8, §8.7)', async () => {
+      const q = (await asChecker<PricingApprovalsView>('GET', '/api/pricing/approvals?country=MY', null, 'finops')).body;
       expect(q.canDecide).toBe(true);
-      expect(q.pending.map((i) => [i.merchantName, i.methodName, i.current, i.proposed, i.ownSubmission])).toEqual([['Tanjung Global Trading Sdn Bhd', 'Cards', 'Percentage: 2.2% (v1)', 'Higher of Percentage or Fixed Fee: 2% + Min: MYR 0.5', false]]);
-      await decide('APP-2026-0001', q.pending[0].version.id, 'approve');
-      const after = (await asChecker<PricingApprovalsView>('GET', '/api/pricing/approvals', null, 'finops')).body;
-      expect([after.pending.length, after.decided.length]).toEqual([0, 1]);
+      const pending = q.items.filter((i) => i.version.status === 'pending_approval');
+      expect(pending.map((i) => [i.merchantName, i.subMerchantName, i.methodName, i.current, i.proposed, i.ownSubmission])).toEqual([['Tanjung Global Trading Sdn Bhd', null, 'Cards', 'Percentage: 2.2% (v1)', 'Higher of Percentage or Fixed Fee: 2% + Min: MYR 0.5', false]]);
+      expect(q.items[0].version.status).toBe('pending_approval');
+      expect(q.items.every((i) => i.country === 'MY')).toBe(true);
+      await decide('APP-2026-0001', pending[0].version.id, 'approve');
+      const after = (await asChecker<PricingApprovalsView>('GET', '/api/pricing/approvals?country=MY', null, 'finops')).body;
+      expect(after.items.filter((i) => i.version.status === 'pending_approval')).toHaveLength(0);
+      expect(after.items.find((i) => i.version.id === pending[0].version.id)?.version.status).toBe('scheduled');
       expect((await call<PricingApprovalsView>('GET', '/api/pricing/approvals', null, 'sales')).body.canDecide).toBe(false);
     });
   });

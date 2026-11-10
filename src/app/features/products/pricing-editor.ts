@@ -43,6 +43,8 @@ export interface PricingPreset {
   methodCode: string | null;
   /** Editing: the version this replaces. */
   editOf: string | null;
+  /** Sub-merchant to start with (Merchant Pricing); null = merchant level. */
+  subMerchantId?: string | null;
 }
 
 const STEPS = ['Scope', 'Technique', 'Configure Rules', 'Summary'] as const;
@@ -67,8 +69,8 @@ const n = (v: string): number | null => (v.trim() === '' ? null : Number(v.repla
   imports: [Icon, DecimalPipe],
   templateUrl: './pricing-editor.html',
   styleUrl: './products.scss',
-  // Esc does not close the inline editor.
-  host: { '(keydown.escape)': '$event.stopPropagation()' },
+  // Esc does not close the inline editor (§8.5); in the Merchant Pricing popup it dismisses an overlap error first, then closes (§7.4).
+  host: { '(keydown.escape)': 'onEscape($event)' },
 })
 export class PricingEditor implements OnInit, AfterViewInit {
   private readonly api = inject(MerchantApi);
@@ -76,6 +78,8 @@ export class PricingEditor implements OnInit, AfterViewInit {
 
   readonly view = input.required<ProductPricingView>();
   readonly preset = input.required<PricingPreset>();
+  /** `mid`: inline in Product & Payment Config (§8.5). `merchant`: popup in Merchant Pricing (§7.4). */
+  readonly variant = input<'mid' | 'merchant'>('mid');
   readonly saved = output<{ version: PricingVersion; view: ProductPricingView }>();
   readonly closed = output<void>();
 
@@ -102,6 +106,8 @@ export class PricingEditor implements OnInit, AfterViewInit {
   // Scope
   protected readonly flow = signal<ProductFlow>('payin');
   protected readonly methodCode = signal('');
+  /** Merchant Pricing: sub-merchant scope; '' = All Sub-Merchants (Merchant Level). */
+  protected readonly subMerchantId = signal('');
   protected readonly vaBanks = signal<string[]>([]);
   protected readonly vaOpen = signal(false);
   // Technique (null = no primary pricing: subscription only)
@@ -173,6 +179,7 @@ export class PricingEditor implements OnInit, AfterViewInit {
     return {
       flow: this.flow(),
       methodCode: this.methodCode(),
+      subMerchantId: this.subMerchantId() || null,
       vaBanks: this.showVa() && this.vaBanks().length < VA_BANKS.length ? this.vaBanks() : [],
       technique: t,
       currency: t === 'fixed_fee' ? this.currency() || this.local() : this.local(),
@@ -197,7 +204,10 @@ export class PricingEditor implements OnInit, AfterViewInit {
     };
   });
 
-  protected readonly scopeText = computed(() => `Scope: ${this.cname()} / ${this.view().merchantName} (Merchant Level) / ${FLOW_LABEL[this.flow()]} / ${this.method()?.name ?? '–'}${this.showVa() ? ` / VA Banks: ${this.vaSummary()}` : ''}`);
+  protected readonly subName = computed(() => this.view().subMerchants.find((x) => x.id === this.subMerchantId())?.name ?? null);
+  /** Sub-merchant chosen while the merchant has no merchant-level rule in this corridor (§7.4 Step 1). */
+  protected readonly noMerchantLevel = computed(() => !!this.subMerchantId() && !this.view().versions.some((v) => !v.subMerchantId && ['active', 'scheduled', 'pending_approval'].includes(v.status)));
+  protected readonly scopeText = computed(() => `Scope: ${this.cname()} / ${this.view().merchantName}${this.subName() ? ` / ${this.subName()}` : ' (Merchant Level)'} / ${FLOW_LABEL[this.flow()]} / ${this.method()?.name ?? '–'}${this.showVa() ? ` / VA Banks: ${this.vaSummary()}` : ''}`);
   protected readonly effectiveSentence = computed(() => (this.startDate() && this.endChecked() && this.endDate() ? `Effective: ${fmtSlash(this.startDate())} – ${fmtSlash(this.endDate())}` : null));
   protected readonly supersession = computed(() => {
     const c = classifyPeriod(this.draft(), this.view().versions, this.editing()?.id);
@@ -235,6 +245,7 @@ export class PricingEditor implements OnInit, AfterViewInit {
     }
     if (!this.flowOptions().find((f) => f.flow === p.flow)?.enabled) this.flow.set(this.flowOptions().find((f) => f.enabled)?.flow ?? 'payin');
     if (p.methodCode && this.options().some((m) => m.code === p.methodCode)) this.methodCode.set(p.methodCode);
+    if (p.subMerchantId && this.view().subMerchants.some((x) => x.id === p.subMerchantId)) this.subMerchantId.set(p.subMerchantId);
   }
 
   ngAfterViewInit() {
@@ -245,6 +256,7 @@ export class PricingEditor implements OnInit, AfterViewInit {
   private prefill(e: PricingVersion) {
     this.flow.set(e.flow);
     this.methodCode.set(e.methodCode);
+    this.subMerchantId.set(e.subMerchantId ?? '');
     this.vaBanks.set(e.vaBanks.length ? [...e.vaBanks] : usesVaBanks(this.view().country, e.methodCode) ? VA_BANKS.map((b) => b.code) : []);
     this.technique.set(e.technique);
     this.currency.set(e.currency);
@@ -279,6 +291,13 @@ export class PricingEditor implements OnInit, AfterViewInit {
       if (e.promotion.metric) this.promoMetric.set(e.promotion.metric);
       if (e.promotion.conditions) this.conditions.set(e.promotion.conditions.map((c) => ({ op: c.op, value: String(c.value), mdr: String(c.mdrPct) })));
     }
+  }
+
+  protected onEscape(e: Event) {
+    e.stopPropagation();
+    if (this.variant() !== 'merchant' || this.done()) return;
+    if (this.overlap()) this.overlap.set(null);
+    else this.cancel();
   }
 
   /** True once past step 1 or in Phase 2, so closing it would lose work. */
@@ -381,7 +400,7 @@ export class PricingEditor implements OnInit, AfterViewInit {
     if (issues.length) return false;
     const c = classifyPeriod(this.draft(), this.view().versions, this.editing()?.id);
     if (c.kind === 'overlap') {
-      this.overlap.set(overlapMessage(c.existing, this.view().merchantName, this.method()?.name ?? this.methodCode()));
+      this.overlap.set(overlapMessage(c.existing, this.view().merchantName, this.method()?.name ?? this.methodCode(), this.subName()));
       return false;
     }
     this.overlap.set(null);

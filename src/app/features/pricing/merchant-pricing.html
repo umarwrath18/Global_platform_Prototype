@@ -1,0 +1,99 @@
+<main class="page">
+  <div class="portal-head">
+    <div>
+      <h1>Merchant Pricing</h1>
+      <p class="sub">Configure and manage merchant pricing rules for {{ corridor.name() }}</p>
+    </div>
+    <div class="head-tools">
+      <app-corridor-select />
+      <a class="btn sm" routerLink="/merchant-pricing/sub-merchants"><app-icon name="users" [size]="15" />Sub-Merchant View</a>
+    </div>
+  </div>
+  <app-merchant-pricing-tabs />
+
+  @if (list(); as l) {
+    <div class="mp-counters" role="status">
+      <span><strong>{{ l.activeRules }}</strong> active rules</span>
+      <span><strong>{{ l.pendingApprovals }}</strong> pending approvals</span>
+    </div>
+    <section class="panel-card">
+      <div class="toolbar">
+        <input class="f-input grow" type="search" [placeholder]="'Search ' + corridor.name() + ' merchants by name or MID...'" aria-label="Search merchants" [value]="q()" (input)="q.set($any($event.target).value); page.set(0)" />
+        <button type="button" class="btn sm" [attr.aria-expanded]="showFilters()" aria-controls="mp-filters" (click)="showFilters.set(!showFilters())"><app-icon name="list" [size]="14" />Filters</button>
+      </div>
+      @if (showFilters()) {
+        <div class="toolbar filters" id="mp-filters">
+          <select class="f-input sm" aria-label="Flow type" (change)="flow.set($any($event.target).value); page.set(0)">
+            <option value="" [selected]="!flow()">All Flow Types</option>
+            <option value="payin" [selected]="flow() === 'payin'">PayIn</option>
+            <option value="payout" [selected]="flow() === 'payout'">Payout</option>
+          </select>
+          <select class="f-input sm" aria-label="Status" (change)="status.set($any($event.target).value); page.set(0)">
+            <option value="" [selected]="!status()">All Statuses</option>
+            @for (s of statuses; track s) {<option [value]="s" [selected]="status() === s">{{ statusLabel[s] }}</option>}
+          </select>
+          <button type="button" class="btn sm ghost" (click)="clear()">Clear</button>
+        </div>
+      }
+      @if (rows().length) {
+        <div class="table-wrap">
+          <table class="data-table mp-table">
+            <thead>
+              <tr>
+                <th scope="col">Business Name</th>
+                <th scope="col">Master MID</th>
+                <th scope="col">Sub-Merchants</th>
+                <th scope="col">Status</th>
+                <th scope="col">Updated On</th>
+                <th scope="col">Active Pricing</th>
+                <th scope="col">MDR</th>
+                <th scope="col"><span class="sr-only">Action</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (r of rows(); track r.applicationId) {
+                <tr>
+                  <td><a class="row-link" [routerLink]="['/merchant-pricing', r.applicationId]">{{ r.merchantName }}</a><div class="sub-line">{{ r.merchantId }}</div></td>
+                  <td class="mono">{{ r.mid ?? 'Not issued yet' }}</td>
+                  <td>{{ r.subMerchantCount }}</td>
+                  <td><span class="status" [class]="'status ' + statusTone[r.status]">{{ statusLabel[r.status] }}</span></td>
+                  <td class="nowrap">{{ date(r.updatedAt) }}</td>
+                  <td>{{ r.activeRules }} / {{ r.totalRules }}@if (r.pendingCount) {<div class="sub-line">{{ r.pendingCount }} pending</div>}</td>
+                  <td>{{ r.mdr ?? '—' }}</td>
+                  <td class="row-actions">
+                    @if (maker()) {
+                      <a class="btn sm ghost" [routerLink]="['/merchant-pricing', r.applicationId]">Edit Pricing</a>
+                      <button type="button" class="btn sm" (click)="configure(r)">Configure</button>
+                    } @else {
+                      <a class="btn sm ghost" [routerLink]="['/merchant-pricing', r.applicationId]">View Pricing</a>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <div class="pager">
+          <label>Rows per page
+            <select class="f-input sm" (change)="setPageSize(+$any($event.target).value)">
+              @for (n of [10, 20, 50]; track n) {<option [value]="n" [selected]="n === pageSize()">{{ n }}</option>}
+            </select>
+          </label>
+          <span class="muted small">{{ page() * pageSize() + 1 }}–{{ page() * pageSize() + rows().length }} of {{ filtered().length }}</span>
+          <button type="button" class="btn sm ghost" [disabled]="page() === 0" (click)="page.set(page() - 1)" aria-label="Previous page"><app-icon name="arrow-left" [size]="14" /></button>
+          <button type="button" class="btn sm ghost" [disabled]="page() >= pages() - 1" (click)="page.set(page() + 1)" aria-label="Next page"><app-icon name="arrow-right" [size]="14" /></button>
+        </div>
+      } @else {
+        <div class="empty-state">
+          <div class="icon-tile"><app-icon name="store" /></div>
+          <h3>{{ q() || flow() || status() ? 'No merchants match.' : 'No merchants with confirmed onboarding in ' + corridor.name() + ' yet.' }}</h3>
+          <p>Merchants appear here once CS confirms their onboarding. Before that, pricing is set in Product &amp; Payment Config.</p>
+        </div>
+      }
+    </section>
+  } @else if (error(); as e) {
+    <div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e.message ?? "We couldn't load merchant pricing." }} <button type="button" class="btn sm" (click)="load()">Try again</button></div></div>
+  } @else {
+    <section class="panel-card"><div class="skeleton-rows" aria-busy="true" aria-label="Loading"><span></span><span></span></div></section>
+  }
+</main>

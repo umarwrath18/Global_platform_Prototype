@@ -41,6 +41,7 @@ function makeView(mode: PricingMode = 'onboarding', over: Partial<ProductPricing
       revision: 1, savedAt: NOW, savedBy: 'x',
     },
     versions: [version('cards')],
+    subMerchants: [],
     gaps: [], gapCount: 0,
     can: { editProducts: true, editPricing: true, decidePricing: false },
     productsMessage: null, pricingMessage: null, usdRate: 4.2, today: TODAY, now: NOW,

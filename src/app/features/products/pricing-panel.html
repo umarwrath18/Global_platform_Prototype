@@ -59,7 +59,7 @@
           <tr [class.active-row]="editor()?.editOf === x.id" [class.faded]="x.status === 'expired' || x.status === 'cancelled' || x.status === 'rejected'">
             <td>
               {{ x.method?.name ?? x.methodCode }}
-              <div class="sub-line">{{ flowLabel[x.flow] }} · v{{ x.version }}@if (vaText(x); as va) { · {{ va }}}</div>
+              <div class="sub-line">{{ flowLabel[x.flow] }} · v{{ x.version }}@if (vaText(x); as va) { · {{ va }}}@if (subLabel(x); as sl) { · {{ sl }}}</div>
             </td>
             <td>{{ technique(x.technique) }}</td>
             <td>

@@ -82,6 +82,26 @@ export const routes: Routes = [
         loadComponent: () => import('./features/approvals/approvals').then((m) => m.Approvals),
       },
       {
+        path: 'merchant-pricing',
+        title: 'Merchant Pricing · Mobi Global Platform',
+        loadComponent: () => import('./features/pricing/merchant-pricing').then((m) => m.MerchantPricing),
+      },
+      {
+        path: 'merchant-pricing/sub-merchants',
+        title: 'Sub-Merchant View · Mobi Global Platform',
+        loadComponent: () => import('./features/pricing/sub-merchant-pricing').then((m) => m.SubMerchantPricing),
+      },
+      {
+        path: 'merchant-pricing/history',
+        title: 'MDR History · Mobi Global Platform',
+        loadComponent: () => import('./features/pricing/mdr-history').then((m) => m.MdrHistory),
+      },
+      {
+        path: 'merchant-pricing/:id',
+        title: 'Merchant Pricing · Mobi Global Platform',
+        loadComponent: () => import('./features/pricing/merchant-pricing-detail').then((m) => m.MerchantPricingDetail),
+      },
+      {
         path: 'pricing-approvals',
         title: 'Pricing Approvals · Mobi Global Platform',
         loadComponent: () => import('./features/pricing/pricing-approvals').then((m) => m.PricingApprovals),

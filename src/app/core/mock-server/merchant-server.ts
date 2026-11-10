@@ -38,10 +38,10 @@ import { regionForCountry } from '../merchants/regions';
 import { randomToken } from './crypto';
 import { entityOfApplication, GoLiveIntent, goLiveBlocker, isRuleError, issueMid, MerchantEntity, parentEntityOf, RegionalMid, toMidView } from './merchant-identity';
 import { MigrationFlag, migrationFlags, MigrationLogEntry, normaliseMerchantDb, SCHEMA_REVISION } from './merchant-migrations';
-import { buildMerchantSeed, buildSeedAdditions, SEED_ADDITION_MERCHANT_IDS } from './merchant-seed';
+import { addDemoSubMerchants, buildMerchantSeed, buildSeedAdditions, SEED_ADDITION_MERCHANT_IDS } from './merchant-seed';
 import { createSubMerchant, goLiveSubMerchant, reviewSubMerchant, setSubMerchantCheck, SubMerchantContext, subMerchantLifecycle, subMerchantsOf, submitSubMerchant } from './sub-merchants';
 import { approvalsFor, ChangeContext, decideChange, merchantRiskApproved, profileEvent, requestCountryChange, requestProfileChange, toChangeView, withdrawChange } from './change-requests';
-import { cancelPricing, checkDecision, decidePricing, DERIVED_CHECKLIST, onboardingGaps, pricingApprovals, pricingAuditLog, ProductContext, productState, productView, runPricingJob, saveProducts, setPricing, syncDerivedChecklist } from './product-pricing';
+import { cancelPricing, checkDecision, decidePricing, DERIVED_CHECKLIST, mdrHistory, merchantPricingList, onboardingGaps, pricingApprovals, pricingAuditLog, subMerchantPricing, ProductContext, productState, productView, runPricingJob, saveProducts, setPricing, syncDerivedChecklist } from './product-pricing';
 import { ApiError, fail } from './server-errors';
 import { simulateVerification } from './verification';
 
@@ -50,14 +50,22 @@ import { simulateVerification } from './verification';
 // status transitions, validation and duplicate checks are never left to the UI.
 
 /**
+ * 5: Merchant Pricing (demo sub-merchants with their own pricing).
  * 4: Product & Payment Config per the Pricing Engine document (catalog, pricing methods, versions).
  * 3: registration form per country (MY / ID / VN only; no pricing in the application).
- * Version 2 and 3 data is kept as a backup and replaced with the new demo data.
+ * Version 2 to 4 data is kept as a backup and replaced with the new demo data.
  */
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 export const MERCHANT_DB_VERSION = DB_VERSION;
+
+/** Fresh demo data in the current shape: the seed, the data upgrade, then the demo sub-merchants. */
+function freshDemoDb(now: number): MerchantDb {
+  const db = normaliseMerchantDb(buildMerchantSeed(now, DB_VERSION), now).db;
+  addDemoSubMerchants(db, now);
+  return db;
+}
 /** Versions replaced on load with fresh demo data, after a backup, because their records can't be converted. */
-const REPLACED_VERSIONS = [2, 3];
+const REPLACED_VERSIONS = [2, 3, 4];
 
 export type MerchantRecord = Omit<GlobalMerchant, 'globalStatus' | 'lifecycleStatus'> & Partial<Pick<GlobalMerchant, 'lifecycleStatus' | 'lifecycleReason' | 'lifecycleUpdatedAt' | 'lifecycleUpdatedBy'>>;
 
@@ -258,7 +266,15 @@ export class MerchantServer {
         if (sub && actions[sub]) return ok(this.subMerchantAction(caller, role, actions[sub]));
       }
       if (resource === 'approvals' && !id && m === 'GET') return ok(approvalsFor(this.load(), role));
-      if (resource === 'pricing' && id === 'approvals' && !sub && m === 'GET') return ok(pricingApprovals(this.load(), role, caller, this.now()));
+      if (resource === 'pricing' && !sub && m === 'GET') {
+        const country = str(query.get('country'), 2).toUpperCase() || null;
+        const corridor = country && ONBOARDING_COUNTRIES[country] ? country : null;
+        if (id === 'approvals') return ok(pricingApprovals(this.load(), role, caller, this.now(), corridor));
+        if (!corridor && (id === 'merchants' || id === 'sub-merchants' || id === 'history')) fail(422, 'COUNTRY_NOT_SUPPORTED', { message: 'Choose a corridor: Malaysia, Indonesia or Vietnam.' });
+        if (id === 'merchants') return ok(merchantPricingList(this.load(), role, corridor!, this.now()));
+        if (id === 'sub-merchants') return ok(subMerchantPricing(this.load(), corridor!, this.now()));
+        if (id === 'history') return ok(mdrHistory(this.load(), corridor!));
+      }
       if (resource === 'pricing' && id === 'audit' && !sub && m === 'GET') return ok(pricingAuditLog(this.load()));
       if (resource === 'notifications') {
         if (!id && m === 'GET') return ok(this.load().notifications);
@@ -1269,7 +1285,7 @@ export class MerchantServer {
     const raw = this.opts.storage.getItem(this.storageKey);
     if (raw === null) {
       const now = this.now();
-      this.save(normaliseMerchantDb(buildMerchantSeed(now, DB_VERSION), now).db);
+      this.save(freshDemoDb(now));
       return;
     }
     let version: unknown;
@@ -1282,7 +1298,7 @@ export class MerchantServer {
       const key = `${this.storageKey}.backup.v${version}`;
       if (this.opts.storage.getItem(key) === null) this.opts.storage.setItem(key, raw);
       const now = this.now();
-      this.save(normaliseMerchantDb(buildMerchantSeed(now, DB_VERSION), now).db);
+      this.save(freshDemoDb(now));
       return;
     }
     if (version !== DB_VERSION) {

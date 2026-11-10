@@ -5,12 +5,13 @@ import { countryName } from '../../core/merchants/onboarding-config';
 import { PRICING_STATUS_LABEL, PRICING_STATUS_TONE, PricingAuditEvent } from '../../core/merchants/products';
 import { Icon } from '../../shared/icon';
 import { fmtDateTime } from '../../shared/merchant-ui';
+import { MerchantPricingTabs } from './merchant-pricing-tabs';
 
 /** The append-only MDR audit log (§7.10): every pricing create, approve, reject and cancel. */
 @Component({
   selector: 'app-pricing-audit',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon],
+  imports: [Icon, MerchantPricingTabs],
   template: `
     <main class="page">
       <div class="portal-head">
@@ -20,6 +21,7 @@ import { fmtDateTime } from '../../shared/merchant-ui';
         </div>
         <span class="tag">{{ filters.country() ? countryName(filters.country()!) : 'All countries' }}</span>
       </div>
+      <app-merchant-pricing-tabs />
       <section class="panel-card">
         <div class="toolbar">
           <input class="f-input grow" type="search" [placeholder]="'Search ' + (filters.country() ? countryName(filters.country()!) + ' ' : '') + 'merchants or payment methods...'" aria-label="Search the audit log" [value]="q()" (input)="q.set($any($event.target).value)" />
@@ -30,7 +32,7 @@ import { fmtDateTime } from '../../shared/merchant-ui';
         } @else if (rows().length) {
           <div class="table-wrap">
             <table class="data-table audit-table">
-              <thead><tr><th scope="col">Timestamp</th><th scope="col">User</th><th scope="col">Role</th><th scope="col">Merchant</th><th scope="col">Corridor</th><th scope="col">Payment Method</th><th scope="col">Previous</th><th scope="col">New</th><th scope="col">Effective</th><th scope="col">Status</th></tr></thead>
+              <thead><tr><th scope="col">Timestamp</th><th scope="col">User</th><th scope="col">Role</th><th scope="col">Merchant</th><th scope="col">Sub-Merchant</th><th scope="col">Corridor</th><th scope="col">Payment Method</th><th scope="col">Previous</th><th scope="col">New</th><th scope="col">Effective</th><th scope="col">Status</th></tr></thead>
               <tbody>
                 @for (e of rows(); track e.id) {
                   <tr>
@@ -38,6 +40,7 @@ import { fmtDateTime } from '../../shared/merchant-ui';
                     <td>{{ e.user }}</td>
                     <td>{{ e.role }}</td>
                     <td>{{ e.merchantName }}<div class="sub-line">{{ e.applicationId }}</div></td>
+                    <td>{{ e.subMerchantName ?? 'Merchant Level' }}</td>
                     <td>{{ e.country }}</td>
                     <td>{{ e.methodName }}<div class="sub-line">v{{ e.version }}</div></td>
                     <td class="cfg">{{ e.previous }}</td>
@@ -73,7 +76,7 @@ export class PricingAudit {
     const country = this.filters.country();
     const merchant = this.filters.merchantId();
     return this.entries().filter(
-      (e) => (!country || e.country === country) && (!merchant || e.merchantId === merchant) && (!q || [e.merchantName, e.merchantId, e.methodName, e.applicationId].join(' ').toLowerCase().includes(q)),
+      (e) => (!country || e.country === country) && (!merchant || e.merchantId === merchant) && (!q || [e.merchantName, e.merchantId, e.methodName, e.applicationId, e.subMerchantName ?? ''].join(' ').toLowerCase().includes(q)),
     );
   });
 

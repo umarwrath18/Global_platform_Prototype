@@ -2,13 +2,15 @@
   <div class="editor-done" role="status">
     <app-icon name="check-circle" [size]="18" />
     <div>
-      @if (d.status === 'pending_approval') {
+      @if (variant() === 'merchant') {
+        <strong>Submitted Successfully</strong> {{ editing() ? 'The updated pricing has been submitted for Finance approval as v' + d.version + '.' : 'The pricing configuration has been submitted for Finance approval.' }}
+      } @else if (d.status === 'pending_approval') {
         <strong>Submitted for FinOps approval</strong> The current pricing stays in effect until FinOps approves the change.
       } @else {
         <strong>Pricing saved</strong> The pricing is set for this MID and shows in the table above.
       }
     </div>
-    <button type="button" class="btn sm" (click)="closed.emit()">Done</button>
+    <button type="button" class="btn sm" (click)="closed.emit()">{{ variant() === 'merchant' ? 'Ok, Close' : 'Done' }}</button>
   </div>
 } @else {
   <section class="editor" aria-labelledby="editor-title">
@@ -36,7 +38,7 @@
             <app-icon name="info" />
             <div>
               Editing pricing for {{ method()?.name }} … Changes will create v{{ e.version + 1 }} effective from the new date. The pricing method ({{ techniqueLabel(e.technique) }}) cannot be changed.
-              <div class="existing">Existing Configuration: {{ techniqueLabel(e.technique) }} · {{ method()?.name }}@if (showVa()) { · VA Banks: {{ vaSummary() }}} · Effective: {{ slash(e.startDate) }} – {{ e.endDate ? slash(e.endDate) : 'Ongoing' }}</div>
+              <div class="existing">Existing Configuration: {{ techniqueLabel(e.technique) }} · {{ method()?.name }}@if (subName()) { · {{ subName() }}}@if (showVa()) { · VA Banks: {{ vaSummary() }}} · Effective: {{ slash(e.startDate) }} – {{ e.endDate ? slash(e.endDate) : 'Ongoing' }}</div>
             </div>
           </div>
         }
@@ -72,6 +74,16 @@
                   @for (m of methodsInFlow(); track m.code) {<option [value]="m.code" [selected]="m.code === methodCode()">{{ m.name }}</option>}
                 </select>
               </div>
+              @if (view().subMerchants.length) {
+                <div class="f-field">
+                  <label for="pe-sub-merchant">Sub-Merchant (optional)</label>
+                  <select id="pe-sub-merchant" class="f-input" [disabled]="view().mode !== 'change'" (change)="subMerchantId.set($any($event.target).value)">
+                    <option value="" [selected]="!subMerchantId()">All Sub-Merchants (Merchant Level)</option>
+                    @for (sm of view().subMerchants; track sm.id) {<option [value]="sm.id" [selected]="sm.id === subMerchantId()">{{ sm.name }}</option>}
+                  </select>
+                  @if (view().mode !== 'change') {<p class="f-hint">Sub-merchant pricing can be set once onboarding is confirmed.</p>}
+                </div>
+              }
               @if (showVa()) {
                 <div class="f-field va">
                   <span class="f-label" id="va-label">VA Banks</span>
@@ -88,6 +100,9 @@
                 </div>
               }
             </div>
+            @if (noMerchantLevel()) {
+              <div class="alert warning compact" role="note"><app-icon name="alert-circle" /><div><strong>No merchant-level pricing exists.</strong> Transactions processed at the merchant level (not under any sub-merchant) will have no MDR applied. Consider configuring merchant-level pricing as a fallback.</div></div>
+            }
             <p class="scope-sum">{{ scopeText() }}</p>
           }
 
@@ -227,7 +242,7 @@
             <dl class="editor-sum">
               <div><dt>Merchant</dt><dd>{{ view().merchantName }}</dd></div>
               <div><dt>Corridor</dt><dd>{{ cname() }}</dd></div>
-              <div><dt>Sub-Merchant</dt><dd>Merchant Level</dd></div>
+              <div><dt>Sub-Merchant</dt><dd>{{ subName() ?? 'Merchant Level' }}</dd></div>
               <div><dt>Flow</dt><dd>{{ flowLabel[flow()] }}</dd></div>
               <div><dt>Payment Method</dt><dd>{{ method()?.name }}</dd></div>
               @if (showVa()) {<div><dt>VA Banks</dt><dd>{{ vaSummary() }}</dd></div>}

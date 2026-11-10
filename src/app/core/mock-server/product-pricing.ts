@@ -9,8 +9,18 @@ import {
   isIsoDate,
   overlapMessage,
   periodText,
+  APPROVAL_STATUS_ORDER,
+  CONFIRMED_STATUSES,
+  MdrHistoryRow,
+  MerchantPricingList,
+  MerchantPricingRow,
   PricingApprovalItem,
   PricingApprovalsView,
+  ProductFlow,
+  resolvePricing,
+  sameScope,
+  SubMerchantPricingRow,
+  subOf,
   PricingAuditEvent,
   PricingDraft,
   pricingInEffect,
@@ -71,6 +81,13 @@ const suspendedOf = (db: MerchantDb, app: CountryApplication) => merchantOf(db, 
 const midOf = (db: MerchantDb, app: CountryApplication) => (db.mids ?? []).find((m) => m.applicationId === app.id)?.mid ?? null;
 
 export const modeOf = (db: MerchantDb, app: CountryApplication) => pricingMode(app.status, suspendedOf(db, app));
+
+/** Sub-merchants of the merchant in the application's corridor (not rejected). */
+export function subMerchantsOf(db: MerchantDb, app: Pick<CountryApplication, 'merchantId' | 'country'>) {
+  return (db.entities ?? []).filter((e) => e.kind === 'sub' && e.gmid === app.merchantId && e.country === app.country && e.status !== 'rejected').map((e) => ({ id: e.id, name: e.displayName ?? e.id }));
+}
+
+const subName = (db: MerchantDb, id: string | null | undefined) => (id ? ((db.entities ?? []).find((e) => e.id === id)?.displayName ?? id) : null);
 
 /**
  * Products, settlement and pricing for an application. Before products are ever saved, any method
@@ -179,6 +196,7 @@ export function productView(db: MerchantDb, app: CountryApplication, role: Staff
     methods: state.methods,
     config: state.config,
     versions: sortVersions(state.versions, state.methods),
+    subMerchants: subMerchantsOf(db, app),
     gaps,
     gapCount: gapCount(gaps),
     can: { editProducts: !pMsg, editPricing: !prMsg, decidePricing: mode === 'change' && role === 'finops' },
@@ -300,6 +318,7 @@ export function readDraft(raw: any, localCurrency: string): PricingDraft {
   return {
     flow: raw?.flow === 'payout' ? 'payout' : 'payin',
     methodCode: str(raw?.methodCode),
+    subMerchantId: str(raw?.subMerchantId) || null,
     vaBanks: Array.isArray(raw?.vaBanks) ? [...new Set<string>(raw.vaBanks.filter((b: unknown) => VA_BANKS.some((x) => x.code === b)))] : [],
     technique,
     currency,
@@ -331,8 +350,8 @@ export function readDraft(raw: any, localCurrency: string): PricingDraft {
 }
 
 /** "{method} ({flow}) – {technique}: {summary}[, {settlement}]" (MP-10). */
-function label(v: PricingVersion, methodName: string) {
-  return `${methodName} (${FLOW_LABEL[v.flow]}) – ${pricingSummary(v)}${v.settlementSnapshot ? `, ${v.settlementSnapshot}` : ''}`;
+function label(v: PricingVersion, methodName: string, sub?: string | null) {
+  return `${methodName} (${FLOW_LABEL[v.flow]})${sub ? ` · ${sub}` : ''} – ${pricingSummary(v)}${v.settlementSnapshot ? `, ${v.settlementSnapshot}` : ''}`;
 }
 
 /** Adds an append-only MDR audit entry (§7.10). */
@@ -351,6 +370,7 @@ function audit(ctx: ProductContext, v: PricingVersion, entry: { role: string; pr
     country: ctx.app.country,
     methodCode: v.methodCode,
     methodName: method?.name ?? v.methodCode,
+    subMerchantName: subName(ctx.db, v.subMerchantId),
     flow: v.flow,
     versionId: v.id,
     version: v.version,
@@ -363,8 +383,8 @@ function audit(ctx: ProductContext, v: PricingVersion, entry: { role: string; pr
 }
 
 /** Summary of the pricing in effect in the scope before this version, or "No pricing configured". */
-function previousSummary(versions: PricingVersion[], v: Pick<PricingVersion, 'methodCode' | 'flow' | 'id'>, today: string) {
-  const prev = versions.filter((x) => x.id !== v.id && x.methodCode === v.methodCode && x.flow === v.flow && (x.status === 'active' || x.status === 'scheduled')).sort((a, b) => b.version - a.version)[0] ?? pricingInEffect(versions, v.methodCode, today, v.flow);
+function previousSummary(versions: PricingVersion[], v: Pick<PricingVersion, 'methodCode' | 'flow' | 'id' | 'subMerchantId'>, today: string) {
+  const prev = versions.filter((x) => x.id !== v.id && sameScope(x, v) && (x.status === 'active' || x.status === 'scheduled')).sort((a, b) => b.version - a.version)[0] ?? pricingInEffect(versions, v.methodCode, today, v.flow, subOf(v));
   return prev ? `${pricingSummary(prev)} (v${prev.version})` : 'No pricing configured';
 }
 
@@ -384,9 +404,9 @@ export function setPricing(ctx: ProductContext, body: any): PricingVersion {
   const editOf = typeof body?.editOf === 'string' && body.editOf ? (state.versions.find((v) => v.id === body.editOf) ?? fail(404, 'NOT_FOUND', { message: 'Pricing version not found.' })) : null;
   if (editOf) {
     if (editOf.status !== 'active' && editOf.status !== 'scheduled') fail(409, 'INVALID_TRANSITION', { message: 'Only active or scheduled pricing can be edited.' });
-    if (state.versions.some((v) => v.methodCode === editOf.methodCode && v.flow === editOf.flow && v.status === 'pending_approval')) fail(409, 'PRICING_PENDING', { message: 'This pricing has a change waiting for FinOps approval.' });
+    if (state.versions.some((v) => sameScope(v, editOf) && v.status === 'pending_approval')) fail(409, 'PRICING_PENDING', { message: 'This pricing has a change waiting for FinOps approval.' });
     if (draft.technique !== editOf.technique) fail(422, 'VALIDATION_FAILED', { message: `The pricing method (${techniqueLabel(editOf.technique)}) cannot be changed.` });
-    if (draft.flow !== editOf.flow || draft.methodCode !== editOf.methodCode || JSON.stringify([...draft.vaBanks].sort()) !== JSON.stringify([...(editOf.vaBanks ?? [])].sort())) fail(422, 'VALIDATION_FAILED', { message: 'The scope of an edited version cannot change.' });
+    if (!sameScope(draft, editOf) || JSON.stringify([...draft.vaBanks].sort()) !== JSON.stringify([...(editOf.vaBanks ?? [])].sort())) fail(422, 'VALIDATION_FAILED', { message: 'The scope of an edited version cannot change.' });
   }
 
   const method = state.methods.find((m) => m.code === draft.methodCode && m.flow === draft.flow);
@@ -394,6 +414,12 @@ export function setPricing(ctx: ProductContext, body: any): PricingVersion {
   if (!method) fail(422, 'VALIDATION_FAILED', { message: `${draft.methodCode} is not a product offered in ${cfg.name}.` });
   if (!state.config.products.find((p) => p.methodCode === draft.methodCode)?.enabled) fail(422, 'VALIDATION_FAILED', { message: `Switch on ${method!.name} and save products before pricing it.` });
   if (!usesVaBanks(ctx.app.country, draft.methodCode)) draft.vaBanks = [];
+  // Sub-merchant pricing (§7.4, §8.9): after onboarding, for the merchant's own sub-merchants in
+  // this corridor, and only for products switched on at the MID.
+  if (draft.subMerchantId) {
+    if (!subMerchantsOf(ctx.db, ctx.app).some((x) => x.id === draft.subMerchantId)) fail(422, 'VALIDATION_FAILED', { message: `That sub-merchant isn't part of ${merchantOf(ctx.db, ctx.app).legalName} in ${cfg.name}.` });
+    if (mode !== 'change') fail(409, 'INVALID_TRANSITION', { message: 'Sub-merchant pricing can be set once onboarding is confirmed.' });
+  }
   const issues = [...validatePrimary(draft, draft.endDate !== null), ...validateSecondary(draft)];
   if (!isIsoDate(draft.startDate)) issues.unshift({ field: 'startDate', message: 'Start date is required' });
   if (draft.endDate && !isIsoDate(draft.endDate)) issues.push({ field: 'endDate', message: 'End date is required when Set End Date is checked' });
@@ -402,9 +428,9 @@ export function setPricing(ctx: ProductContext, body: any): PricingVersion {
 
   const conflict = classifyPeriod(draft, state.versions, editOf?.id);
   if (conflict.kind === 'overlap') {
-    fail(409, 'PRICING_OVERLAP', { message: `Pricing period overlaps with an existing configuration. ${overlapMessage(conflict.existing, merchantOf(ctx.db, ctx.app).legalName, method!.name)}` });
+    fail(409, 'PRICING_OVERLAP', { message: `Pricing period overlaps with an existing configuration. ${overlapMessage(conflict.existing, merchantOf(ctx.db, ctx.app).legalName, method!.name, subName(ctx.db, draft.subMerchantId))}` });
   }
-  if (mode === 'change' && state.versions.some((v) => v.methodCode === draft.methodCode && v.flow === draft.flow && v.status === 'pending_approval')) {
+  if (mode === 'change' && state.versions.some((v) => sameScope(v, draft) && v.status === 'pending_approval')) {
     fail(409, 'PRICING_PENDING', { message: `${method!.name} already has a pricing change waiting for FinOps approval. Wait for that decision or cancel it first.` });
   }
 
@@ -415,7 +441,7 @@ export function setPricing(ctx: ProductContext, body: any): PricingVersion {
     ...draft,
     id: nextPricingId(ctx.db),
     applicationId: ctx.app.id,
-    version: Math.max(0, ...all.filter((v) => v.flow === draft.flow && v.methodCode === draft.methodCode).map((v) => v.version)) + 1,
+    version: Math.max(0, ...all.filter((v) => sameScope(v, draft)).map((v) => v.version)) + 1,
     status: 'pending_approval',
     usd: draft.technique === 'fixed_fee' && draft.currency === 'USD' ? { fixedFeeUsd: draft.fixedFee!, usdExchangeRate: USD_RATES[cfg.currency], localEquivalent: Math.round(draft.fixedFee! * USD_RATES[cfg.currency] * 100) / 100, localEquivalentCurrency: cfg.currency } : null,
     source: mode === 'onboarding' ? 'onboarding' : 'change',
@@ -435,7 +461,7 @@ export function setPricing(ctx: ProductContext, body: any): PricingVersion {
   };
   const previous = previousSummary(all, version, today);
   ctx.db.pricingVersions.push(version);
-  const text = label(version, method!.name);
+  const text = label(version, method!.name, subName(ctx.db, version.subMerchantId));
   if (mode === 'onboarding') {
     activateVersion(version, ctx.db.pricingVersions.filter((v) => v.applicationId === ctx.app.id), today);
     ctx.record(`Set merchant pricing v${version.version} – ${text}`);
@@ -517,33 +543,133 @@ export function decidePricing(ctx: ProductContext, versionId: string, body: any)
 
 // ------------------------------------------------------------------ queues and audit
 
-/** The FinOps Pricing Approvals queue (§8.7): pending changes and recent decisions. */
-export function pricingApprovals(db: MerchantDb, role: StaffRole, caller: Caller, now: number): PricingApprovalsView {
+/** One approvals-list item: current vs proposed pricing for the change (§7.8, §8.7). */
+function approvalItem(db: MerchantDb, v: PricingVersion, caller: Caller, today: string): PricingApprovalItem | null {
+  const app = db.applications.find((a) => a.id === v.applicationId);
+  if (!app) return null;
+  const cfg = ONBOARDING_COUNTRIES[app.country];
+  const versions = (db.pricingVersions ?? []).filter((x) => x.applicationId === app.id && x.id !== v.id);
+  const current = v.status === 'pending_approval' ? pricingInEffect(versions, v.methodCode, today, v.flow, subOf(v)) : undefined;
+  return {
+    version: v,
+    applicationId: app.id,
+    merchantId: app.merchantId,
+    merchantName: merchantOf(db, app).legalName,
+    mid: midOf(db, app),
+    country: app.country,
+    countryName: cfg?.name ?? app.country,
+    methodName: cfg?.paymentMethods.find((m) => m.code === v.methodCode)?.name ?? v.methodCode,
+    subMerchantName: subName(db, v.subMerchantId),
+    current: current ? `${pricingSummary(current)} (v${current.version})` : null,
+    proposed: pricingSummary(v),
+    ownSubmission: v.createdById === caller.userId,
+  };
+}
+
+/** Pricing changes submitted by Ops after onboarding, all statuses (§7.8, §8.7), sorted pending first. */
+export function pricingApprovals(db: MerchantDb, role: StaffRole, caller: Caller, now: number, country?: string | null): PricingApprovalsView {
   const today = todayIso(now);
-  const item = (v: PricingVersion): PricingApprovalItem | null => {
-    const app = db.applications.find((a) => a.id === v.applicationId);
-    if (!app) return null;
-    const cfg = ONBOARDING_COUNTRIES[app.country];
-    const versions = (db.pricingVersions ?? []).filter((x) => x.applicationId === app.id);
-    const current = pricingInEffect(versions.filter((x) => x.id !== v.id), v.methodCode, today, v.flow);
+  const rank = (s: PricingVersion['status']) => APPROVAL_STATUS_ORDER.indexOf(s);
+  const items = (db.pricingVersions ?? [])
+    .filter((v) => v.source === 'change')
+    .map((v) => approvalItem(db, v, caller, today))
+    .filter((x): x is PricingApprovalItem => !!x && (!country || x.country === country))
+    .sort((a, b) => rank(a.version.status) - rank(b.version.status) || (a.version.status === 'pending_approval' ? a.version.createdAt - b.version.createdAt : b.version.createdAt - a.version.createdAt));
+  return { items, canDecide: role === 'finops' };
+}
+
+// ------------------------------------------------------------------ Merchant Pricing (§7)
+
+/** Applications that Merchant Pricing covers: confirmed MIDs (change mode, or suspended after confirmation). */
+const pricedApps = (db: MerchantDb, country: string) => db.applications.filter((a) => a.country === country && CONFIRMED_STATUSES.includes(a.status));
+
+function merchantStatus(db: MerchantDb, merchantId: string): MerchantPricingRow['status'] {
+  const m = db.merchants.find((x) => x.id === merchantId)!;
+  if (m.lifecycleStatus === 'suspended') return 'suspended';
+  const apps = db.applications.filter((a) => a.merchantId === merchantId);
+  if (apps.some((a) => a.status === 'operational')) return 'active';
+  return apps.some((a) => a.status !== 'rejected') ? 'onboarding' : 'no_active_applications';
+}
+
+/** §7.1 Merchant List for a corridor. */
+export function merchantPricingList(db: MerchantDb, role: StaffRole, country: string, now: number): MerchantPricingList {
+  const rows: MerchantPricingRow[] = pricedApps(db, country).map((app) => {
+    const versions = (db.pricingVersions ?? []).filter((v) => v.applicationId === app.id);
+    const active = versions.filter((v) => v.status === 'active');
+    const rates = active.flatMap((v) => (v.technique === 'volume_based' ? (v.tiers ?? []).map((t) => t.mdrPct) : v.technique === 'historical_volume' ? [v.historical!.resultingMdr, v.historical!.defaultMdr] : v.mdrPct !== null ? [v.mdrPct] : []));
+    const lo = Math.min(...rates);
+    const hi = Math.max(...rates);
     return {
-      version: v,
       applicationId: app.id,
       merchantId: app.merchantId,
       merchantName: merchantOf(db, app).legalName,
       mid: midOf(db, app),
-      country: app.country,
-      countryName: cfg?.name ?? app.country,
-      methodName: cfg?.paymentMethods.find((m) => m.code === v.methodCode)?.name ?? v.methodCode,
-      current: current ? `${pricingSummary(current)} (v${current.version})` : null,
-      proposed: pricingSummary(v),
-      ownSubmission: v.createdById === caller.userId,
+      country,
+      subMerchantCount: subMerchantsOf(db, app).length,
+      status: merchantStatus(db, app.merchantId),
+      updatedAt: Math.max(app.updatedAt, ...versions.map((v) => v.approvedAt ?? v.rejectedAt ?? v.cancelledAt ?? v.createdAt)),
+      activeRules: active.length,
+      totalRules: versions.length,
+      mdr: rates.length ? (lo === hi ? `${lo}%` : `${lo}%–${hi}%`) : null,
+      flows: [...new Set(versions.map((v) => v.flow))],
+      pendingCount: versions.filter((v) => v.status === 'pending_approval').length,
     };
+  });
+  return {
+    rows: rows.sort((a, b) => a.merchantName.localeCompare(b.merchantName)),
+    activeRules: rows.reduce((n, r) => n + r.activeRules, 0),
+    pendingApprovals: rows.reduce((n, r) => n + r.pendingCount, 0),
+    canConfigure: role === 'sales',
   };
-  const change = (db.pricingVersions ?? []).filter((v) => v.source === 'change');
-  const pending = change.filter((v) => v.status === 'pending_approval').sort((a, b) => a.createdAt - b.createdAt);
-  const decided = change.filter((v) => v.approvedAt || v.rejectedAt).sort((a, b) => (b.approvedAt ?? b.rejectedAt ?? 0) - (a.approvedAt ?? a.rejectedAt ?? 0)).slice(0, 50);
-  return { pending: pending.map(item).filter((x): x is PricingApprovalItem => !!x), decided: decided.map(item).filter((x): x is PricingApprovalItem => !!x), canDecide: role === 'finops' };
+}
+
+/** §7.3 Sub-Merchant View: one row per sub-merchant × payment method, with the resolved pricing (§7.9). */
+export function subMerchantPricing(db: MerchantDb, country: string, now: number): SubMerchantPricingRow[] {
+  const today = todayIso(now);
+  const cfg = ONBOARDING_COUNTRIES[country];
+  const out: SubMerchantPricingRow[] = [];
+  for (const app of pricedApps(db, country)) {
+    const versions = (db.pricingVersions ?? []).filter((v) => v.applicationId === app.id);
+    const state = productState(db, app);
+    for (const sub of subMerchantsOf(db, app)) {
+      const codes = new Set([...state.config.products.filter((p) => p.enabled).map((p) => `${p.flow}:${p.methodCode}`), ...versions.filter((v) => subOf(v) === sub.id).map((v) => `${v.flow}:${v.methodCode}`)]);
+      const base = { applicationId: app.id, merchantId: app.merchantId, merchantName: merchantOf(db, app).legalName, mid: midOf(db, app), subMerchantId: sub.id, subMerchantName: sub.name };
+      let priced = 0;
+      for (const key of codes) {
+        const [flow, code] = key.split(':') as [ProductFlow, string];
+        const r = resolvePricing(versions, code, today, flow, sub.id);
+        if (r) priced++;
+        out.push({
+          ...base,
+          methodCode: code,
+          methodName: cfg.paymentMethods.find((m) => m.code === code)?.name ?? code,
+          level: r?.level ?? null,
+          technique: r ? techniqueLabel(r.version.technique) : null,
+          pricing: r ? pricingSummary(r.version) : null,
+          currency: r?.version.currency ?? null,
+          startDate: r?.version.startDate ?? null,
+          endDate: r?.version.endDate ?? null,
+          status: r?.version.status ?? null,
+        });
+      }
+      // A sub-merchant with no resolved pricing at all gets one placeholder row ("No pricing").
+      if (!priced) {
+        for (let i = out.length - 1; i >= 0 && out[i].subMerchantId === sub.id; i--) out.splice(i, 1);
+        out.push({ ...base, methodCode: null, methodName: null, level: null, technique: null, pricing: null, currency: null, startDate: null, endDate: null, status: null });
+      }
+    }
+  }
+  return out;
+}
+
+/** §7.11 MDR History: every rule in the corridor, by merchant, sub-merchant, payment method, then version (newest first). */
+export function mdrHistory(db: MerchantDb, country: string): MdrHistoryRow[] {
+  const cfg = ONBOARDING_COUNTRIES[country];
+  return (db.pricingVersions ?? [])
+    .map((v) => ({ v, app: db.applications.find((a) => a.id === v.applicationId) }))
+    .filter((x) => x.app?.country === country)
+    .map(({ v, app }) => ({ version: v, applicationId: app!.id, merchantId: app!.merchantId, merchantName: merchantOf(db, app!).legalName, subMerchantName: subName(db, v.subMerchantId), methodName: cfg.paymentMethods.find((m) => m.code === v.methodCode)?.name ?? v.methodCode }))
+    .sort((a, b) => a.merchantName.localeCompare(b.merchantName) || (a.subMerchantName ?? '').localeCompare(b.subMerchantName ?? '') || a.methodName.localeCompare(b.methodName) || b.version.version - a.version.version);
 }
 
 /** The MDR audit log, latest first. */

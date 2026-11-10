@@ -80,6 +80,10 @@ export class PricingPanel {
     return x.vaBanks.length ? x.vaBanks.map((b) => VA_BANKS.find((v) => v.code === b)?.name ?? b).join(', ') : 'All VA Banks';
   }
 
+  protected subLabel(x: PricingVersion) {
+    return x.subMerchantId ? (this.view().subMerchants.find((s) => s.id === x.subMerchantId)?.name ?? x.subMerchantId) : '';
+  }
+
   protected subscriptionText(x: PricingVersion) {
     if (!x.subscription || !x.subscription.monthlyFee) return '';
     const next = nextSubscriptionCharge(x, this.view().today);

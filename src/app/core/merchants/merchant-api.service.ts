@@ -19,7 +19,7 @@ import {
 import type { MccChangeRequest } from './mcc';
 import type { ApprovalsView, ChangeRequest, CreateChangeRequest } from './change-requests';
 import type { CreateSubMerchantRequest, SubMerchantView } from './sub-merchants';
-import type { PricingApprovalsView, PricingAuditEvent, PricingDecisionRequest, PricingVersion, ProductPricingView, SaveProductsRequest, SetPricingRequest } from './products';
+import type { MdrHistoryRow, MerchantPricingList, SubMerchantPricingRow, PricingApprovalsView, PricingAuditEvent, PricingDecisionRequest, PricingVersion, ProductPricingView, SaveProductsRequest, SetPricingRequest } from './products';
 import { StaffRoleService } from './staff-role.service';
 
 export type MerchantClientError = MerchantApiError | { code: 'NETWORK_ERROR'; message?: string } | { code: 'UNKNOWN_ERROR'; message?: string };
@@ -180,8 +180,20 @@ export class MerchantApi {
     return this.run(this.http.post<PricingResult>(url, req, { headers: this.headers }), true);
   }
 
-  pricingApprovals() {
-    return this.run(this.http.get<PricingApprovalsView>('/api/pricing/approvals', { headers: this.headers }));
+  pricingApprovals(country?: string) {
+    return this.run(this.http.get<PricingApprovalsView>(`/api/pricing/approvals${country ? `?country=${encodeURIComponent(country)}` : ''}`, { headers: this.headers }));
+  }
+
+  merchantPricing(country: string) {
+    return this.run(this.http.get<MerchantPricingList>(`/api/pricing/merchants?country=${encodeURIComponent(country)}`, { headers: this.headers }));
+  }
+
+  subMerchantPricing(country: string) {
+    return this.run(this.http.get<SubMerchantPricingRow[]>(`/api/pricing/sub-merchants?country=${encodeURIComponent(country)}`, { headers: this.headers }));
+  }
+
+  mdrHistory(country: string) {
+    return this.run(this.http.get<MdrHistoryRow[]>(`/api/pricing/history?country=${encodeURIComponent(country)}`, { headers: this.headers }));
   }
 
   pricingAudit() {

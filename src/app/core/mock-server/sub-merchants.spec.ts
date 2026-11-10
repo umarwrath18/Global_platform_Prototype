@@ -68,7 +68,7 @@ describe('Sub-merchants', () => {
 
       const d = db();
       const parent = d.entities!.find((e) => e.gmid === 'GM-100101' && e.kind === 'parent')!;
-      const children = d.entities!.filter((e) => e.kind === 'sub');
+      const children = d.entities!.filter((e) => e.kind === 'sub' && e.gmid === 'GM-100101');
       expect(children.map((c) => [c.gmid, c.parentEntityId])).toEqual([['GM-100101', parent.id], ['GM-100101', parent.id]]);
       for (const c of children) {
         expect(entityProblems(c, d.entities!)).toEqual([]);

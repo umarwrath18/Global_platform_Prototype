@@ -248,9 +248,25 @@ it, so test approvals with two logins (e.g. submit as `123`, approve as `TANJUNG
 FinOps). Each decision asks for a current code from the approver's authenticator. **"Confirm
 onboarding"** replaces "Issue production keys" (it also issues them) and is blocked until a product
 is on, every product has pricing in effect and every PayIn product has a settlement cycle. Every
-pricing create, approval, rejection and cancellation is in the **MDR audit log** (sidebar) and the
-application history. Not built yet: the standalone Merchant Pricing engine (Part A), sub-merchant
-MID pricing, a merchant-facing pricing view, and re-authentication for settlement or USD fee changes.
+pricing create, approval, rejection and cancellation is in the **MDR audit log** and the application
+history.
+
+**Merchant Pricing (Pricing Engine Part A).** Sidebar → **Merchant Pricing**, scoped to a corridor
+(MY, ID or VN; it follows the header's country filter). It works on the same pricing as Product &
+Payment Config, for MIDs whose onboarding is confirmed:
+- **Merchants** (§7.1): search, Flow and Status filters, active / total rules, MDR range, pagination.
+  Ops (Sales / Operations) get *Edit Pricing* and *Configure*; FinOps and others *View Pricing*.
+- **Merchant detail** (§7.2): Active, Scheduled and Pending rules at merchant level and per
+  sub-merchant, version history, View Details, Edit Pricing ("Select Pricing to Edit"), Cancel Rule,
+  and the editor as a popup with an optional **sub-merchant** scope.
+- **Sub-Merchant View** (§7.3): the pricing that applies to each sub-merchant and payment method – its
+  own rule, otherwise the merchant-level rule (§7.9).
+- **MDR History** (§7.11), **Approvals** (§7.8: status chips, Pricing Detail, maker ≠ checker and an
+  MFA code per decision) and the **MDR audit log** (§7.10).
+Demo: Nusantara Home Retail (Malaysia) has two sub-merchants; the Online Store has its own Cards
+rule and the Penang Outlet uses the merchant's. Not built yet: the §3.1 standalone catalog
+(Boost, ShopeePay, EzyCash, LinkAja, e-wallet payouts), a merchant-facing pricing view,
+re-authentication for settlement or USD fee changes, and sub-merchant settlement cycles.
 
 **Changes after Risk approval.** Once Risk has approved a merchant, anything Risk reviewed changes
 only through a change request that Risk approves: the legal identity (merchant page → "Request

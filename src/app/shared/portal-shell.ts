@@ -30,8 +30,8 @@ const NAV: NavItem[] = [
   { label: 'Applications', icon: 'file', link: '/applications' },
   { label: 'Notifications', icon: 'bell', link: '/notifications' },
   { label: 'Approvals', icon: 'check-circle', link: '/approvals' },
-  { label: 'Pricing Approvals', icon: 'card', link: '/pricing-approvals' },
-  { label: 'MDR audit log', icon: 'list', link: '/pricing-audit' },
+  { label: 'Merchant Pricing', icon: 'card', link: '/merchant-pricing' },
+  { label: 'Pricing Approvals', icon: 'check-circle', link: '/pricing-approvals' },
 ];
 
 /** What Mobi Support and Security Admin see: they have no merchant permissions. */

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   activateVersion,
   calculateFee,
+  resolvePricing,
   classifyPeriod,
   gapCount,
   mdrWarnings,
@@ -256,5 +257,21 @@ describe('summaries and the onboarding gate', () => {
     expect(gapCount(gaps)).toBe(3);
     const priced = [version({ methodCode: 'fpx' }), version({ methodCode: 'bank_transfer_payout', flow: 'payout' })];
     expect(productGaps({ ...on, settlement: { fpx: 'T+1' } }, priced, methods, '2026-11-10')).toEqual([]);
+  });
+});
+
+describe('price resolution (§7.9)', () => {
+  it('uses the sub-merchant rule, then the merchant-level rule, then none', () => {
+    const merchant = version({ methodCode: 'cards', mdrPct: 2.2 });
+    const sub = version({ methodCode: 'cards', mdrPct: 1.9, subMerchantId: 'ME-1' });
+    expect(resolvePricing([merchant, sub], 'cards', '2026-11-10', 'payin', 'ME-1')).toMatchObject({ level: 'sub_merchant', version: { mdrPct: 1.9 } });
+    expect(resolvePricing([merchant, sub], 'cards', '2026-11-10', 'payin', 'ME-2')).toMatchObject({ level: 'merchant', version: { mdrPct: 2.2 } });
+    expect(resolvePricing([sub], 'cards', '2026-11-10', 'payin', null)).toBeNull();
+  });
+
+  it('keeps sub-merchant rules out of merchant-level overlap checks', () => {
+    const sub = version({ methodCode: 'cards', subMerchantId: 'ME-1', startDate: '2026-11-01' });
+    expect(classifyPeriod(draft({ methodCode: 'cards', startDate: '2026-11-01' }), [sub]).kind).toBe('none');
+    expect(classifyPeriod(draft({ methodCode: 'cards', subMerchantId: 'ME-1', startDate: '2026-11-01' }), [sub]).kind).toBe('overlap');
   });
 });

@@ -91,11 +91,13 @@ export function todayIso(now: number) {
 
 export const addDays = (date: string, days: number) => new Date(Date.parse(`${date}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10);
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 /** DD MMM YYYY, for tables (e.g. 04 Nov 2026). */
 export function fmtDay(date: string | null | undefined): string {
   if (!date) return '';
   const d = new Date(`${date}T00:00:00Z`);
-  return `${String(d.getUTCDate()).padStart(2, '0')} ${d.toLocaleString('en-GB', { month: 'short', timeZone: 'UTC' })} ${d.getUTCFullYear()}`;
+  return `${String(d.getUTCDate()).padStart(2, '0')} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
 /** DD/MM/YYYY, for effective-period sentences. */
@@ -188,6 +190,8 @@ export const PROMO_TYPE_LABEL: Record<Promotion['type'], string> = { uncondition
 export interface PricingDraft {
   flow: ProductFlow;
   methodCode: string;
+  /** Sub-merchant (entity ID) the rule is for; null or absent = merchant level (§7.4 Scope, §7.9). */
+  subMerchantId?: string | null;
   /** Indonesia VA only; empty = all banks. */
   vaBanks: string[];
   /** Null = no primary method; a subscription fee is then required. */
@@ -315,13 +319,20 @@ export function nextSubscriptionCharge(v: Pick<PricingDraft, 'subscription' | 's
   const prev = new Date(Date.UTC(y, m - 1, 1));
   if (v.startDate > addDays(first, -1)) return null; // starts after the month being charged
   if (v.endDate && v.endDate < prev.toISOString().slice(0, 10)) return null;
-  return { date: first, forMonth: prev.toLocaleString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' }), amount: v.subscription.monthlyFee, currency: v.subscription.currency };
+  return { date: first, forMonth: `${MONTHS[prev.getUTCMonth()]} ${prev.getUTCFullYear()}`, amount: v.subscription.monthlyFee, currency: v.subscription.currency };
 }
 
 // ------------------------------------------------------------------ effective periods (§4.2)
 
-/** Same scope: flow + payment method (the MID is the application). VA banks are checked separately (§7.6). */
-const sameScope = (a: Pick<PricingVersion, 'flow' | 'methodCode'>, b: Pick<PricingVersion, 'flow' | 'methodCode'>) => a.flow === b.flow && a.methodCode === b.methodCode;
+/** Sub-merchant of a rule; null = merchant level. */
+export const subOf = (v: Pick<PricingDraft, 'subMerchantId'>) => v.subMerchantId ?? null;
+
+/**
+ * Same scope: flow + payment method + sub-merchant (the MID is the application). VA banks are
+ * checked separately (§7.6).
+ */
+export const sameScope = (a: Pick<PricingVersion, 'flow' | 'methodCode' | 'subMerchantId'>, b: Pick<PricingVersion, 'flow' | 'methodCode' | 'subMerchantId'>) =>
+  a.flow === b.flow && a.methodCode === b.methodCode && subOf(a) === subOf(b);
 
 /** §7.6: VA rules are compared only when their bank sets intersect (empty = all banks). */
 export function vaBanksIntersect(a: string[], b: string[]) {
@@ -343,7 +354,7 @@ export type PeriodConflict = { kind: 'none' } | { kind: 'supersession'; existing
  * Classifies a new period against the same-scope versions (§4.2). `excludeId`: the version being
  * edited, which the check ignores (§7.7). A hard overlap wins over a supersession.
  */
-export function classifyPeriod(draft: Pick<PricingDraft, 'flow' | 'methodCode' | 'vaBanks' | 'startDate' | 'endDate'>, versions: PricingVersion[], excludeId?: string | null): PeriodConflict {
+export function classifyPeriod(draft: Pick<PricingDraft, 'flow' | 'methodCode' | 'subMerchantId' | 'vaBanks' | 'startDate' | 'endDate'>, versions: PricingVersion[], excludeId?: string | null): PeriodConflict {
   let supersession: PeriodConflict | null = null;
   for (const e of versions) {
     if (e.id === excludeId || !sameScope(e, draft)) continue;
@@ -364,8 +375,8 @@ export function classifyPeriod(draft: Pick<PricingDraft, 'flow' | 'methodCode' |
 }
 
 /** "Pricing period overlaps…" detail line (§7.4 step 3). */
-export function overlapMessage(existing: PricingVersion, merchantName: string, methodName: string): string {
-  return `${techniqueLabel(existing.technique)} pricing is already configured for ${merchantName} → ${methodName} from ${fmtDay(existing.startDate)} to ${existing.endDate ? fmtDay(existing.endDate) : 'Ongoing'}. Please select a non-overlapping effective period.`;
+export function overlapMessage(existing: PricingVersion, merchantName: string, methodName: string, subMerchantName?: string | null): string {
+  return `${techniqueLabel(existing.technique)} pricing is already configured for ${merchantName}${subMerchantName ? ` → ${subMerchantName}` : ''} → ${methodName} from ${fmtDay(existing.startDate)} to ${existing.endDate ? fmtDay(existing.endDate) : 'Ongoing'}. Please select a non-overlapping effective period.`;
 }
 
 export const statusOnActivation = (startDate: string, today: string): PricingStatus => (startDate > today ? 'scheduled' : 'active');
@@ -411,11 +422,25 @@ export function runStatusJob(versions: PricingVersion[], today: string): number 
   return n;
 }
 
-/** The version that prices `methodCode` on `day`: latest start, then highest version (§7.9). */
-export function pricingInEffect(versions: PricingVersion[], methodCode: string, day: string, flow?: ProductFlow): PricingVersion | undefined {
+/**
+ * The rule in effect for `methodCode` on `day` at one level (merchant level by default): latest
+ * start date first, then the highest version (§7.9).
+ */
+export function pricingInEffect(versions: PricingVersion[], methodCode: string, day: string, flow?: ProductFlow, subMerchantId: string | null = null): PricingVersion | undefined {
   return versions
-    .filter((v) => v.methodCode === methodCode && (!flow || v.flow === flow) && inEffect(v, day))
+    .filter((v) => v.methodCode === methodCode && (!flow || v.flow === flow) && subOf(v) === subMerchantId && inEffect(v, day))
     .sort((a, b) => b.startDate.localeCompare(a.startDate) || b.version - a.version)[0];
+}
+
+/**
+ * Price resolution (§7.9): a sub-merchant's own rule in effect, else the merchant-level rule, else
+ * no pricing (no fee; the caller raises an alert).
+ */
+export function resolvePricing(versions: PricingVersion[], methodCode: string, day: string, flow: ProductFlow, subMerchantId: string | null): { version: PricingVersion; level: 'sub_merchant' | 'merchant' } | null {
+  const own = subMerchantId ? pricingInEffect(versions, methodCode, day, flow, subMerchantId) : undefined;
+  if (own) return { version: own, level: 'sub_merchant' };
+  const merchant = pricingInEffect(versions, methodCode, day, flow, null);
+  return merchant ? { version: merchant, level: 'merchant' } : null;
 }
 
 // ------------------------------------------------------------------ validation (§4.2, §5, §7.4, §7.5)
@@ -724,6 +749,8 @@ export interface PricingAuditEvent {
   country: string;
   methodCode: string;
   methodName: string;
+  /** Sub-merchant name; null = merchant level. */
+  subMerchantName?: string | null;
   flow: ProductFlow;
   versionId: string;
   version: number;
@@ -753,6 +780,8 @@ export interface ProductPricingView {
   methods: ProductMethod[];
   config: ProductConfig;
   versions: PricingVersion[];
+  /** Sub-merchants of the merchant in this corridor (not rejected), for sub-merchant pricing. */
+  subMerchants: { id: string; name: string }[];
   gaps: ProductGap[];
   gapCount: number;
   can: { editProducts: boolean; editPricing: boolean; decidePricing: boolean };
@@ -797,6 +826,7 @@ export interface PricingApprovalItem {
   country: string;
   countryName: string;
   methodName: string;
+  subMerchantName: string | null;
   /** Summary of the pricing in effect now (null: none). */
   current: string | null;
   proposed: string;
@@ -804,8 +834,94 @@ export interface PricingApprovalItem {
   ownSubmission: boolean;
 }
 
+/** §7.8: every pricing change submitted by Ops (all statuses, for the filter chips). */
 export interface PricingApprovalsView {
-  pending: PricingApprovalItem[];
-  decided: PricingApprovalItem[];
+  items: PricingApprovalItem[];
   canDecide: boolean;
+}
+
+/** Sort order of the approvals list (§7.8). */
+export const APPROVAL_STATUS_ORDER: PricingStatus[] = ['pending_approval', 'active', 'scheduled', 'cancelled', 'rejected', 'expired'];
+
+// ------------------------------------------------------------------ Merchant Pricing (§7)
+
+export const CORRIDORS = ['MY', 'ID', 'VN'] as const;
+
+/** One row of the Merchant Pricing list (§7.1): a merchant's MID in the corridor. */
+export interface MerchantPricingRow {
+  applicationId: string;
+  merchantId: string;
+  merchantName: string;
+  /** Master MID; null until issued at go-live. */
+  mid: string | null;
+  country: string;
+  subMerchantCount: number;
+  /** The merchant's status in the app: onboarding, active, no_active_applications, or suspended. */
+  status: 'onboarding' | 'active' | 'no_active_applications' | 'suspended';
+  updatedAt: number;
+  activeRules: number;
+  totalRules: number;
+  /** MDR range of active rules, e.g. "0.7%–2.2%"; null when none uses an MDR. */
+  mdr: string | null;
+  flows: ProductFlow[];
+  pendingCount: number;
+}
+
+export interface MerchantPricingList {
+  rows: MerchantPricingRow[];
+  activeRules: number;
+  pendingApprovals: number;
+  canConfigure: boolean;
+}
+
+/** One row of the Sub-Merchant View (§7.3): resolved pricing for a sub-merchant and payment method. */
+export interface SubMerchantPricingRow {
+  applicationId: string;
+  merchantId: string;
+  merchantName: string;
+  mid: string | null;
+  subMerchantId: string;
+  subMerchantName: string;
+  methodCode: string | null;
+  methodName: string | null;
+  /** Where the pricing comes from; null = no pricing. */
+  level: 'sub_merchant' | 'merchant' | null;
+  technique: string | null;
+  pricing: string | null;
+  currency: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  status: PricingStatus | null;
+}
+
+/** One row of MDR History (§7.11). */
+export interface MdrHistoryRow {
+  version: PricingVersion;
+  applicationId: string;
+  merchantId: string;
+  merchantName: string;
+  subMerchantName: string | null;
+  methodName: string;
+}
+
+/** "MDR: 1.5% + Fixed: 0.5", "Resulting: 1% | Default: 2% | Prev Month GMV >= 10,000,000"… (§7.11 Pricing Details). */
+export function pricingDetails(v: PricingVersion): string {
+  switch (v.technique) {
+    case null:
+      return 'No primary pricing';
+    case 'fixed_fee':
+      return v.usd ? `Fixed: USD ${num(v.usd.fixedFeeUsd)} (Rate ${num(v.usd.usdExchangeRate)} → ${v.usd.localEquivalentCurrency} ${num(v.usd.localEquivalent)})` : `Fixed: ${v.currency} ${num(v.fixedFee ?? 0)}`;
+    case 'historical_volume': {
+      const h = v.historical!;
+      return `Resulting: ${pct(h.resultingMdr)} | Default: ${pct(h.defaultMdr)} | ${REFERENCE_PERIOD_SHORT[h.referencePeriod]} ${METRIC_SHORT[h.evaluationMetric]} ${h.thresholdDirection} ${num(h.volumeThreshold)}`;
+    }
+    case 'volume_based':
+      return (v.tiers ?? []).map((t) => `${num(t.minVolume)}-${t.maxVolume === null ? '∞' : num(t.maxVolume)}: ${pct(t.mdrPct)}`).join(' | ');
+    case 'higher_of':
+      return `Percentage: ${pct(v.mdrPct)} + Min: ${v.currency} ${num(v.minimumFee ?? 0)}`;
+    case 'variable_plus_fixed':
+      return `MDR: ${pct(v.mdrPct)} + Fixed: ${v.currency} ${num(v.fixedFee ?? 0)}`;
+    default:
+      return `MDR: ${pct(v.mdrPct)}${v.minimumFee ? ` · Min: ${v.currency} ${num(v.minimumFee)}` : ''}`;
+  }
 }

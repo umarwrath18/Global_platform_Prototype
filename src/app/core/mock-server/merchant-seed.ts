@@ -12,6 +12,8 @@ import {
 import { ONBOARDING_COUNTRIES, READINESS_CHECKLISTS as READINESS } from '../merchants/onboarding-config';
 import { periodText, pricingSummary, type PricingAuditEvent, type PricingVersion, type ProductConfig } from '../merchants/products';
 import type { MerchantDb, MerchantRecord } from './merchant-server';
+import { formatEntityId, type MerchantEntity } from './merchant-identity';
+import { SUB_MERCHANT_CHECKS } from '../merchants/sub-merchants';
 import { simulateVerification } from './verification';
 
 // Seed merchants. Names, registration numbers, bank accounts and people are fictional
@@ -465,4 +467,72 @@ export function buildSeedAdditions(now: number): { merchants: MerchantRecord[]; 
   const applications = seeds.map((x) => buildApplication(x, ago));
   nusantara.updatedAt = Math.max(...applications.map((a) => a.updatedAt));
   return { merchants: [nusantara], applications, products: seeds.map((x, i) => seedProducts(x, applications[i])) };
+}
+
+// ---------------------------------------------------------------- demo sub-merchants
+
+/**
+ * Demo sub-merchants for Merchant Pricing (added after the data upgrade has created the parent
+ * entities): Nusantara Home Retail's Online Store and Penang Outlet in Malaysia, both approved.
+ * The Online Store has its own Cards pricing; the Penang Outlet falls back to the merchant's.
+ */
+export function addDemoSubMerchants(db: MerchantDb, now: number) {
+  const parent = (db.entities ?? []).find((e) => e.gmid === 'GM-109001' && e.kind === 'parent');
+  const app = db.applications.find((a) => a.id === 'APP-2026-9001');
+  if (!parent || !app || (db.entities ?? []).some((e) => e.kind === 'sub' && e.gmid === 'GM-109001')) return;
+  const created = now - 60 * DAY;
+  db.seq.entity ??= 1;
+  const sub = (displayName: string, email: string): MerchantEntity => ({
+    id: formatEntityId(db.seq.entity!++),
+    gmid: 'GM-109001',
+    kind: 'sub',
+    parentEntityId: parent.id,
+    legalEntity: null,
+    displayName,
+    email,
+    website: 'https://nusantarahome.example',
+    tradingLicenseUrl: null,
+    lifecycleStatus: 'active',
+    lifecycleReason: null,
+    createdAt: created,
+    createdBy: STAFF.sales,
+    country: 'MY',
+    status: 'approved',
+    createdVia: 'ops',
+    goLiveChecks: SUB_MERCHANT_CHECKS.map((c) => ({ ...c, done: false, doneAt: null, doneBy: null })),
+    history: [
+      { at: created, action: 'Sub-merchant created', by: STAFF.sales, role: 'sales', comment: null },
+      { at: created + DAY, action: 'Approved by Risk', by: STAFF.risk, role: 'risk', comment: null },
+    ],
+    submittedBy: STAFF.sales,
+    submittedAt: created,
+    decidedBy: STAFF.risk,
+    decidedRole: 'risk',
+    decidedAt: created + DAY,
+    decisionComment: null,
+  });
+  const online = sub('Nusantara Home – Online Store', 'online@nusantarahome.example');
+  const penang = sub('Nusantara Home – Penang Outlet', 'penang@nusantarahome.example');
+  db.entities!.push(online, penang);
+  const at = created + 2 * DAY;
+  const v = blankVersion({
+    id: 'PV-SEED-9001-cards-online',
+    applicationId: app.id,
+    methodCode: 'cards',
+    subMerchantId: online.id,
+    currency: 'MYR',
+    mdrPct: 1.9,
+    startDate: new Date(at).toISOString().slice(0, 10),
+    createdAt: at,
+    source: 'change',
+    settlementSnapshot: 'T+1',
+    createdBy: STAFF.sales,
+    createdById: 'seed-sales',
+    createdRole: 'sales',
+    approvedBy: 'Nurul Huda',
+    approvedAt: at,
+  });
+  (db.pricingVersions ??= []).push(v);
+  const [audit] = seedAudit([v], db.applications, db.merchants);
+  (db.pricingAudit ??= []).push({ ...audit, id: 'PA-SEED-SUB-1', role: 'Ops', previous: 'No pricing configured', subMerchantName: online.displayName });
 }

@@ -2,68 +2,137 @@
   <div class="portal-head">
     <div>
       <h1>Pricing Approvals</h1>
-      <p class="sub">Merchant Pricing changes submitted by Ops after onboarding.</p>
+      <p class="sub">{{ view()?.canDecide ? 'Review and approve pricing configurations submitted by Operations' : 'View pricing configurations pending approval (read-only)' }}</p>
     </div>
-    <a class="btn sm ghost" routerLink="/pricing-audit"><app-icon name="list" [size]="15" />MDR audit log</a>
+    <div class="head-tools">
+      <app-corridor-select />
+    </div>
   </div>
+  <app-merchant-pricing-tabs />
 
   @if (view(); as v) {
     @if (!v.canDecide) {
       <div class="alert compact" role="note"><app-icon name="lock" /><div>Read-only – Switch to FinOps to approve</div></div>
     }
     <section class="panel-card">
-      <div class="tabs" role="tablist" aria-label="Pricing approvals">
-        <button type="button" role="tab" [class.on]="tab() === 'pending'" [attr.aria-selected]="tab() === 'pending'" (click)="tab.set('pending')">Pending<span class="n">{{ v.pending.length }}</span></button>
-        <button type="button" role="tab" [class.on]="tab() === 'decided'" [attr.aria-selected]="tab() === 'decided'" (click)="tab.set('decided')">Decided<span class="n">{{ v.decided.length }}</span></button>
+      <div class="chips-bar" role="group" aria-label="Filter by status">
+        @for (c of chips; track c.key) {
+          <button type="button" class="chip" [class.on]="chip() === c.key" [attr.aria-pressed]="chip() === c.key" (click)="chip.set(c.key)">{{ c.label }}@if (c.key === 'pending_approval') {<span class="n">{{ counts()['pending_approval'] || 0 }}</span>}</button>
+        }
       </div>
-      @let list = tab() === 'pending' ? v.pending : v.decided;
-      @if (list.length) {
-        <ul class="pa-list">
-          @for (i of list; track i.version.id) {
-            <li class="pa-item">
-              <div class="pa-main">
-                <p class="pa-title">
-                  <a [routerLink]="['/applications', i.applicationId, 'products']">{{ i.merchantName }}</a>
-                  <span class="muted">· {{ i.mid ? 'MID ' + i.mid : i.applicationId }} · {{ i.countryName }}</span>
-                </p>
-                <p class="pa-product">{{ i.methodName }} ({{ flowLabel[i.version.flow] }}) · v{{ i.version.version }} · {{ technique(i.version.technique) }}</p>
-                <dl class="pa-compare">
-                  <div><dt>Current</dt><dd>{{ i.current ?? 'No pricing configured' }}</dd></div>
-                  <div><dt>Proposed</dt><dd>{{ i.proposed }}@if (secondary(i.version); as s) {<span class="muted"> · {{ s }}</span>}</dd></div>
-                  <div><dt>Effective</dt><dd>{{ period(i.version) }}</dd></div>
-                </dl>
-                <p class="pa-meta">
-                  Submitted by {{ i.version.createdBy }} · {{ dateTime(i.version.createdAt) }}
-                  @if (i.version.approvedBy) { · Approved by {{ i.version.approvedBy }} · {{ dateTime(i.version.approvedAt!) }}}
-                  @if (i.version.rejectedBy) { · Rejected by {{ i.version.rejectedBy }} · {{ dateTime(i.version.rejectedAt!) }}: “{{ i.version.rejectionReason }}”}
-                </p>
-                @if (i.version.version > 1 && tab() === 'pending') {
-                  <p class="pa-meta">This is v{{ i.version.version }} – a modified version of the previous configuration. Approving this will supersede the previous version.</p>
-                }
-              </div>
-              <div class="pa-side">
-                <span class="status" [class]="'status ' + tone[i.version.status]">{{ statusLabel[i.version.status] }}</span>
-                @if (tab() === 'pending' && v.canDecide) {
-                  @if (i.ownSubmission) {
-                    <p class="pa-own">You submitted this change, so someone else must approve it.</p>
-                  } @else {
-                    <div class="pa-actions">
-                      <button type="button" class="btn sm" (click)="open(i, 'reject')">Reject</button>
-                      <button type="button" class="btn sm primary" (click)="open(i, 'approve')">Approve</button>
-                    </div>
-                  }
-                }
-              </div>
-            </li>
-          }
-        </ul>
+      @if (rows().length) {
+        <div class="table-wrap">
+          <table class="data-table pa-table">
+            <thead>
+              <tr>
+                <th scope="col">Merchant</th>
+                <th scope="col">Corridor</th>
+                <th scope="col">Payment Method</th>
+                <th scope="col">Technique</th>
+                <th scope="col">New Rate</th>
+                <th scope="col">Effective From</th>
+                <th scope="col">Status</th>
+                <th scope="col">Changed By</th>
+                <th scope="col"><span class="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (i of rows(); track i.version.id) {
+                <tr class="clickable" tabindex="0" (click)="detail.set(i)" (keydown.enter)="detail.set(i)" [class.selected]="detail()?.version?.id === i.version.id">
+                  <td>{{ i.merchantName }}<div class="sub-line">{{ i.subMerchantName ?? 'Merchant Level' }}</div></td>
+                  <td>{{ i.country }}</td>
+                  <td>{{ i.methodName }}<div class="sub-line">{{ flowLabel[i.version.flow] }} · v{{ i.version.version }}@if (vaText(i); as va) { · {{ va }}}</div></td>
+                  <td>{{ technique(i.version.technique) }}</td>
+                  <td class="cfg">{{ newRate(i) }}</td>
+                  <td class="nowrap">{{ day(i.version.startDate) }}</td>
+                  <td><span class="status" [class]="'status ' + tone[i.version.status]">{{ statusLabel[i.version.status] }}</span></td>
+                  <td>{{ i.version.createdBy }}</td>
+                  <td class="row-actions">
+                    @if (i.version.status === 'pending_approval' && v.canDecide) {
+                      @if (i.ownSubmission) {
+                        <span class="muted small" title="You submitted this change, so someone else must approve it.">Your change</span>
+                      } @else {
+                        <button type="button" class="btn sm icon-only" (click)="open(i, 'approve', $event)" [attr.aria-label]="'Approve ' + i.methodName + ' for ' + i.merchantName" title="Approve"><app-icon name="check" [size]="15" /></button>
+                        <button type="button" class="btn sm icon-only" (click)="open(i, 'reject', $event)" [attr.aria-label]="'Reject ' + i.methodName + ' for ' + i.merchantName" title="Reject"><app-icon name="x" [size]="15" /></button>
+                      }
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
       } @else {
         <div class="empty-state">
           <div class="icon-tile"><app-icon name="check-circle" /></div>
-          <h3>{{ tab() === 'pending' ? 'Nothing is waiting for approval.' : 'No decisions yet.' }}</h3>
+          <h3>{{ chip() === 'pending_approval' ? 'Nothing is waiting for approval in ' + corridor.name() + '.' : 'No pricing configurations match.' }}</h3>
         </div>
       }
     </section>
+
+    @if (detail(); as i) {
+      @let x = i.version;
+      <section class="panel-card pa-detail" aria-labelledby="pd-title">
+        <div class="panel-head">
+          <div><h2 id="pd-title">Pricing Detail</h2><p>{{ i.merchantName }} · {{ i.mid ? 'MID ' + i.mid : i.applicationId }}</p></div>
+          <button type="button" class="btn sm ghost" (click)="detail.set(null)">Close</button>
+        </div>
+        <div class="panel-body">
+          <dl class="kv">
+            <div><dt>Merchant</dt><dd>{{ i.merchantName }}</dd></div>
+            <div><dt>Sub-Merchant</dt><dd>{{ i.subMerchantName ?? 'Merchant Level' }}</dd></div>
+            <div><dt>Corridor</dt><dd>{{ i.countryName }}</dd></div>
+            <div><dt>Flow Type</dt><dd>{{ flowLabel[x.flow] }}</dd></div>
+            <div><dt>Payment Method</dt><dd>{{ i.methodName }}</dd></div>
+            @if (vaText(i); as va) {<div><dt>VA Banks</dt><dd>{{ va }}</dd></div>}
+            <div><dt>Pricing Technique</dt><dd>{{ technique(x.technique) }}</dd></div>
+            <div><dt>Version</dt><dd>v{{ x.version }}</dd></div>
+            <div><dt>Created By</dt><dd>{{ x.createdBy }} · {{ dateTime(x.createdAt) }}</dd></div>
+            @if (x.technique === null) {
+              <div class="wide"><dt>Configuration</dt><dd>No Primary Pricing Method configured; only Subscription Fees will be applied.</dd></div>
+            } @else if (x.usd; as u) {
+              <div><dt>Fixed Fee per Transaction (USD)</dt><dd>USD {{ u.fixedFeeUsd }}</dd></div>
+              <div><dt>{{ u.localEquivalentCurrency }} Equivalent</dt><dd>{{ money(u.localEquivalent, u.localEquivalentCurrency) }}</dd></div>
+              <div><dt>Exchange Rate Used</dt><dd>{{ u.usdExchangeRate }} {{ u.localEquivalentCurrency }}/USD</dd></div>
+            } @else if (x.historical; as h) {
+              <div><dt>Reference Period</dt><dd>{{ refLabel[h.referencePeriod] }}</dd></div>
+              <div><dt>Evaluation Metric</dt><dd>{{ metricLabel[h.evaluationMetric] }}</dd></div>
+              <div><dt>Volume Threshold</dt><dd>{{ h.thresholdDirection }} {{ money(h.volumeThreshold, x.currency) }}</dd></div>
+              <div><dt>Resulting MDR</dt><dd>{{ h.resultingMdr }}%</dd></div>
+              <div><dt>Default MDR</dt><dd>{{ h.defaultMdr }}%</dd></div>
+            } @else {
+              @if (x.mdrPct !== null) {<div><dt>MDR / Percentage</dt><dd>{{ x.mdrPct }}%</dd></div>}
+              @if (x.fixedFee !== null) {<div><dt>Fixed Fee</dt><dd>{{ money(x.fixedFee, x.currency) }}</dd></div>}
+              @if (x.minimumFee) {<div><dt>Minimum Fee</dt><dd>{{ money(x.minimumFee, x.currency) }}</dd></div>}
+              <div><dt>Currency</dt><dd>{{ x.currency }}</dd></div>
+            }
+            @if (x.tiers?.length) {
+              <div class="wide"><dt>Volume Tiers</dt><dd>@for (t of x.tiers; track $index) {<div>{{ t.minVolume }} – {{ t.maxVolume ?? 'No limit' }}: {{ t.mdrPct }}%@if (t.fixedFee) { + {{ money(t.fixedFee, x.currency) }}}</div>}</dd></div>
+            }
+            @if (x.subscription || x.promotion) {
+              <div class="wide"><dt>Secondary Charges</dt><dd>
+                @if (x.subscription; as s) {<div>Subscription: {{ s.currency }} {{ s.monthlyFee }}/month</div>}
+                @if (x.promotion; as p) {<div>Promotional ({{ promoLabel[p.type] }}): MDR override to {{ p.mdrPct }}%</div>}
+              </dd></div>
+            }
+            <div class="wide"><dt>Effective Period</dt><dd>{{ day(x.startDate) }} – {{ x.endDate ? day(x.endDate) : 'No end date' }}</dd></div>
+            @if (i.current) {<div class="wide"><dt>Current pricing</dt><dd>{{ i.current }}</dd></div>}
+            @if (x.rejectionReason) {<div class="wide"><dt>Rejection reason</dt><dd>{{ x.rejectionReason }}</dd></div>}
+          </dl>
+          @if (x.version > 1 && x.status === 'pending_approval') {
+            <p class="pa-meta">This is v{{ x.version }} – a modified version of the previous configuration. Approving this will supersede the previous version.</p>
+          }
+          @if (x.status === 'pending_approval' && v.canDecide && !i.ownSubmission) {
+            <div class="pa-actions">
+              <button type="button" class="btn sm" (click)="open(i, 'reject')">Reject</button>
+              <button type="button" class="btn sm primary" (click)="open(i, 'approve')">Approve</button>
+            </div>
+          } @else if (x.status === 'pending_approval' && v.canDecide) {
+            <p class="pa-own">You submitted this change, so someone else must approve it.</p>
+          }
+        </div>
+      </section>
+    }
   } @else if (loadError(); as e) {
     <div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e.message ?? "We couldn't load pricing approvals." }} <button type="button" class="btn sm" (click)="load()">Try again</button></div></div>
   } @else {
@@ -74,7 +143,7 @@
     <div class="modal-backdrop" (click)="close()">
       <section class="pa-modal panel-card" role="dialog" aria-modal="true" aria-labelledby="pa-title" (click)="$event.stopPropagation()" (keydown.escape)="close()">
         <h2 id="pa-title">{{ d.decision === 'approve' ? 'Approve pricing change' : 'Reject pricing change' }}</h2>
-        <p class="muted">{{ d.item.merchantName }} · {{ d.item.methodName }} v{{ d.item.version.version }} · {{ d.item.proposed }}</p>
+        <p class="muted">{{ d.item.merchantName }}@if (d.item.subMerchantName) { · {{ d.item.subMerchantName }}} · {{ d.item.methodName }} v{{ d.item.version.version }} · {{ d.item.proposed }}</p>
         @if (d.decision === 'reject') {
           <label class="f-label" for="pa-reason">Provide a reason for rejecting this pricing configuration.</label>
           <textarea id="pa-reason" class="f-input" rows="3" maxlength="1000" placeholder="Enter rejection reason..." [value]="reason()" (input)="reason.set($any($event.target).value)"></textarea>
