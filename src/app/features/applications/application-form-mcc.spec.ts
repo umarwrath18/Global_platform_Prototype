@@ -45,7 +45,7 @@ describe('Application form – MCC field', () => {
   it('leaves MCC optional with an empty state when no catalogue covers the country, without inventing options', async () => {
     const { f, el, field } = await render(EMPTY_MCC_CATALOGUE);
     expect(field().querySelector('label .req')).toBeNull();
-    expect(el.querySelector('#mcc-options')).toBeNull();
+    expect(el.querySelector('#mcc')).toBeNull();
     expect(field().textContent).toContain('No MCC catalogue covers Malaysia yet, so the MCC can be left empty.');
     expect((f.componentInstance as any).issues().some((i: any) => i.field === 'business.mcc')).toBe(false);
   });
@@ -109,19 +109,11 @@ describe('Application form – MCC field', () => {
     expect([...conn.options].map((o) => o.textContent?.trim())).toEqual(['Select connection type', 'Direct Merchant', 'PSP', 'Payment Facilitator (aggregator)', 'Marketplace', 'Platform (SaaS)']);
   });
 
-  it("offers only the country's codes, searchable, and confirms the save (regression: no confirmation was shown)", async () => {
+  it("offers only the country's codes in a dropdown and confirms the save (regression: no confirmation was shown)", async () => {
     const { f, el, api } = await render(FIXTURE);
-    const options = [...el.querySelectorAll('#mcc-options option')].map((o) => o.textContent?.trim());
-    expect(options).toEqual(['5411 – TEST – Grocery stores']);
-    const search = el.querySelector('#mcc') as HTMLInputElement;
-    search.value = 'nothing like this';
-    search.dispatchEvent(new Event('input'));
-    f.detectChanges();
-    expect(el.querySelectorAll('#mcc-options option')).toHaveLength(0);
-    search.value = 'groc';
-    search.dispatchEvent(new Event('input'));
-    f.detectChanges();
-    const select = el.querySelector('#mcc-options') as HTMLSelectElement;
+    const select = el.querySelector('#mcc') as HTMLSelectElement;
+    expect(select.tagName).toBe('SELECT');
+    expect([...select.options].map((o) => o.textContent?.trim())).toEqual(['Select MCC', '5411 – TEST – Grocery stores']);
     select.value = '5411';
     select.dispatchEvent(new Event('change'));
     await vi.waitFor(async () => {
@@ -134,7 +126,7 @@ describe('Application form – MCC field', () => {
 
   it('after approval, sends MCC changes to a Risk request instead', async () => {
     const { el } = await render(FIXTURE, true);
-    expect(el.querySelector('#mcc-options')).toBeNull();
+    expect(el.querySelector('#mcc')).toBeNull();
     expect(el.textContent).toContain('the MCC can only change through a Risk-approved request');
   });
 });

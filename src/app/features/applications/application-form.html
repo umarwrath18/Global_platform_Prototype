@@ -134,15 +134,14 @@
             </div>
             <div class="f-field full">
               <label for="mcc">Merchant category code (MCC) @if (mccConfigured() && !mccLocked()) {<span class="req">*</span>}</label>
-              @if (currentMcc(); as cm) {<p class="f-static">Selected: <strong>{{ cm.code }} – {{ cm.description }}</strong></p>}
               @if (mccLocked()) {
-                @if (!currentMcc()) {<p class="f-static">Not captured</p>}
+                <p class="f-static">{{ currentMcc() ? currentMcc()!.code + ' – ' + currentMcc()!.description : 'Not captured' }}</p>
                 <p class="f-hint">Risk has approved this merchant, so the MCC can only change through a Risk-approved request. <a [routerLink]="['/merchants', merchant().id]">Request a change</a></p>
               } @else if (!mccConfigured()) {
                 <p class="f-hint" id="mcc-empty">No MCC catalogue covers {{ cfg().name }} yet, so the MCC can be left empty.</p>
               } @else {
                 <app-mcc-picker inputId="mcc" [options]="mccOptions()" [value]="currentMcc()?.code ?? null" [preferredGroup]="d.business.industry" [disabled]="mccSaving()" [invalid]="!!(err('business.mcc') || mccError())" describedBy="mcc-hint" (selected)="setMcc($event)" />
-                <p class="f-hint" id="mcc-hint">Search by code or description. Codes for the nature of business are listed first. Set once for the parent merchant; its sub-merchants use the same MCC.@if (mcc.isTestFixture()) {{{ ' ' }}<strong>Test fixture – not an approved catalogue.</strong>}</p>
+                <p class="f-hint" id="mcc-hint">Grouped by nature of business; the selected one is listed first. Set once for the parent merchant; its sub-merchants use the same MCC.@if (mcc.isTestFixture()) {{{ ' ' }}<strong>Test fixture – not an approved catalogue.</strong>}</p>
               }
               @if (mccRestricted()) {<p class="f-hint warn"><app-icon name="alert-circle" [size]="14" />Restricted in {{ cfg().name }}: it will be flagged for Risk review.</p>}
               @if (mccSaving()) {<p class="f-hint" role="status"><span class="spinner" aria-hidden="true"></span>Saving MCC…</p>}
