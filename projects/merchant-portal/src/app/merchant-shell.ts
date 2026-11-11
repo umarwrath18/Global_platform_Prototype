@@ -8,6 +8,7 @@ import { MobiLogo } from '@gp/shared/mobi-logo';
 const NAV: { label: string; icon: IconName; link: string }[] = [
   { label: 'Dashboard', icon: 'grid', link: '/dashboard' },
   { label: 'My Transactions', icon: 'swap', link: '/transactions' },
+  { label: 'Pricing & settings', icon: 'card', link: '/pricing-settings' },
 ];
 
 /**

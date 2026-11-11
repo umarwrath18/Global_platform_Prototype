@@ -1,12 +1,17 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { DatePreset, MerchantPortalOverview, TransactionExport, TransactionPage, TransactionQuery, TransactionSummary } from './merchant-portal';
+import { DatePreset, MerchantPortalOverview, MerchantSettingsView, TransactionExport, TransactionPage, TransactionQuery, TransactionSummary } from './merchant-portal';
 
 /** Merchant-facing portal API. The merchant is identified by the session, never by a parameter. */
 @Injectable({ providedIn: 'root' })
 export class MerchantPortalApi {
   private readonly http = inject(HttpClient);
+
+  /** Read-only pricing, settlement and integration settings for the merchant's live countries. */
+  settings() {
+    return firstValueFrom(this.http.get<MerchantSettingsView>('/api/merchant-portal/settings'));
+  }
 
   overview() {
     return firstValueFrom(this.http.get<MerchantPortalOverview>('/api/merchant-portal/overview'));

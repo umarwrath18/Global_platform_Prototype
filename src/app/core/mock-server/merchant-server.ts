@@ -31,7 +31,8 @@ import {
   StaffRole,
 } from '../merchants/merchant-models';
 import { ONBOARDING_COUNTRIES, READINESS_CHECKLISTS, REGISTRATION_COUNTRIES } from '../merchants/onboarding-config';
-import { PricingAuditEvent, PricingVersion, ProductConfig } from '../merchants/products';
+import { fmtDay, periodText, PricingAuditEvent, pricingInEffect, pricingSummary, PricingVersion, ProductConfig, secondarySummary, todayIso } from '../merchants/products';
+import type { MerchantSettingsView } from '../merchants/merchant-portal';
 import { ChangeRequestRecord, describeChange, FieldChange, ProfileEvent } from '../merchants/change-requests';
 import { EMPTY_MCC_CATALOGUE, MccAuditEvent, MccCatalogue, MccCatalogueEntry, MccChangeRequest, mccCountryCheck, mccIssue, MccRef } from '../merchants/mcc';
 import { regionForCountry } from '../merchants/regions';
@@ -101,6 +102,8 @@ export interface MerchantPortalProfile {
   id: string;
   legalName: string;
   countries: { code: string; currency: string; methods: { code: string; name: string }[] }[];
+  /** Read-only "Pricing & settings" for the Merchant Portal. */
+  settings: MerchantSettingsView;
 }
 
 export interface MerchantDataReport {
@@ -116,6 +119,8 @@ export interface MerchantDataReport {
 export interface Caller {
   userId: string;
   name: string;
+  /** Internal users: the team this login works as; `admin` may switch (absent in older callers). */
+  team?: StaffRole | 'support' | 'security' | 'admin' | null;
 }
 
 export interface ServerReply {
@@ -148,6 +153,11 @@ export interface MerchantServerOptions {
   countryConfig?: { sync(): void };
   /** MCC catalogue; without one (or while it is empty) MCC is optional everywhere. */
   mcc?: { catalogue(): MccCatalogue };
+  /**
+   * Each internal login works only as its team (from its user record); only the prototype admin
+   * may switch with "View as". The app turns this on; tests that switch teams with one login leave it off.
+   */
+  fixedTeams?: boolean;
 }
 
 const STAFF_ROLES: StaffRole[] = ['sales', 'risk', 'cs', 'finops'];
@@ -203,7 +213,14 @@ export class MerchantServer {
     const auth = await this.opts.auth.authenticate(token);
     if (!auth.ok) return auth.response;
     const caller = auth.caller;
-    const role = STAFF_ROLES.includes(roleHeader as StaffRole) ? (roleHeader as StaffRole) : 'sales';
+    const requested = STAFF_ROLES.includes(roleHeader as StaffRole) ? (roleHeader as StaffRole) : 'sales';
+    // With fixed teams, a login works only as its own team; only the prototype admin may switch.
+    // Mobi Support and Security Admin have no merchant permissions: they can read, never change.
+    const team = (auth.caller as Caller).team ?? 'sales';
+    if (this.opts.fixedTeams && (team === 'support' || team === 'security') && method.toUpperCase() !== 'GET') {
+      return { status: 403, body: { code: 'ROLE_NOT_PERMITTED', message: 'Mobi Support and Security Admin have no merchant permissions.' } };
+    }
+    const role: StaffRole = !this.opts.fixedTeams || team === 'admin' || team === 'support' || team === 'security' ? requested : (team as StaffRole);
     this.opts.countryConfig?.sync();
     try {
       this.ensureSeeded();
@@ -233,6 +250,7 @@ export class MerchantServer {
         if (id && sub === 'submit' && m === 'POST') return ok(this.submit(id, body, caller, role));
         if (id && sub === 'review' && m === 'POST') return ok(this.review(id, body, caller, role));
         if (id && sub === 'readiness' && m === 'POST') return ok(await this.readiness(id, body, caller, role));
+        if (id && sub === 'ipn' && m === 'PUT') return ok(this.setIpn(id, body, caller, role));
         if (id && sub === 'changes' && m === 'POST') return ok(this.changeAction(caller, role, (ctx) => requestCountryChange(ctx, id, body)), 201);
         if (id && sub === 'products' && m === 'GET') return ok(this.products(id, role));
         if (id && sub === 'products' && m === 'PUT') return ok(this.productAction(id, caller, role, (ctx) => ({ message: saveProducts(ctx, body) })));
@@ -783,17 +801,9 @@ export class MerchantServer {
       case 'start_integration':
         move('keys_generated', 'integration', 'Merchant integration started');
         break;
-      case 'set_ipn': {
-        if (!['cs_configuration', 'keys_generated', 'integration', 'go_live_verification'].includes(app.status)) fail(409, 'INVALID_TRANSITION', { message: 'The IPN callback URL can be set during readiness only.' });
-        const url = str(body.url, 600).trim();
-        const problem = url ? ipnIssue(url) : 'Enter the IPN callback URL.';
-        if (problem) fail(422, 'VALIDATION_FAILED', { errors: [{ section: 'transaction', field: 'transaction.ipnCallbackUrl', message: problem }], message: problem });
-        if (url === app.data.transaction.ipnCallbackUrl) break;
-        const before = app.data.transaction.ipnCallbackUrl;
-        app.data.transaction.ipnCallbackUrl = url;
-        this.event(app, caller, role, before ? 'IPN callback URL changed' : 'IPN callback URL set', null, null, `${before ? `${before} → ` : ''}${url}`);
+      case 'set_ipn':
+        this.applyIpn(app, body.url, caller, role);
         break;
-      }
       case 'request_go_live':
         requireDone('integration');
         move('integration', 'go_live_verification', 'Integration complete; go-live verification started');
@@ -804,6 +814,34 @@ export class MerchantServer {
     app.updatedAt = now;
     this.save(db);
     return app;
+  }
+
+  /** Statuses where the IPN callback URL can be changed directly: readiness and after go-live. */
+  private static readonly IPN_STATUSES: ApplicationStatus[] = ['cs_configuration', 'keys_generated', 'integration', 'go_live_verification', 'operational'];
+
+  /**
+   * The IPN callback URL is a technical setting: CS or Sales / Operations change it directly,
+   * during readiness and after go-live, and every change is recorded. No Risk approval.
+   */
+  private setIpn(id: string, body: any, caller: Caller, role: StaffRole): CountryApplication {
+    if (role !== 'cs' && role !== 'sales') fail(403, 'ROLE_NOT_PERMITTED', { message: 'Only Customer Success or Sales / Operations can change the IPN callback URL.' });
+    const db = this.load();
+    const app = this.findApplication(db, id);
+    this.applyIpn(app, body?.url, caller, role);
+    this.save(db);
+    return app;
+  }
+
+  private applyIpn(app: CountryApplication, raw: unknown, caller: Caller, role: StaffRole) {
+    if (!MerchantServer.IPN_STATUSES.includes(app.status)) fail(409, 'INVALID_TRANSITION', { message: 'The IPN callback URL can be changed once Risk has approved the application and setup has started.' });
+    const url = str(raw, 600).trim();
+    const problem = url ? ipnIssue(url) : 'Enter the IPN callback URL.';
+    if (problem) fail(422, 'VALIDATION_FAILED', { errors: [{ section: 'transaction', field: 'transaction.ipnCallbackUrl', message: problem }], message: problem });
+    const before = app.data.transaction.ipnCallbackUrl;
+    if (url === before) return;
+    app.data.transaction.ipnCallbackUrl = url;
+    app.updatedAt = this.now();
+    this.event(app, caller, role, before ? 'IPN callback URL changed' : 'IPN callback URL set', null, null, `${before ? `${before} → ` : ''}${url}`);
   }
 
   /**
@@ -1235,7 +1273,45 @@ export class MerchantServer {
           methods: state.methods.filter((m) => enabled.has(m.code)).map((m) => ({ code: m.code, name: m.name })),
         };
       });
-    return { id: merchant.id, legalName: merchant.legalName, countries };
+    const today = todayIso(this.now());
+    const settings: MerchantSettingsView = {
+      merchant: { id: merchant.id, name: merchant.legalName },
+      countries: db.applications
+        .filter((a) => a.merchantId === merchantId && a.status === 'operational')
+        .map((app) => {
+          const state = productState(db, app);
+          const cfg = ONBOARDING_COUNTRIES[app.country];
+          const t = app.data.transaction;
+          return {
+            country: app.country,
+            countryName: cfg.name,
+            currency: cfg.currency,
+            mid: (db.mids ?? []).find((m) => m.applicationId === app.id)?.mid ?? null,
+            ipnCallbackUrl: t.ipnCallbackUrl,
+            dailyLimit: t.dailyLimit,
+            minTransactionValue: t.minTransactionValue,
+            sendReceipts: t.sendReceipts,
+            products: state.config.products
+              .filter((p) => p.enabled)
+              .map((p) => {
+                const v = pricingInEffect(state.versions, p.methodCode, today, p.flow);
+                const next = state.versions
+                  .filter((x) => x.methodCode === p.methodCode && x.flow === p.flow && !x.subMerchantId && x.status === 'scheduled' && x.startDate > today)
+                  .sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
+                return {
+                  name: state.methods.find((m) => m.code === p.methodCode)?.name ?? p.methodCode,
+                  flow: p.flow,
+                  settlement: p.flow === 'payin' ? (state.config.settlement[p.methodCode] ?? null) : null,
+                  pricing: v ? pricingSummary(v) : null,
+                  effective: v ? periodText(v) : null,
+                  extras: v ? secondarySummary(v) || null : null,
+                  upcoming: next ? `${pricingSummary(next)} from ${fmtDay(next.startDate)}` : null,
+                };
+              }),
+          };
+        }),
+    };
+    return { id: merchant.id, legalName: merchant.legalName, countries, settings };
   }
 
   // ---------------------------------------------------------------- storage

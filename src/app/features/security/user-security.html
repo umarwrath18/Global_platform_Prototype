@@ -134,7 +134,7 @@
         <!-- ------------------------------------------ Tech alerts -->
         @case ('alerts') {
           <section class="panel-card">
-            <div class="panel-head"><div><h2>Tech alerts</h2><p>Raised when a user enters more than 3 consecutive incorrect codes. Sign-in stays blocked until a Security Admin waives it.</p></div></div>
+            <div class="panel-head"><div><h2>Tech alerts</h2><p>Raised when a user enters more than 3 consecutive incorrect codes, here and by email to the Tech team. Sign-in stays blocked until a Security Admin waives it.</p></div></div>
             @if (d.alerts.length) {
               <div class="table-wrap">
                 <table class="data-table">
@@ -142,7 +142,7 @@
                   <tbody>
                     @for (a of d.alerts; track a.id) {
                       <tr>
-                        <td class="mono">{{ a.id }}<span class="muted" style="display: block; font-weight: 400">{{ a.failedAttempts }} failed codes</span></td>
+                        <td class="mono">{{ a.id }}<span class="muted" style="display: block; font-weight: 400">{{ a.failedAttempts }} failed codes</span>@if (a.email; as m) {<span class="muted" style="display: block; font-weight: 400; font-family: inherit" [title]="m.subject">Emailed {{ m.to }} (simulated)</span>}</td>
                         <td><span class="who"><strong>{{ a.userName }}</strong><span>{{ a.loginId }} · {{ a.accountId }}</span></span></td>
                         <td class="muted">{{ dateTime(a.at) }}</td>
                         <td><span class="status" [class]="a.status === 'open' ? 'danger' : 'success'">{{ a.status === 'open' ? 'Open · sign-in blocked' : 'Resolved' }}</span></td>

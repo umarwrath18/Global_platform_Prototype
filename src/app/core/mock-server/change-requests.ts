@@ -151,6 +151,8 @@ function readCountrySection(ctx: ChangeContext, app: CountryApplication, section
   const merchant = findMerchant(ctx.db, app.merchantId);
   let value = raw;
   if (section === 'bank') value = { ...(raw ?? {}), accountNumber: str(raw?.accountNumber, 120).trim() || app.data.bank['accountNumber'] || '' };
+  // The IPN callback URL is changed directly (CS or Sales / Operations), never through Risk.
+  if (section === 'transaction') value = { ...(raw ?? {}), ipnCallbackUrl: app.data.transaction.ipnCallbackUrl };
   const data = ctx.readData(app.country, { ...app.data, [section]: value });
   const issues = validateApplication(app.country, data, merchant).filter((i) => i.section === section);
   if (issues.length) fail(422, 'VALIDATION_FAILED', { errors: issues, message: `${issues.length} item${issues.length === 1 ? '' : 's'} must be fixed.` });

@@ -54,7 +54,7 @@
             <option value="" [selected]="!d.transaction.connectionType">Select connection type</option>
             @for (k of connectionTypes; track k) {<option [value]="k" [selected]="k === d.transaction.connectionType">{{ connectionTypeLabel[k] }}</option>}
           </select>@if (err('transaction.connectionType'); as m) {<p class="f-error">{{ m }}</p>}</div>
-        <div class="f-field full"><label for="cr-ipn">IPN callback URL</label><input id="cr-ipn" class="f-input" type="url" placeholder="https://" [class.invalid]="err('transaction.ipnCallbackUrl')" [value]="d.transaction.ipnCallbackUrl" (input)="setTransaction('ipnCallbackUrl', $any($event.target).value)" />@if (err('transaction.ipnCallbackUrl'); as m) {<p class="f-error">{{ m }}</p>}</div>
+        <p class="f-hint full">The IPN callback URL isn't part of this request: CS or Sales / Operations change it directly in the Go-live panel.</p>
         <div class="f-field full"><label class="cr-check"><input type="checkbox" [checked]="d.transaction.sendReceipts" (change)="setReceipts($any($event.target).checked)" /> Send payment receipts to customers</label></div>
       </div>
     }

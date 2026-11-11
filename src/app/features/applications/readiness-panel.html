@@ -66,10 +66,10 @@
             }
           }
 
-          @if (s.key === 'integration' && ipnEditable()) {
+          @if (s.key === 'integration' && ipnEditable() && (s.state !== 'done' || a.status === 'operational')) {
             <div class="ipn" [class.missing]="!a.data.transaction.ipnCallbackUrl">
               <label for="ipn-url"><strong>IPN callback URL</strong></label>
-              @if (canAct()) {
+              @if (canEditIpn()) {
                 <div class="ipn-row">
                   <input id="ipn-url" class="f-input" type="url" placeholder="https://" [value]="ipnDraft() ?? a.data.transaction.ipnCallbackUrl" (input)="ipnDraft.set($any($event.target).value)" aria-describedby="ipn-help" />
                   <button type="button" class="btn sm" [disabled]="!!busy() || ipnDraft() === null || ipnDraft() === a.data.transaction.ipnCallbackUrl" (click)="saveIpn()">
@@ -79,7 +79,7 @@
               } @else {
                 <p class="mono">{{ a.data.transaction.ipnCallbackUrl || 'Not set yet' }}</p>
               }
-              <p class="hint" id="ipn-help">{{ a.data.transaction.ipnCallbackUrl ? 'Where Mobi sends payment notifications. https only.' : 'Not set yet. Required before go-live. https only.' }}</p>
+              <p class="hint" id="ipn-help">{{ a.data.transaction.ipnCallbackUrl ? 'Where Mobi sends payment notifications. https only. Changes apply at once and are recorded in the history.' : 'Not set yet. Required before go-live. https only.' }}</p>
             </div>
           }
 

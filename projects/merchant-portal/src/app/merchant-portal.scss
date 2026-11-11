@@ -239,3 +239,28 @@
     flex: 1 1 100%;
   }
 }
+
+.ps-card {
+  margin-bottom: 16px;
+}
+
+.ps-settings {
+  padding: 16px 20px 20px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.sub-line {
+  font-size: 12px;
+  color: var(--text-muted);
+
+  &.upcoming {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--mobi-blue);
+  }
+}
+
+.nowrap {
+  white-space: nowrap;
+}

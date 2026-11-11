@@ -39,6 +39,11 @@ export const routes: Routes = [
         loadComponent: () => import('./transactions').then((m) => m.MerchantTransactions),
       },
       {
+        path: 'pricing-settings',
+        title: 'Pricing & settings · Mobi Merchant Portal',
+        loadComponent: () => import('./pricing-settings').then((m) => m.MerchantPricingSettings),
+      },
+      {
         path: 'account-security',
         title: 'Account security · Mobi Merchant Portal',
         loadComponent: () => import('@gp/features/security/account-security').then((m) => m.AccountSecurity),

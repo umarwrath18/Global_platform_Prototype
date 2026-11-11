@@ -19,6 +19,7 @@ export class MockBackend {
   private readonly inbox = inject(DemoInboxService);
 
   readonly server: AuthServer = new AuthServer({
+    fixedTeams: true,
     storage: localStorage,
     sendEmail: (email) => this.inbox.deliver(email),
     merchantName: (id: string): string | null => this.merchants.portalProfile(id)?.legalName ?? null,
@@ -32,7 +33,7 @@ export class MockBackend {
     defaultCatalogue: { source: { kind: 'standard', name: MCC_STANDARD_NAME, version: MCC_STANDARD_VERSION, loadedAt: 0 }, entries: MCC_STANDARD_LIST },
   });
 
-  readonly merchants: MerchantServer = new MerchantServer({ storage: localStorage, auth: this.server, strictValidation: isStrictValidation, countryConfig: this.countryConfig, mcc: this.mcc });
+  readonly merchants: MerchantServer = new MerchantServer({ storage: localStorage, auth: this.server, strictValidation: isStrictValidation, countryConfig: this.countryConfig, mcc: this.mcc, fixedTeams: true });
 
   /** Merchant-facing portal (sample transactions and balance; see merchant-portal-server.ts). */
   readonly merchantPortal = new MerchantPortalServer({ storage: localStorage, auth: this.server, profile: (id) => this.merchants.portalProfile(id) });

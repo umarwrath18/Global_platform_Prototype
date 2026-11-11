@@ -19,16 +19,24 @@
       </span>
     </div>
 
-    <label class="view-as" title="Switch the team view">
-      <app-icon name="users" [size]="16" class="va-icon" />
-      <span class="va-label">View as</span>
-      <select (change)="switchRole($any($event.target).value)" aria-label="View as team">
-        @for (r of roleOptions; track r) {
-          <option [value]="r" [selected]="r === roles.acting()">{{ shortRole[r] }}</option>
-        }
-      </select>
-      <app-icon name="chevron-down" [size]="14" class="va-chev" />
-    </label>
+    @if (roles.canSwitch()) {
+      <label class="view-as" title="Switch the team view (prototype admin only)">
+        <app-icon name="users" [size]="16" class="va-icon" />
+        <span class="va-label">View as</span>
+        <select (change)="switchRole($any($event.target).value)" aria-label="View as team">
+          @for (r of roleOptions; track r) {
+            <option [value]="r" [selected]="r === roles.acting()">{{ shortRole[r] }}</option>
+          }
+        </select>
+        <app-icon name="chevron-down" [size]="14" class="va-chev" />
+      </label>
+    } @else {
+      <div class="view-as fixed" title="Your team">
+        <app-icon name="users" [size]="16" class="va-icon" />
+        <span class="va-label">Team</span>
+        <strong class="va-team">{{ shortRole[roles.acting()] }}</strong>
+      </div>
+    }
 
     <nav class="nav">
       <ul>

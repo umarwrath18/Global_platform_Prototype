@@ -21,7 +21,7 @@ import {
 } from '../api/models';
 import { checkPassword } from '../api/password-policy';
 import { constantTimeEqual, DEFAULT_PBKDF2_ITERATIONS, hashPassword, randomOtp, randomToken, sha256Hex, verifyPassword } from './crypto';
-import { BASE_CURRENCY, COUNTRY_CATALOGUE, DEMO_PASSWORD, ROLES, SEED_ACCOUNTS, SEED_USERS, SeedAccount, SeedUser } from './seed';
+import { BASE_CURRENCY, COUNTRY_CATALOGUE, DEMO_PASSWORD, ROLES, SEED_ACCOUNTS, SEED_USERS, SeedAccount, SeedUser, StaffTeam } from './seed';
 import { generateTotpSecret, otpauthUri, SecretVault, secondsLeftInStep, TOTP, totpAt, verifyTotp } from './totp';
 
 /** FR-08 events shown in the security audit log. */
@@ -76,7 +76,8 @@ export const MFA_POLICY = {
   stepUpTtlMs: 5 * 60_000,
 } as const;
 
-const DB_VERSION = 8;
+/** 9: fixed teams per login, team logins added, Thailand / Philippines removed from GA-1001. */
+const DB_VERSION = 9;
 
 interface AccountRec extends SeedAccount {
   /** GMID that created this account at go-live. Only on accounts created after this field existed. */
@@ -176,7 +177,13 @@ interface AlertRec {
   resolvedBy: string | null;
   resolvedAt: number | null;
   resolution: string | null;
+  /** Email to the Tech team (simulated: recorded, not sent). Absent on alerts raised before it existed. */
+  email?: { to: string; subject: string; status: 'simulated' };
 }
+
+/** Tech team mailbox for security alerts. */
+export const TECH_ALERT_MAILBOX = 'tech-alerts@mobi.xyz';
+
 export interface AuditEvent {
   at: number;
   type: string;
@@ -227,6 +234,11 @@ export interface AuthServerOptions {
   pbkdf2Iterations?: number;
   /** Stand-in for the configured email service. */
   sendEmail: (email: DemoEmail) => void;
+  /**
+   * Each internal login works only as its team (`SeedUser.team`); only the prototype admin may
+   * switch. The app turns this on; tests that switch teams with one login leave it off.
+   */
+  fixedTeams?: boolean;
   /** Looks up a merchant's legal name for merchant users' sessions. */
   merchantName?: (merchantId: string) => string | null;
 }
@@ -531,7 +543,19 @@ export class AuthServer {
       db.challenges = db.challenges.filter((c) => c.userId !== user.id);
       db.stepUps = db.stepUps.filter((s) => s.userId !== user.id);
       const revoked = this.revokeSessions(db, (s) => s.userId === user.id, 'MFA_BLOCKED');
-      const alert: AlertRec = { id: `ALR-${randomToken(4).toUpperCase()}`, at: this.now(), userId: user.id, accountId: user.accountId, failedAttempts: mfa.failures, status: 'open', resolvedBy: null, resolvedAt: null, resolution: null };
+      // Tech is alerted in-app (User security → Tech alerts) and by email.
+      const alert: AlertRec = {
+        id: `ALR-${randomToken(4).toUpperCase()}`,
+        at: this.now(),
+        userId: user.id,
+        accountId: user.accountId,
+        failedAttempts: mfa.failures,
+        status: 'open',
+        resolvedBy: null,
+        resolvedAt: null,
+        resolution: null,
+        email: { to: TECH_ALERT_MAILBOX, subject: `[Mobi security] MFA blocked: ${user.loginId} (${mfa.failures} incorrect codes)`, status: 'simulated' },
+      };
       db.alerts.unshift(alert);
       this.audit(db, 'MFA_BLOCKED', { userId: user.id, accountId: user.accountId, detail: `failures=${mfa.failures}; sessions_revoked=${revoked}` });
       this.audit(db, 'TECH_ALERT_RAISED', { userId: user.id, accountId: user.accountId, detail: alert.id });
@@ -633,7 +657,11 @@ export class AuthServer {
     const { user } = await this.requireSession(db, token, true);
     // Merchant users never reach internal administration, whatever role header they send.
     if (user.portal === 'merchant') fail(403, 'ROLE_NOT_PERMITTED');
-    const role = roleHeader === 'support' || roleHeader === 'security' ? roleHeader : null;
+    const requested = roleHeader === 'support' || roleHeader === 'security' ? roleHeader : null;
+    // With fixed teams, Mobi Support and Security Admin logins act only as their team; only the
+    // prototype admin may choose with "View as". Otherwise the screen's choice applies (tests).
+    const team = user.team ?? 'sales';
+    const role = !this.opts.fixedTeams || team === 'admin' ? requested : team === 'support' || team === 'security' ? team : null;
     if (!role || !allowed.includes(role)) fail(403, 'ROLE_NOT_PERMITTED');
     return { user, role: role!, actor: `${user.name} (${SECURITY_ROLE_LABEL[role!]})` };
   }
@@ -861,6 +889,7 @@ export class AuthServer {
     const role = ROLES[user.roleId];
     return {
       user: { id: user.id, loginId: user.loginId, name: user.name, email: user.email },
+      team: user.portal === 'merchant' ? null : (user.team ?? 'sales'),
       account: { id: account.id, name: account.name },
       role: { id: user.roleId, name: role.name },
       permissions: role.permissions,
@@ -1072,14 +1101,14 @@ export class AuthServer {
   async authenticate(
     token: string | null,
     portal: 'internal' | 'merchant' = 'internal',
-  ): Promise<{ ok: true; caller: { userId: string; name: string; accountId: string; merchantId: string | null } } | { ok: false; response: ServerResponse }> {
+  ): Promise<{ ok: true; caller: { userId: string; name: string; accountId: string; merchantId: string | null; team: StaffTeam | null } } | { ok: false; response: ServerResponse }> {
     await this.ensureSeeded();
     const db = this.load();
     try {
       const { user } = await this.requireSession(db, token, true);
       const userPortal = user.portal === 'merchant' ? 'merchant' : 'internal';
       if (userPortal !== portal || (portal === 'merchant' && !user.merchantId)) fail(403, 'ROLE_NOT_PERMITTED');
-      return { ok: true, caller: { userId: user.id, name: user.name, accountId: user.accountId, merchantId: user.merchantId ?? null } };
+      return { ok: true, caller: { userId: user.id, name: user.name, accountId: user.accountId, merchantId: user.merchantId ?? null, team: user.portal === 'merchant' ? null : (user.team ?? 'sales') } };
     } catch (e) {
       if (e instanceof HttpError) return { ok: false, response: { status: e.status, body: e.body } };
       throw e;
@@ -1236,11 +1265,18 @@ export class AuthServer {
           await this.migrateToMfa(existing);
           await this.addMissingSeedUsers();
           this.removeRecoveryCodes();
+          this.applyTeamsAndCountries();
           return;
         }
         if (existing?.version === 5 || existing?.version === 6 || existing?.version === 7) {
           await this.addMissingSeedUsers();
           this.removeRecoveryCodes();
+          this.applyTeamsAndCountries();
+          return;
+        }
+        if (existing?.version === 8) {
+          await this.addMissingSeedUsers();
+          this.applyTeamsAndCountries();
           return;
         }
         const users: UserRec[] = [];
@@ -1311,6 +1347,23 @@ export class AuthServer {
     Object.assign(db.mfa, await this.seedMfa(added));
     db.version = DB_VERSION;
     if (added.length) this.audit(db, 'SEED_USERS_ADDED', { detail: added.map((u) => u.loginId).join(',') });
+    this.save(db);
+  }
+
+  /**
+   * Teams are fixed per login (the seed decides), and only Malaysia, Indonesia and Vietnam remain
+   * on GA-1001 (Thailand and the Philippines were Batch 1 sample data). Everything else is kept.
+   */
+  private applyTeamsAndCountries() {
+    const db = this.load();
+    for (const u of db.users) {
+      const seed = SEED_USERS.find((s) => s.id === u.id);
+      if (seed?.team) u.team = seed.team;
+    }
+    const ga = db.accounts.find((a) => a.id === 'GA-1001');
+    if (ga) ga.countries = ga.countries.filter((c) => c.code !== 'TH' && c.code !== 'PH');
+    db.version = DB_VERSION;
+    this.audit(db, 'SEED_USERS_ADDED', { detail: 'teams assigned; GA-1001 countries limited to MY, ID, VN' });
     this.save(db);
   }
 

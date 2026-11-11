@@ -15,6 +15,8 @@ export interface CountryAccess {
 
 export interface SessionView {
   user: { id: string; loginId: string; name: string; email: string };
+  /** Internal users: the team this login works as (`admin` may switch). Null for merchant users. */
+  team: 'sales' | 'risk' | 'cs' | 'finops' | 'support' | 'security' | 'admin' | null;
   account: { id: string; name: string };
   role: { id: string; name: string };
   permissions: string[];
@@ -125,6 +127,8 @@ export interface SecurityAlertView {
   accountId: string;
   type: 'MFA_BLOCKED';
   failedAttempts: number;
+  /** Email sent to the Tech team (simulated in the prototype). */
+  email?: { to: string; subject: string; status: 'simulated' };
   status: 'open' | 'resolved';
   resolvedBy: string | null;
   resolvedAt: number | null;

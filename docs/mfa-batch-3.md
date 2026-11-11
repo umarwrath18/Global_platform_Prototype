@@ -179,9 +179,9 @@ no console errors).
 - **Demo authenticator:** a prototype-only bypass that reads the current code from the simulated
   backend. Remove it with the mock backend.
 - **Email:** notifications appear in the Email preview; nothing is sent.
-- **Roles:** Support and Security Admin are "View as" options, not separate logins. One person can
-  open and complete their own request by switching roles. Production needs separate staff accounts
-  and separation of duties.
+- **Roles:** Support and Security Admin now have their own logins (`MOBI-SUPPORT`, `MOBI-SECURITY`)
+  with fixed teams. Only `MOBI-ADMIN` can switch with "View as", so it could open and complete its
+  own request. Production needs separate staff accounts and separation of duties.
 - **Identity check:** the identity-verification method is free text, because the approved process
   isn't defined yet.
 

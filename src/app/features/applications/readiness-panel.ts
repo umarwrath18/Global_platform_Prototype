@@ -58,12 +58,23 @@ export class ReadinessPanel {
   protected readonly cfg = computed(() => rulesFor(this.application()));
   /** Unsaved IPN callback URL; null while unchanged. */
   protected readonly ipnDraft = signal<string | null>(null);
-  protected readonly ipnEditable = computed(() => ['cs_configuration', 'keys_generated', 'integration', 'go_live_verification'].includes(this.application().status));
+  protected readonly ipnEditable = computed(() => ['cs_configuration', 'keys_generated', 'integration', 'go_live_verification', 'operational'].includes(this.application().status));
+  /** CS or Sales / Operations change the IPN callback URL directly (no Risk approval). */
+  readonly canEditIpn = input(false);
 
   protected async saveIpn() {
     const url = (this.ipnDraft() ?? '').trim();
-    await this.run({ action: 'set_ipn', url }, 'set_ipn', 'IPN callback URL saved');
-    if (!this.error()) this.ipnDraft.set(null);
+    this.busy.set('set_ipn');
+    this.error.set(null);
+    try {
+      const app = await this.api.setIpn(this.application().id, url);
+      this.ipnDraft.set(null);
+      this.changed.emit({ application: app, message: 'IPN callback URL saved' });
+    } catch (e) {
+      this.error.set(toMerchantError(e).message ?? "We couldn't save the IPN callback URL.");
+    } finally {
+      this.busy.set(null);
+    }
   }
 
 

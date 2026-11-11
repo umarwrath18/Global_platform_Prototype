@@ -157,6 +157,11 @@ export class MerchantApi {
 
   // ---------------------------------------------- Product & Payment Config
 
+  /** CS or Sales / Operations: change the IPN callback URL directly (recorded in the history). */
+  setIpn(applicationId: string, url: string) {
+    return this.run(this.http.put<CountryApplication>(`/api/applications/${encodeURIComponent(applicationId)}/ipn`, { url }, { headers: this.headers }));
+  }
+
   getProducts(applicationId: string) {
     return this.run(this.http.get<ProductPricingView>(`/api/applications/${encodeURIComponent(applicationId)}/products`, { headers: this.headers }));
   }

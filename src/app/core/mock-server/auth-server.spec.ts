@@ -33,7 +33,8 @@ describe('AuthServer', () => {
       const body = (await server.handle('GET', '/api/auth/session', null, token)).body as any;
       expect(body.landingPath).toBe('/dashboard');
       expect(body.baseCurrency).toBe('USD');
-      expect(body.countries.map((c: any) => `${c.code}:${c.status}`)).toEqual(['MY:active', 'ID:active', 'VN:active', 'TH:pending', 'PH:failed']);
+      expect(body.countries.map((c: any) => `${c.code}:${c.status}`)).toEqual(['MY:active', 'ID:active', 'VN:active']);
+      expect(body.team).toBe('sales');
     });
 
     it('never returns a session for a correct password alone', async () => {
@@ -125,8 +126,12 @@ describe('AuthServer', () => {
       const ctx = (c: string) => server.handle('GET', `/api/workspace/context?country=${c}`, null, token);
       expect((await ctx('VN')).body).toMatchObject({ scope: 'country', currency: 'VND' });
       expect((await server.handle('GET', '/api/workspace/context', null, token)).body).toMatchObject({ scope: 'global', currency: 'USD' });
-      expect((await ctx('TH')).body).toEqual({ code: 'COUNTRY_NOT_ACTIVE', countryStatus: 'pending' });
-      expect((await ctx('PH')).body).toEqual({ code: 'COUNTRY_NOT_ACTIVE', countryStatus: 'failed' });
+      // GA-4004 (Lumi) has Malaysia pending and Vietnam failed.
+      const lumi = await tokenFor('LUMI-ADMIN');
+      const lumiCtx = (c: string) => server.handle('GET', `/api/workspace/context?country=${c}`, null, lumi);
+      expect((await lumiCtx('MY')).body).toEqual({ code: 'COUNTRY_NOT_ACTIVE', countryStatus: 'pending' });
+      expect((await lumiCtx('VN')).body).toEqual({ code: 'COUNTRY_NOT_ACTIVE', countryStatus: 'failed' });
+      expect((await ctx('TH')).body).toEqual({ code: 'COUNTRY_NOT_AUTHORISED' });
       expect((await ctx('SG')).body).toEqual({ code: 'COUNTRY_NOT_AUTHORISED' });
     });
 

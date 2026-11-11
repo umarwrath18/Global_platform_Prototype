@@ -56,12 +56,21 @@ read the same server and this goes away.
 ## Demo accounts
 
 All test users share the password **`Mobi@123`**. The login screen also lists
-them under "Use a test account".
+them under "Use a test account". **Testers: start with [`docs/testing-guide.md`](docs/testing-guide.md)**,
+which explains each login's team and walks through registration → Risk → CS → pricing change → FinOps.
+
+Each internal login belongs to **one fixed team**, like real staff. The sidebar shows the team as a
+fixed label. Only `MOBI-ADMIN` has the **View as** switcher, to review every team's screens from one login.
 
 | Global Account ID     | Scenario                                              |
 | --------------------- | ----------------------------------------------------- |
-| `123`                 | Administrator · Tanjung Global Trading (GA-1001): MY/ID/VN active (the Batch 1 account also lists TH pending, PH failed) · **2FA not set up yet** |
-| `TANJUNG-ADMIN`       | Second administrator on the same account (GA-1001) · **2FA on** |
+| `123`                 | **Sales / Operations** · Tanjung Global Trading (GA-1001): Malaysia, Indonesia and Vietnam active · **MFA not set up yet** |
+| `MOBI-RISK`           | **Risk** · MFA on                                     |
+| `MOBI-CS`             | **Customer Success** · MFA on                         |
+| `TANJUNG-ADMIN`       | **FinOps** (second administrator on GA-1001) · MFA on |
+| `MOBI-SUPPORT`        | **Mobi Support** (User security only) · MFA on        |
+| `MOBI-SECURITY`       | **Security Admin (Tech)** (User security only) · MFA on |
+| `MOBI-ADMIN`          | **Prototype admin**: can switch teams with "View as" · MFA on |
 | `TANJUNG-VIEWER`      | Viewer on GA-1001 · **2FA on**                        |
 | `LUMI-ADMIN`          | Active account with no active countries (GA-4004) · **2FA not set up yet** |
 | `TANJUNG-RAVI`        | Individual user disabled                              |
@@ -80,13 +89,16 @@ screen in an **Email preview** card instead of being emailed.
 ### Merchant Portal (Batch 4)
 
 Open the **Merchant Portal app** (http://localhost:4201 locally) and sign in as `TANJUNG-MERCHANT`
-(after 2FA). There are only two screens:
+(after 2FA). There are three screens:
 - **Dashboard:** available balance (one figure per currency the merchant trades in, never converted),
   and total, successful and failed transaction counts for Today, Last 7 days or Last 30 days.
 - **My Transactions:** invoice ID, transaction ID, payment method, date and time, amount, currency and
   status, with filters for date range (presets or custom), payment method, status and transaction ID.
   **Export CSV** downloads every record matching the filters, as
   `<merchant-name>-transactions-YYYY-MM-DD.csv`.
+- **Pricing & settings** (read only): for each live country, the pricing in effect per product, any
+  approved change that starts later, the settlement cycle, the IPN callback URL, limits and the MID.
+  `NUSANTARA-MERCHANT` shows the most data.
 
 Merchant users never see internal modules, the View as switcher, filters or staff notifications. Every
 internal API refuses them, and the merchant API refuses internal users. A merchant's data always comes from
@@ -120,10 +132,11 @@ password alone never creates a session.
   Mobi Support: Support opens a reset request, a Security Admin verifies identity and resets 2FA,
   and the user sets up a new authenticator at their next sign-in.
 - **Blocked:** more than 3 consecutive wrong codes block that user (only that user) and raise a
-  Tech alert. The block stays until a Security Admin waives it.
+  Tech alert, shown in User security and emailed to `tech-alerts@mobi.xyz` (simulated in this
+  prototype). The block stays until a Security Admin waives it.
 - **Account security** (sidebar user menu → Account security): replace your authenticator
   (verify the current one, then the new one). This sends a confirmation email to the Email preview.
-- **User security** (View as → *Mobi Support* or *Security Admin*): users' 2FA status, reset
+- **User security** (sign in as `MOBI-SUPPORT` or `MOBI-SECURITY`): users' 2FA status, reset
   requests, Tech alerts and the audit log. Support opens a reset request for a lost device. Security
   Admin verifies identity and resets, or waives a block. Every admin action needs a reason, and
   admins first confirm it's them with their own authenticator code. Admins never see authenticator
@@ -136,9 +149,10 @@ tested again. See [`docs/mfa-batch-3.md`](docs/mfa-batch-3.md) for the full revi
 
 ### Merchant onboarding (Batch 2)
 
-Sign in as `123`, then open **Merchants** in the sidebar. Use **View as** in the sidebar to
-switch between Sales / Operations, Risk and Customer Success. This control stands in for
-real role permissions and exists only in this prototype.
+Sign in as `123` (Sales / Operations), then open **Merchants** in the sidebar. Sign in as
+`MOBI-RISK` or `MOBI-CS` for the Risk and Customer Success steps, or use `MOBI-ADMIN` with
+**View as** to switch teams from one login. Teams are fixed per login, in the screens and in the
+simulated backend.
 
 **Validation modes.** By default the app runs in *guided* mode:
 - Fields validate and show errors as they would in production, but missing input never
@@ -190,14 +204,15 @@ transactions, Successful, Failed, Success rate, Volume) as "—" with "No transa
 The onboarding figures moved to the **Applications** page: a summary strip (Drafts, Pending review,
 Returned, In readiness, Operational) and "Needs attention", ordered by approval priority.
 
-**Country configuration (MVP feature 5).** Open **Countries** in the sidebar to see each country's
-onboarding rules: availability, business types, registration and tax ID rules, bank fields,
-documents and director/owner rules, with a change history. New and draft applications follow the
-live rules; a submitted application keeps a snapshot of the rules it was submitted under.
-Only **Sales / Operations** (chosen in "View as") can edit; Risk and CS see the page as view only.
-Every change needs a reason and is recorded in the change history with the person and team.
-Like the other team checks, this relies on the prototype's role switcher, not real permissions.
-Data is stored separately under `mobi.gp.countryconfig`.
+**Country rules.** Each country's onboarding rules (availability, business types, registration and
+tax ID rules, bank fields, documents and director/owner rules) are backend configuration. There is
+no screen for them: when a country is added or changed in the backend, the registration form follows
+it. New and draft applications use the current rules; a submitted application keeps a snapshot of
+the rules it was submitted under. In the prototype the rules are stored under `mobi.gp.countryconfig`.
+
+**IPN callback URL.** A technical setting, not a Risk change: Customer Success or Sales / Operations
+set it during readiness and can change it directly after go-live (Go-live panel). Every change is
+recorded in the application history. Transaction change requests to Risk never change it.
 
 **Merchant identity and live MIDs.** A GMID (`GM-…`) is the merchant shared by a parent and its
 sub-merchants; the Global Account (`GA-…`) is the separate portal login; internal merchant entities
@@ -244,8 +259,8 @@ document §8 (Part B). Two steps on one screen:
 after "Confirm onboarding" (Sales / Ops submit, FinOps approves on **Pricing Approvals**), and
 *read only* before CS review or while the merchant is suspended. Editing keeps the scope and the
 pricing method and creates v+1. **Maker ≠ checker:** the person who submitted a change can't decide
-it, so test approvals with two logins (e.g. submit as `123`, approve as `TANJUNG-ADMIN` with "View as"
-FinOps). Each decision asks for a current code from the approver's authenticator. **"Confirm
+it, so test approvals with two logins (e.g. submit as `123`, approve as `TANJUNG-ADMIN`, the FinOps
+login). Each decision asks for a current code from the approver's authenticator. **"Confirm
 onboarding"** replaces "Issue production keys" (it also issues them) and is blocked until a product
 is on, every product has pricing in effect and every PayIn product has a settlement cycle. Every
 pricing create, approval, rejection and cancellation is in the **MDR audit log** and the application
@@ -295,8 +310,9 @@ itself. Every step is recorded on the sub-merchant.
 **Approvals.** One page lists what is waiting for the acting team: Risk sees profile, country and
 MCC change requests and new sub-merchants; FinOps sees pricing changes; Sales / Operations see their own requests; CS
 sees everything, read only. Each item links to the page where the decision is made. Approval is
-checked by team only: in this prototype one login can switch teams in "View as" and approve its own
-request. Production needs person-level separation of duties.
+checked by team, and each login has a fixed team. `MOBI-ADMIN` can switch teams, so it could approve
+its own request; use team logins for approval tests. Pricing approvals also check maker ≠ checker by
+person.
 
 **Data upgrade.** The first request with this build upgrades existing merchant data in place
 (schema revision 3, still `version: 2`): it copies the original to `mobi.gp.merchantdb.backup.r2`
@@ -356,6 +372,7 @@ adding `PORTAL`, add it and choose **Redeploy**.
 
 ## Documentation
 
+- [`docs/testing-guide.md`](docs/testing-guide.md): demo logins, teams and a step-by-step test walkthrough.
 - [`docs/authentication-batch-1.md`](docs/authentication-batch-1.md): login workflows, rules, security controls, QA cases and open decisions.
 - [`docs/merchant-onboarding-batch-2.md`](docs/merchant-onboarding-batch-2.md): merchant data model, workflows, statuses, demo data, QA cases, limitations and open questions.
 - [`docs/merchant-portal-batch-4.md`](docs/merchant-portal-batch-4.md): Merchant Portal MVP screens, access rules, API contracts, tests and open questions.

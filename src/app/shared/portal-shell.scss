@@ -971,3 +971,23 @@ kbd {
     }
   }
 }
+
+.view-as.fixed {
+  cursor: default;
+
+  &:hover {
+    border-color: var(--nav-border);
+  }
+
+  .va-team {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

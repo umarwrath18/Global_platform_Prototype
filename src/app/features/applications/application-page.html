@@ -49,7 +49,7 @@
         <div class="next" [class.mine]="n.role === role()">
           <app-icon [name]="n.role === role() ? 'arrow-right' : 'clock'" [size]="16" />
           <span><strong>{{ n.role === role() ? "You're up." : 'Next:' }}</strong> {{ n.text }}</span>
-          @if (n.role !== role()) {
+          @if (n.role !== role() && roles.canSwitch()) {
             <button type="button" class="btn sm" (click)="switchRole(n.role)"><app-icon name="users" [size]="14" />Switch to {{ roleLabel[n.role] }}</button>
           }
         </div>
@@ -135,7 +135,7 @@
             <app-review-panel [application]="a" (decided)="onDecided($event)" />
           }
           @if (inReadiness()) {
-            <app-readiness-panel [application]="a" [canAct]="role() === 'cs'" [suspended]="suspended()" [productGaps]="d.productGaps" (changed)="onReadiness($event)" />
+            <app-readiness-panel [application]="a" [canAct]="role() === 'cs'" [canEditIpn]="role() === 'cs' || role() === 'sales'" [suspended]="suspended()" [productGaps]="d.productGaps" (changed)="onReadiness($event)" />
           }
           @if (showProducts()) {
             <section class="ppc-section" id="product-config" aria-label="Product & Payment Config">

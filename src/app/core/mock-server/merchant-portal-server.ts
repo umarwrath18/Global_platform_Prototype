@@ -100,6 +100,8 @@ export class MerchantPortalServer {
       const q = new URLSearchParams(rawQuery ?? '');
       const route = `${method.toUpperCase()} ${rawPath}`;
       switch (route) {
+        case 'GET /api/merchant-portal/settings':
+          return { status: 200, body: profile!.settings };
         case 'GET /api/merchant-portal/overview':
           return { status: 200, body: this.overview(profile!) };
         case 'GET /api/merchant-portal/summary':

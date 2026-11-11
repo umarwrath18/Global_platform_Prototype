@@ -170,7 +170,7 @@ describe('Two-factor authentication', () => {
       const step = ((await call('POST', '/api/security/step-up', { code: await demoCode('session', admin) }, admin, 'security')).body as any).stepUpToken;
       const overview = (await call('GET', '/api/security/overview', null, admin, 'security')).body as any;
       expect(overview.alerts).toHaveLength(1);
-      expect(overview.alerts[0]).toMatchObject({ status: 'open', loginId: 'TANJUNG-ADMIN', failedAttempts: 4 });
+      expect(overview.alerts[0]).toMatchObject({ status: 'open', loginId: 'TANJUNG-ADMIN', failedAttempts: 4, email: { to: 'tech-alerts@mobi.xyz', subject: '[Mobi security] MFA blocked: TANJUNG-ADMIN (4 incorrect codes)', status: 'simulated' } });
       expect((await call('POST', '/api/security/users/U-2/waive', { stepUpToken: step }, admin, 'security')).body).toEqual({ code: 'VALIDATION_FAILED' });
       expect((await call('POST', '/api/security/users/U-2/waive', { stepUpToken: step, reason: 'User confirmed typo on new phone' }, admin, 'security')).status).toBe(204);
 
@@ -213,7 +213,7 @@ describe('Two-factor authentication', () => {
       const upgraded = new AuthServer({ storage, now: () => now, pbkdf2Iterations: 1000, sendEmail: () => undefined });
       expect(((await upgraded.handle('POST', '/api/auth/login', { loginId: 'TANJUNG-ADMIN', password: DEMO_PASSWORD }, null)).body as any).stage).toBe('verify');
       const after = JSON.parse(storage.getItem(key)!);
-      expect(after.version).toBe(8);
+      expect(after.version).toBe(9);
       expect(after.mfa['U-2']).not.toHaveProperty('recovery');
       expect(after.mfa['U-2'].status).toBe('active');
       expect(after.challenges.some((c: any) => c.stage === 'rebind')).toBe(false);
@@ -341,7 +341,7 @@ describe('Two-factor authentication', () => {
       const upgraded = new AuthServer({ storage, now: () => now, pbkdf2Iterations: 1000, sendEmail: () => undefined });
       expect(((await upgraded.handle('POST', '/api/auth/login', { loginId: '123', password: DEMO_PASSWORD }, null)).body as any).stage).toBe('setup');
       const after = JSON.parse(storage.getItem(key)!);
-      expect(after.version).toBe(8);
+      expect(after.version).toBe(9);
       expect(after.sessions).toEqual([]);
       expect(after.revokedSessions.at(-1)).toMatchObject({ tokenHash: 'abc', reason: 'MFA_REQUIRED' });
       expect(after.users).toHaveLength(v4.users.length);
