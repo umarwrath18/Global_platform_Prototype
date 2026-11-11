@@ -275,3 +275,16 @@ describe('price resolution (§7.9)', () => {
     expect(classifyPeriod(draft({ methodCode: 'cards', subMerchantId: 'ME-1', startDate: '2026-11-01' }), [sub]).kind).toBe('overlap');
   });
 });
+
+describe('groupMethods (§3.1 option groups)', () => {
+  it('keeps catalog order, collects each group and puts neighbouring ungrouped methods together', async () => {
+    const { groupMethods } = await import('./products');
+    const m = (code: string, group?: string) => ({ code, ...(group ? { group } : {}) });
+    const groups = groupMethods([m('fpx'), m('duitnow_qr'), m('tng', 'E-Wallets'), m('grabpay', 'E-Wallets'), m('cards'), m('boost', 'E-Wallets'), m('ezycash')]);
+    expect(groups.map((g) => [g.label, g.items.map((i) => i.code)])).toEqual([
+      [null, ['fpx', 'duitnow_qr']],
+      ['E-Wallets', ['tng', 'grabpay', 'boost']],
+      [null, ['cards', 'ezycash']],
+    ]);
+  });
+});

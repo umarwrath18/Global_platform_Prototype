@@ -14,6 +14,5 @@ Built from "Build Prompt – Mobi Pricing Engine" §7, on the same pricing data 
 | Sub-merchants | Priced after onboarding, for the merchant's own sub-merchants in the corridor, and only for products switched on at the MID (§8.9). Resolution: sub-merchant rule, else merchant-level, else none (§7.9). |
 
 ## Not built (later)
-- §3.1 standalone catalog methods.
-- Sub-merchant settlement cycles; a merchant-facing pricing view.
-- Re-authentication for settlement and USD fee changes; unusual-change alerts.
+- Sub-merchant settlement cycles: decided to stay at MID level for now (sub-merchants settle into the parent's account).
+- Built later in Part C (`pricing-engine-part-c.md`): §3.1 catalog methods, re-authentication for settlement and USD fee changes, unusual-change alerts, payment-method deactivation. The merchant-facing pricing view is the Merchant Portal's Pricing & settings page.

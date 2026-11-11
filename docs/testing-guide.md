@@ -76,6 +76,17 @@ Shortcut: the seeded Nusantara Home Retail (Malaysia) is already live, so you ca
 
 ## Other things to try
 
+- **Deactivate a payment method:** as `123`, open Merchant Pricing → a live merchant → **View** on an
+  active rule → **Deactivate**. Choose the whole MID or one sub-merchant, Immediately or On a date,
+  add a reason, then enter your authenticator code. Sign in as `TANJUNG-ADMIN` to see the FinOps alert
+  under Notifications. In **Sub-Merchant View** you can deactivate or reactivate one sub-merchant's method.
+- **Settlement or USD fee change:** saving a settlement cycle, or submitting a Fixed Fee in USD, asks for
+  your authenticator code once; for the next 5 minutes it isn't asked again.
+- **Unusual-change alert:** as `123`, submit a pricing change that drops a rate by 30% or more (e.g.
+  FPX 1% → 0.6%), or sets it to 0. FinOps gets a warning; the change is still submitted.
+- **E-wallets and payouts:** Product & Payment Config shows the e-wallets grouped, and Bank Transfer plus
+  one e-wallet payout already on for the live demo merchants.
+
 - **IPN after go-live:** as `MOBI-CS` or `123`, open a live application and change the IPN callback
   URL in the Go-live panel. It saves directly, no Risk approval, and appears in the application
   history. As `MOBI-RISK` the field is read only.

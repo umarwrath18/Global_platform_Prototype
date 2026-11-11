@@ -60,6 +60,11 @@ interface Reading {
     }
   `,
   styles: `
+    /* While a side sheet is open, sit over the dimmed page instead of the sheet's buttons. */
+    :host-context(body.sheet-open) .card { right: auto; left: 20px; }
+    @media (max-width: 767px) {
+      :host-context(body.sheet-open) .card { top: 12px; bottom: auto; left: 12px; }
+    }
     .card {
       position: fixed;
       right: 20px;

@@ -484,6 +484,18 @@
   &:has(.suffix) .f-input {
     padding-right: 32px;
   }
+
+  // The unit sits where the browser's number spinner would be.
+  input[type='number'] {
+    appearance: textfield;
+    -moz-appearance: textfield;
+  }
+
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
 }
 
 .editor-body {

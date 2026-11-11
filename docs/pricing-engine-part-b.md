@@ -26,6 +26,6 @@ in this project.
 ## Not built (later)
 - Standalone Merchant Pricing engine (Part A): merchant list, sub-merchant view, MDR history page.
 - Sub-merchant pricing for MIDs (§8.9), merchant-facing pricing view.
-- Re-authentication for settlement and USD fee changes (§9); unusual-change alerts; production FX
-  rate handling (USD-5/6) and per-transaction fee records (no transactions exist yet).
+- Production FX rate handling (USD-5/6) and per-transaction fee records (no transactions exist yet).
+- Re-authentication for settlement and USD fee changes (§9) and unusual-change alerts: built in Part C.
 - Finance sign-off for settlement changes on live MIDs (§8.3 [DECIDE]): not required for now.

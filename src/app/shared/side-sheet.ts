@@ -267,6 +267,8 @@ export class SideSheet implements AfterViewInit, OnDestroy {
 
   ngAfterViewInit() {
     this.doc.body.style.overflow = 'hidden';
+    // Lets fixed helpers (the prototype's Demo authenticator) move out of the sheet's way.
+    this.doc.body.classList.add('sheet-open');
     // Focus the first field or button in the body, else the panel itself.
     queueMicrotask(() => {
       const panel = this.panel();
@@ -277,6 +279,7 @@ export class SideSheet implements AfterViewInit, OnDestroy {
 
   ngOnDestroy() {
     this.doc.body.style.overflow = this.overflow;
+    if (this.doc.querySelectorAll('app-side-sheet').length <= 1) this.doc.body.classList.remove('sheet-open'); // this one is still in the DOM
     if (this.opener && this.doc.contains(this.opener)) this.opener.focus({ preventScroll: true });
   }
 

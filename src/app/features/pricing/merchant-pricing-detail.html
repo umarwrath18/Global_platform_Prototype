@@ -227,6 +227,12 @@
       </app-side-sheet>
     }
 
+    @if (editor(); as p) {
+      <app-side-sheet size="editor" label="Pricing editor" (dismiss)="ed.requestClose()">
+        <app-pricing-editor #ed [view]="v" [preset]="p" variant="merchant" (saved)="onSaved($event)" (closed)="closeEditor()" />
+      </app-side-sheet>
+    }
+
     @if (deactivating(); as d) {
       <app-deactivate-sheet [view]="v" [methodCode]="d.methodCode" [flow]="d.flow" [subMerchantId]="d.subMerchantId" (finished)="view.set($event)" (closed)="deactivating.set(null)" />
     }

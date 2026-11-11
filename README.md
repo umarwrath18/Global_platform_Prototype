@@ -271,17 +271,34 @@ history.
 Payment Config, for MIDs whose onboarding is confirmed:
 - **Merchants** (§7.1): search, Flow and Status filters, active / total rules, MDR range, pagination.
   Ops (Sales / Operations) get *Edit Pricing* and *Configure*; FinOps and others *View Pricing*.
-- **Merchant detail** (§7.2): Active, Scheduled and Pending rules at merchant level and per
-  sub-merchant, version history, View Details, Edit Pricing ("Select Pricing to Edit"), Cancel Rule,
-  and the editor as a popup with an optional **sub-merchant** scope.
+- **Merchant detail** (§7.2): Active, Scheduled and Pending rules for the **Master Merchant** and
+  per sub-merchant, version history and deactivated payment methods. Each row has one **View**: the
+  details open in a side sheet with *What changes*, an activity timeline, and Edit Pricing, Cancel
+  Rule or Deactivate. The editor opens in a side sheet with an optional **sub-merchant** scope.
 - **Sub-Merchant View** (§7.3): the pricing that applies to each sub-merchant and payment method – its
-  own rule, otherwise the merchant-level rule (§7.9).
-- **MDR History** (§7.11), **Approvals** (§7.8: status chips, Pricing Detail, maker ≠ checker and an
-  MFA code per decision) and the **MDR audit log** (§7.10).
+  own rule, otherwise *Inherited from Master Merchant* (§7.9). Ops can deactivate or reactivate a
+  method for one sub-merchant here.
+- **MDR History** (§7.11), **Approvals** (§7.8: status chips, Pricing Detail in a side sheet, maker ≠
+  checker and an MFA code per decision) and the **MDR audit log** (§7.10).
 Demo: Nusantara Home Retail (Malaysia) has two sub-merchants; the Online Store has its own Cards
-rule and the Penang Outlet uses the merchant's. Not built yet: the §3.1 standalone catalog
-(Boost, ShopeePay, EzyCash, LinkAja, e-wallet payouts), a merchant-facing pricing view,
-re-authentication for settlement or USD fee changes, and sub-merchant settlement cycles.
+rule and the Penang Outlet inherits the Master Merchant's. See
+[`docs/pricing-engine-part-c.md`](docs/pricing-engine-part-c.md) for this batch.
+
+**Pricing Part C.** Added after the gap review (details in `docs/pricing-engine-part-c.md`):
+- **More payment methods (§3.1):** Malaysia: Boost, ShopeePay, EzyCash - COTC and e-wallet payouts
+  (Boost, Touch 'n Go, GrabPay, ShopeePay). Indonesia: LinkAja, Shopee and e-wallet payouts (OVO, DANA,
+  LinkAja, ShopeePay). E-wallets are grouped. Live demo MIDs pay out by Bank Transfer and one e-wallet.
+- **Deactivate a payment method** (Ops, after onboarding, with an MFA code): for the whole MID or one
+  sub-merchant, **immediately** or **from a date**. Pricing ends the day before (today when immediate);
+  later or pending pricing is cancelled; FinOps is alerted in-app and by (simulated) email. A
+  scheduled stop can be cancelled; a sub-merchant can be reactivated and inherits again.
+- **MFA code** for settlement saves, USD fixed fees and deactivations; one code lasts 5 minutes.
+- **Unusual-change alerts** to FinOps (in-app and simulated email, warning only): 5+ pricing changes
+  for a merchant within an hour, 20+ by one person in a day, pricing set to 0, or a drop of 30%+.
+- **Side sheets** for pricing, change requests and User security (registration and readiness stay
+  full pages). Dates show as "12 Nov 2026"; % and currency sit inside fields.
+Not built: settlement cycles per sub-merchant (MID only, by decision), Slack alerts (pipeline), host
+management.
 
 **Changes after Risk approval.** Once Risk has approved a merchant, anything Risk reviewed changes
 only through a change request that Risk approves: the legal identity (merchant page → "Request
@@ -373,6 +390,8 @@ adding `PORTAL`, add it and choose **Redeploy**.
 ## Documentation
 
 - [`docs/testing-guide.md`](docs/testing-guide.md): demo logins, teams and a step-by-step test walkthrough.
+- [`docs/pricing-engine-part-c.md`](docs/pricing-engine-part-c.md): Master Merchant, §3.1 methods, deactivation, MFA re-authentication, unusual-change alerts and side sheets.
+- [`docs/transaction-management-requirements.md`](docs/transaction-management-requirements.md): Transaction Management requirements (draft for review).
 - [`docs/authentication-batch-1.md`](docs/authentication-batch-1.md): login workflows, rules, security controls, QA cases and open decisions.
 - [`docs/merchant-onboarding-batch-2.md`](docs/merchant-onboarding-batch-2.md): merchant data model, workflows, statuses, demo data, QA cases, limitations and open questions.
 - [`docs/merchant-portal-batch-4.md`](docs/merchant-portal-batch-4.md): Merchant Portal MVP screens, access rules, API contracts, tests and open questions.

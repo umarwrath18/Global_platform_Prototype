@@ -181,3 +181,24 @@
   color: var(--text-muted);
 }
 .cr-check { display: inline-flex; align-items: center; gap: 8px; font-weight: 500; }
+
+// In the sheet the section switcher wraps, so it's a row of pills rather than one joined control.
+.cr-body .seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+
+  button,
+  button + button {
+    height: 36px;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+  }
+
+  button.on {
+    border-color: var(--mobi-blue);
+  }
+}

@@ -58,12 +58,14 @@ export function countryProducts(cfg: CountryOnboardingConfig): ProductMethod[] {
   return cfg.paymentMethods.map((m) => ({ code: m.code, name: m.name, flow: m.flow, typicalMaxMdr: m.typicalMaxMdr, ...(m.group ? { group: m.group } : {}) }));
 }
 
-/** Methods grouped for pickers: ungrouped ones stand alone, grouped ones sit under their label, in catalog order. */
+/** Methods grouped for pickers (§3.1 order): e.g. [FPX, DuitNow QR], E-Wallets [...], [Cards, EzyCash - COTC]. */
 export function groupMethods<T extends { group?: string }>(methods: T[]): { label: string | null; items: T[] }[] {
   const out: { label: string | null; items: T[] }[] = [];
   for (const m of methods) {
     const label = m.group ?? null;
-    const existing = label ? out.find((g) => g.label === label) : null;
+    // A group collects all its methods; ungrouped methods next to each other share one row.
+    const last = out[out.length - 1];
+    const existing = label ? out.find((g) => g.label === label) : last && last.label === null ? last : null;
     if (existing) existing.items.push(m);
     else out.push({ label, items: [m] });
   }
