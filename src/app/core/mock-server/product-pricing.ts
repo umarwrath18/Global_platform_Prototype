@@ -473,6 +473,7 @@ export function setPricing(ctx: ProductContext, body: any): PricingVersion {
     cancelledAt: null,
   };
   const previous = previousSummary(all, version, today);
+  const before = previousInScope(all, version, today);
   ctx.db.pricingVersions.push(version);
   const text = label(version, method!.name, subName(ctx.db, version.subMerchantId));
   if (mode === 'onboarding') {
@@ -485,7 +486,75 @@ export function setPricing(ctx: ProductContext, body: any): PricingVersion {
     audit(ctx, version, { role: AUDIT_ROLE[ctx.role], previous, next: pricingSummary(version), status: 'pending_approval' });
     ctx.notify('pricing_approval_requested', ['finops'], `Pricing to approve: ${merchantOf(ctx.db, ctx.app).legalName} · ${method!.name}`, `${ctx.caller.name} submitted pricing change v${version.version} for ${ctx.app.id}: ${pricingSummary(version)}.`);
   }
+  flagUnusualChange(ctx, version, before, method!.name);
   return version;
+}
+
+// ------------------------------------------------------------------ unusual-change alerts (§9)
+
+/** Thresholds for unusual pricing changes (agreed). Alerts only warn: they never block a change. */
+export const UNUSUAL_CHANGE = { perMerchantPerHour: 5, perPersonPerDay: 20, dropRatio: 0.3 } as const;
+
+function previousInScope(versions: PricingVersion[], v: Pick<PricingVersion, 'methodCode' | 'flow' | 'subMerchantId'>, today: string) {
+  return pricingInEffect(versions, v.methodCode, today, v.flow, subOf(v)) ?? null;
+}
+
+/** True when the pricing charges nothing at all (MDR and fees 0), ignoring subscription-only setups. */
+function chargesNothing(v: PricingVersion): boolean {
+  switch (v.technique) {
+    case 'variable_rate':
+    case 'higher_of':
+      return v.mdrPct === 0 && !v.minimumFee;
+    case 'variable_plus_fixed':
+      return v.mdrPct === 0 && !v.fixedFee;
+    case 'fixed_fee':
+      return v.fixedFee === 0;
+    case 'volume_based':
+      return (v.tiers ?? []).some((t) => t.mdrPct === 0 && !t.fixedFee);
+    case 'historical_volume':
+      return v.historical?.resultingMdr === 0 || v.historical?.defaultMdr === 0;
+    default:
+      return false;
+  }
+}
+
+/** Headline rate used to compare versions: MDR % where there is one, else the fixed fee. */
+function headline(v: PricingVersion): { value: number; text: (n: number) => string } | null {
+  if (v.mdrPct !== null && v.mdrPct !== undefined && ['variable_rate', 'higher_of', 'variable_plus_fixed'].includes(v.technique ?? '')) return { value: v.mdrPct, text: (n) => `${n}%` };
+  if (v.technique === 'fixed_fee' && v.fixedFee !== null) return { value: v.usd ? v.usd.localEquivalent : v.fixedFee, text: (n) => `${v.usd ? v.usd.localEquivalentCurrency : v.currency} ${n}` };
+  return null;
+}
+
+/**
+ * §9 alerts to FinOps (in-app and simulated email), recorded in the application history:
+ * 5+ pricing submissions for one merchant within an hour, 20+ by one person in a day, pricing that
+ * charges nothing, or a drop of 30% or more against the pricing in effect for the same scope.
+ * "High-volume" can't be measured until transactions exist, so the drop rule applies to every merchant.
+ */
+function flagUnusualChange(ctx: ProductContext, v: PricingVersion, before: PricingVersion | null, methodName: string) {
+  const reasons: string[] = [];
+  const merchant = merchantOf(ctx.db, ctx.app);
+  const appsOfMerchant = new Set(ctx.db.applications.filter((a) => a.merchantId === merchant.id).map((a) => a.id));
+  const all = ctx.db.pricingVersions ?? [];
+  const lastHour = all.filter((x) => appsOfMerchant.has(x.applicationId) && x.createdAt > ctx.now - 3_600_000).length;
+  if (lastHour === UNUSUAL_CHANGE.perMerchantPerHour) reasons.push(`${lastHour} pricing changes for ${merchant.legalName} in the last hour`);
+  const today = todayIso(ctx.now);
+  const byPerson = all.filter((x) => x.createdById === v.createdById && todayIso(x.createdAt) === today).length;
+  if (byPerson === UNUSUAL_CHANGE.perPersonPerDay) reasons.push(`${byPerson} pricing changes by ${v.createdBy} today`);
+  if (chargesNothing(v)) reasons.push(`${methodName} pricing set to 0 (no fee charged)`);
+  const now = headline(v);
+  // Rates are compared only between versions with the same technique (a % and a fixed fee can't be compared).
+  const was = before && before.technique === v.technique ? headline(before) : null;
+  if (now && was && was.value > 0 && now.value < was.value && (was.value - now.value) / was.value >= UNUSUAL_CHANGE.dropRatio) {
+    reasons.push(`${methodName} rate drops from ${was.text(was.value)} to ${now.text(now.value)} (−${Math.round(((was.value - now.value) / was.value) * 100)}%)`);
+  }
+  if (!reasons.length) return;
+  const title = `Unusual pricing change: ${merchant.legalName}`;
+  ctx.record(`Unusual pricing change flagged for FinOps – ${reasons.join('; ')}`, { system: true });
+  ctx.notify('pricing_alert', ['finops'], title, `${reasons.join('. ')}. Submitted by ${v.createdBy} (v${v.version}, ${ctx.app.id}). This is a warning only; the change was not blocked.`, {
+    to: [FINOPS_MAILBOX],
+    subject: `[Mobi pricing] ${title}`,
+  });
 }
 
 function cancelVersion(ctx: ProductContext, v: PricingVersion, why: string | null) {

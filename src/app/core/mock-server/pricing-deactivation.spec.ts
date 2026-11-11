@@ -160,4 +160,31 @@ describe('Payment-method deactivation and re-authentication', () => {
       expect((await deactivate('APP-2026-0001', { methodCode: 'fpx', when: 'immediate' })).body.code).toBe('DEACTIVATION_SCHEDULED');
     });
   });
+
+  describe('unusual-change alerts to FinOps', () => {
+    const submit = (method: string, mdr: number, flow: 'payin' | 'payout' = 'payin') => call<any>('POST', '/api/applications/APP-2026-0001/pricing', { draft: percentageDraft(method, mdr, addDays(today(), 1), flow) });
+    const alerts = () => db().notifications.filter((n) => n.event === 'pricing_alert');
+
+    it('flags a drop of 30% or more and pricing that charges nothing; a smaller drop is not flagged', async () => {
+      await submit('duitnow_qr', 0.7); // 0.8% → 0.7%: −12.5%
+      expect(alerts()).toHaveLength(0);
+      expect((await submit('fpx', 0.6)).status).toBe(201); // 1% → 0.6%: −40%, still submitted
+      expect(alerts()[0]).toMatchObject({
+        audience: ['finops'],
+        title: 'Unusual pricing change: Tanjung Global Trading Sdn Bhd',
+        email: { to: ['finops@mobi.xyz'], subject: '[Mobi pricing] Unusual pricing change: Tanjung Global Trading Sdn Bhd', status: 'simulated' },
+      });
+      expect(alerts()[0].body).toContain('FPX rate drops from 1% to 0.6% (−40%)');
+      await submit('tng', 0);
+      expect(alerts()[0].body).toContain("Touch 'n Go pricing set to 0 (no fee charged)");
+      expect(db().applications.find((a) => a.id === 'APP-2026-0001')!.history.at(-1)!.action).toContain('Unusual pricing change flagged for FinOps');
+    });
+
+    it('flags the fifth pricing change for one merchant within an hour, once', async () => {
+      for (const [m, flow] of [['fpx', 'payin'], ['duitnow_qr', 'payin'], ['tng', 'payin'], ['bank_transfer_payout', 'payout']] as const) await submit(m, 0.9, flow);
+      expect(alerts().filter((a) => a.body.includes('in the last hour'))).toHaveLength(0);
+      await submit('tng_payout', 0.9, 'payout');
+      expect(alerts().filter((a) => a.body.includes('5 pricing changes for Tanjung Global Trading Sdn Bhd in the last hour'))).toHaveLength(1);
+    });
+  });
 });
