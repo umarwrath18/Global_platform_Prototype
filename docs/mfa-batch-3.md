@@ -193,8 +193,10 @@ no console errors).
 3. **Staff 2FA:** should Mobi staff (Support / Security Admin) logins also need 2FA when they become
    real accounts?
 4. **Merchant-side multi-user management** (invite, roles, remove): confirm it's a later phase.
-5. **Blocks:** should repeated blocks escalate (e.g. require a reset after N waive-offs)? Who on the
-   Tech team gets the alert, and how (email, Slack, pager)?
+5. **Blocks:** should repeated blocks escalate (e.g. require a reset after N waive-offs)?
+   *Alert channel decided:* in-app and email to `tech-alerts@mobi.xyz` now; **Slack is in the
+   pipeline** for later (the real backend posts the same alert to a Tech Slack channel through an
+   incoming webhook). Still open: the Slack channel and who owns it.
 6. **Rate limits:** confirm 3 failures / block-until-waived, the 5-minute second step, and ±30 s drift.
 7. **Recovery codes:** confirm 2 codes, and whether a user with none left should be prompted at sign-in.
 8. **Success metrics:** baselines and targets (§7) still to be agreed.
