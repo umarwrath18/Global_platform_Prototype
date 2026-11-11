@@ -11,8 +11,12 @@
     @for (flow of flows; track flow) {
       <div class="flow-row">
         <div class="flow-label"><strong>{{ flowRow[flow] }}</strong></div>
-        <div class="chips" role="group" [attr.aria-label]="flowRow[flow] + ' products'">
-          @for (m of methodsOf(flow); track m.code) {
+        <div class="chip-groups">
+        @for (g of groupsOf(flow); track $index) {
+        <div class="chip-group">
+        @if (g.label) {<span class="chip-group-label">{{ g.label }}</span>}
+        <div class="chips" role="group" [attr.aria-label]="flowRow[flow] + (g.label ? ' – ' + g.label : '') + ' products'">
+          @for (m of g.items; track m.code) {
             <button
               type="button"
               class="p-chip"
@@ -34,6 +38,9 @@
               @if (lockedOn(m.code) && enabled()[m.code]) {<app-icon name="lock" [size]="12" />}
             </button>
           }
+        </div>
+        </div>
+        }
         </div>
       </div>
     }

@@ -51,12 +51,13 @@ import { simulateVerification } from './verification';
 // status transitions, validation and duplicate checks are never left to the UI.
 
 /**
+ * 6: §3.1 catalog additions, payout products on live demo MIDs, payment-method deactivation.
  * 5: Merchant Pricing (demo sub-merchants with their own pricing).
  * 4: Product & Payment Config per the Pricing Engine document (catalog, pricing methods, versions).
  * 3: registration form per country (MY / ID / VN only; no pricing in the application).
- * Version 2 to 4 data is kept as a backup and replaced with the new demo data.
+ * Version 2 to 5 data is kept as a backup and replaced with the new demo data.
  */
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 export const MERCHANT_DB_VERSION = DB_VERSION;
 
 /** Fresh demo data in the current shape: the seed, the data upgrade, then the demo sub-merchants. */
@@ -66,7 +67,7 @@ function freshDemoDb(now: number): MerchantDb {
   return db;
 }
 /** Versions replaced on load with fresh demo data, after a backup, because their records can't be converted. */
-const REPLACED_VERSIONS = [2, 3, 4];
+const REPLACED_VERSIONS = [2, 3, 4, 5];
 
 export type MerchantRecord = Omit<GlobalMerchant, 'globalStatus' | 'lifecycleStatus'> & Partial<Pick<GlobalMerchant, 'lifecycleStatus' | 'lifecycleReason' | 'lifecycleUpdatedAt' | 'lifecycleUpdatedBy'>>;
 

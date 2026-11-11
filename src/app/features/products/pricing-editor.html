@@ -66,19 +66,28 @@
                     <button type="button" role="radio" [attr.aria-checked]="flow() === f.flow" [class.on]="flow() === f.flow" [disabled]="!f.enabled" (click)="setFlow(f.flow)" [title]="f.enabled ? '' : 'No ' + flowLabel[f.flow] + ' products are switched on'">{{ flowLabel[f.flow] }}</button>
                   }
                 </div>
+                @for (f of flowOptions(); track f.flow) {
+                  @if (!f.enabled) {<p class="f-hint">No {{ flowLabel[f.flow] }} products are switched on. Switch on {{ f.flow === 'payout' ? 'Bank Transfer or an e-wallet payout' : 'a PayIn product' }} in Product &amp; Payment Config.</p>}
+                }
               </div>
               <div class="f-field">
                 <label for="pe-method">Payment Method <span class="req">*</span></label>
                 <select id="pe-method" class="f-input" (change)="setMethod($any($event.target).value)">
                   <option value="" [selected]="!methodCode()">Select payment method</option>
-                  @for (m of methodsInFlow(); track m.code) {<option [value]="m.code" [selected]="m.code === methodCode()">{{ m.name }}</option>}
+                  @for (g of methodGroups(); track $index) {
+                    @if (g.label) {
+                      <optgroup [label]="g.label">@for (m of g.items; track m.code) {<option [value]="m.code" [selected]="m.code === methodCode()">{{ m.name }}</option>}</optgroup>
+                    } @else {
+                      @for (m of g.items; track m.code) {<option [value]="m.code" [selected]="m.code === methodCode()">{{ m.name }}</option>}
+                    }
+                  }
                 </select>
               </div>
               @if (view().subMerchants.length) {
                 <div class="f-field">
                   <label for="pe-sub-merchant">Sub-Merchant (optional)</label>
                   <select id="pe-sub-merchant" class="f-input" [disabled]="view().mode !== 'change'" (change)="subMerchantId.set($any($event.target).value)">
-                    <option value="" [selected]="!subMerchantId()">All Sub-Merchants (Merchant Level)</option>
+                    <option value="" [selected]="!subMerchantId()">Master Merchant</option>
                     @for (sm of view().subMerchants; track sm.id) {<option [value]="sm.id" [selected]="sm.id === subMerchantId()">{{ sm.name }}</option>}
                   </select>
                   @if (view().mode !== 'change') {<p class="f-hint">Sub-merchant pricing can be set once onboarding is confirmed.</p>}

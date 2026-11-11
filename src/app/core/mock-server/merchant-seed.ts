@@ -228,6 +228,11 @@ const CONFIGURED: ApplicationStatus[] = ['keys_generated', 'integration', 'go_li
 /** Demo MDRs (Percentage) for seeded pricing. Illustrative only, not approved Mobi prices. */
 const SEED_MDR: Record<string, number> = { fpx: 1.0, duitnow_qr: 0.8, tng: 1.5, grabpay: 1.5, cards: 2.2, va: 0.9, qris: 0.7, dana: 1.5, ovo: 1.5, vietqr: 0.6, momo: 1.6, zalopay: 1.6, bank_transfer: 0.6 };
 
+/** Demo payout pricing (Fixed Fee per transfer, local currency). Illustrative only. */
+const SEED_PAYOUT_FEE: Record<string, number> = { MYR: 1, IDR: 2500, VND: 5000 };
+/** Payout products switched on for live demo merchants: Bank Transfer plus one e-wallet where the catalog has one. */
+const SEED_PAYOUTS: Record<string, string[]> = { MY: ['bank_transfer_payout', 'tng_payout'], ID: ['bank_transfer_payout', 'ovo_payout'], VN: ['bank_transfer_payout'] };
+
 const blankVersion = (over: Partial<PricingVersion> & Pick<PricingVersion, 'id' | 'applicationId' | 'methodCode' | 'startDate' | 'createdAt'>): PricingVersion => ({
   flow: 'payin',
   vaBanks: [],
@@ -273,19 +278,28 @@ function seedProducts(s: AppSeed, app: CountryApplication): { config: ProductCon
   const cycle = configured ? ('T+1' as const) : null;
   const cfg = ONBOARDING_COUNTRIES[s.country];
   const payin = cfg.paymentMethods.filter((m) => m.flow === 'payin');
-  const codes = s.enabledMethods ?? payin.slice(0, 3).map((m) => m.code);
+  const payinCodes = s.enabledMethods ?? payin.slice(0, 3).map((m) => m.code);
+  // Configured MIDs also pay out: Bank Transfer and one e-wallet (onboarding stays PayIn only).
+  const payoutCodes = configured ? (SEED_PAYOUTS[s.country] ?? []).filter((c) => cfg.paymentMethods.some((m) => m.code === c)) : [];
+  const codes = [...payinCodes, ...payoutCodes];
   const started = app.history.find((h) => h.toStatus === 'cs_configuration') ?? app.history[0];
   const config: ProductConfig = {
     applicationId: app.id,
     products: cfg.paymentMethods.map((m) => ({ methodCode: m.code, flow: m.flow, enabled: codes.includes(m.code) })),
-    settlement: cycle ? Object.fromEntries(codes.map((c) => [c, cycle])) : {},
+    settlement: cycle ? Object.fromEntries(payinCodes.map((c) => [c, cycle])) : {},
     revision: 1,
     savedAt: started.at,
     savedBy: STAFF.cs,
   };
-  const versions = payin
-    .filter((m) => codes.includes(m.code))
-    .map((m) => blankVersion({ id: `PV-SEED-${app.id.slice(-4)}-${m.code}`, applicationId: app.id, methodCode: m.code, currency: cfg.currency, mdrPct: SEED_MDR[m.code] ?? 1, startDate: new Date(started.at).toISOString().slice(0, 10), createdAt: started.at, settlementSnapshot: cycle }));
+  const startDate = new Date(started.at).toISOString().slice(0, 10);
+  const versions = [
+    ...payin
+      .filter((m) => payinCodes.includes(m.code))
+      .map((m) => blankVersion({ id: `PV-SEED-${app.id.slice(-4)}-${m.code}`, applicationId: app.id, methodCode: m.code, currency: cfg.currency, mdrPct: SEED_MDR[m.code] ?? 1, startDate, createdAt: started.at, settlementSnapshot: cycle })),
+    ...payoutCodes.map((code) =>
+      blankVersion({ id: `PV-SEED-${app.id.slice(-4)}-${code}`, applicationId: app.id, methodCode: code, flow: 'payout', technique: 'fixed_fee', currency: cfg.currency, mdrPct: null, fixedFee: SEED_PAYOUT_FEE[cfg.currency] ?? 1, startDate, createdAt: started.at }),
+    ),
+  ];
   return { config, versions };
 }
 

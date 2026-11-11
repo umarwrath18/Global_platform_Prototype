@@ -11,8 +11,8 @@ import { AuthBridge, Caller, ServerReply } from './merchant-server';
 /** The only team that may change country configuration. */
 export const COUNTRY_CONFIG_EDITOR: StaffRole = 'sales';
 
-// 3: product catalog per the Pricing Engine document. 2: directors carry the ID label. Older configuration is reset to the defaults.
-const DB_VERSION = 3;
+// 4: §3.1 catalog additions (MY / ID) with option groups. 3: product catalog per the Pricing Engine document. 2: directors carry the ID label. Older configuration is reset to the defaults.
+const DB_VERSION = 4;
 
 interface StoredCountry {
   config: CountryOnboardingConfig;

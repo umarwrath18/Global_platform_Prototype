@@ -26,6 +26,8 @@ export interface ProductMethod {
   flow: ProductFlow;
   /** Usual maximum MDR %: above it the editor warns (the hard limit is MDR_HARD_LIMIT). */
   typicalMaxMdr: number;
+  /** Option group in pickers (§3.1), e.g. "E-Wallets". */
+  group?: string;
 }
 
 /** Hard upper limit for every MDR % (decision: 10%). */
@@ -53,7 +55,19 @@ export const VA_BANKS: { code: string; name: string }[] = [
 export const usesVaBanks = (country: string, methodCode: string) => country === 'ID' && methodCode === 'va';
 
 export function countryProducts(cfg: CountryOnboardingConfig): ProductMethod[] {
-  return cfg.paymentMethods.map((m) => ({ code: m.code, name: m.name, flow: m.flow, typicalMaxMdr: m.typicalMaxMdr }));
+  return cfg.paymentMethods.map((m) => ({ code: m.code, name: m.name, flow: m.flow, typicalMaxMdr: m.typicalMaxMdr, ...(m.group ? { group: m.group } : {}) }));
+}
+
+/** Methods grouped for pickers: ungrouped ones stand alone, grouped ones sit under their label, in catalog order. */
+export function groupMethods<T extends { group?: string }>(methods: T[]): { label: string | null; items: T[] }[] {
+  const out: { label: string | null; items: T[] }[] = [];
+  for (const m of methods) {
+    const label = m.group ?? null;
+    const existing = label ? out.find((g) => g.label === label) : null;
+    if (existing) existing.items.push(m);
+    else out.push({ label, items: [m] });
+  }
+  return out;
 }
 
 // ------------------------------------------------------------------ currency

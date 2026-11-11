@@ -33,6 +33,7 @@ import {
   VOLUME_PERIOD_LABEL,
   VolumePeriod,
   VolumeTier,
+  groupMethods,
 } from '../../core/merchants/products';
 import { countryName } from '../../core/merchants/onboarding-config';
 import { Icon } from '../../shared/icon';
@@ -159,6 +160,7 @@ export class PricingEditor implements OnInit, AfterViewInit {
   });
   protected readonly flowOptions = computed(() => (['payin', 'payout'] as ProductFlow[]).map((f) => ({ flow: f, enabled: this.options().some((m) => m.flow === f) })));
   protected readonly methodsInFlow = computed(() => this.options().filter((m) => m.flow === this.flow()));
+  protected readonly methodGroups = computed(() => groupMethods(this.methodsInFlow()));
   protected readonly method = computed(() => this.view().methods.find((m) => m.code === this.methodCode()) ?? null);
   protected readonly showVa = computed(() => usesVaBanks(this.view().country, this.methodCode()));
   protected readonly vaButton = computed(() => (!this.vaBanks().length ? 'Select VA Banks' : this.vaBanks().length === VA_BANKS.length ? 'All VA Banks' : `${this.vaBanks().length} bank(s) selected`));

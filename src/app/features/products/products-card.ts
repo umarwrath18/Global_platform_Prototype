@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
 import { MerchantApi, toMerchantError } from '../../core/merchants/merchant-api.service';
-import { FLOW_ROW_LABEL, pricingInEffect, ProductFlow, ProductPricingView, SETTLEMENT_CYCLES, SettlementCycle } from '../../core/merchants/products';
+import { FLOW_ROW_LABEL, groupMethods, pricingInEffect, ProductFlow, ProductPricingView, SETTLEMENT_CYCLES, SettlementCycle } from '../../core/merchants/products';
 import { Icon } from '../../shared/icon';
 
 /** Step 1: switch products on or off and set each PayIn product's settlement cycle. Drafts until saved. */
@@ -34,6 +34,9 @@ export class ProductsCard {
   protected readonly payin = computed(() => this.view().methods.filter((m) => m.flow === 'payin'));
   protected methodsOf(flow: ProductFlow) {
     return this.view().methods.filter((m) => m.flow === flow);
+  }
+  protected groupsOf(flow: ProductFlow) {
+    return groupMethods(this.methodsOf(flow));
   }
   protected readonly savedOn = computed(() => new Set(this.view().config.products.filter((p) => p.enabled).map((p) => p.methodCode)));
   protected readonly onCount = computed(() => this.view().methods.filter((m) => this.enabled()[m.code]).length);

@@ -41,7 +41,7 @@ describe('merchant data upgrade (schema revision 3)', () => {
   it('keeps every existing record and only adds new fields', async () => {
     expect((await get('/api/merchants')).status).toBe(200);
     const db = stored();
-    expect(db.version).toBe(5);
+    expect(db.version).toBe(6);
     expect(db.schemaRevision).toBe(SCHEMA_REVISION);
     expect(db.merchants).toEqual(original.merchants);
     expect(db.notifications).toEqual(original.notifications);
@@ -163,14 +163,14 @@ describe('merchant data upgrade (schema revision 3)', () => {
     const entity = after.entities!.find((e) => e.gmid === 'GM-100110')!;
     expect(after.applications.find((a) => a.id === 'APP-2026-0019')).toMatchObject({ entityId: entity.id, regionCode: 'VN' });
     expect(after.mids!.find((m) => m.applicationId === 'APP-2026-0007')).toMatchObject({ source: 'migrated', goLiveEvidenceAt: upgradeAt + 5, regionCode: 'VN' });
-    expect(after.version).toBe(5);
+    expect(after.version).toBe(6);
     expect(after.schemaRevision).toBe(3);
   });
 
   it('keeps the data loadable by the previous build (same version, fields and types)', async () => {
     await get('/api/merchants');
     const db = stored();
-    expect(db.version).toBe(5); // the previous build refuses data only when this differs
+    expect(db.version).toBe(6); // the previous build refuses data only when this differs
     for (const key of ['seq', 'merchants', 'applications', 'notifications', 'lifecycleEvents'] as const) expect(db[key]).toBeDefined();
     expect(Object.keys(db.seq)).toEqual(expect.arrayContaining(['merchant', 'application', 'notification']));
   });
@@ -191,7 +191,7 @@ describe('merchant data upgrade (schema revision 3)', () => {
     const v3 = JSON.stringify({ ...original, version: 3 });
     storage.setItem(KEY, v3);
     expect((await get('/api/merchants')).status).toBe(200);
-    expect(stored().version).toBe(5);
+    expect(stored().version).toBe(6);
     expect(storage.getItem('mobi.gp.merchantdb.backup.v3')).toBe(v3);
   });
 
@@ -200,7 +200,7 @@ describe('merchant data upgrade (schema revision 3)', () => {
     storage.setItem(KEY, v2);
     expect((await get('/api/merchants')).status).toBe(200);
     const db = stored();
-    expect(db).toMatchObject({ version: 5, schemaRevision: 3 });
+    expect(db).toMatchObject({ version: 6, schemaRevision: 3 });
     expect(db.applications.every((a) => ['MY', 'ID', 'VN'].includes(a.country))).toBe(true);
     expect(storage.getItem('mobi.gp.merchantdb.backup.v2')).toBe(v2);
     // A second load keeps the new data and the first backup.
@@ -215,7 +215,7 @@ describe('merchant data upgrade (schema revision 3)', () => {
     const s = new MerchantServer({ storage: fresh, now: () => upgradeAt, auth });
     expect((await s.handle('GET', '/api/merchants', null, 'token', 'sales')).status).toBe(200);
     const db = JSON.parse(fresh.getItem(KEY)!) as MerchantDb;
-    expect(db).toMatchObject({ version: 5, schemaRevision: 3 });
+    expect(db).toMatchObject({ version: 6, schemaRevision: 3 });
     expect(db.mids!.map((m) => m.applicationId).sort()).toEqual(['APP-2026-0001', 'APP-2026-0002', 'APP-2026-0003', 'APP-2026-9001', 'APP-2026-9002']);
     expect(fresh.getItem(BACKUP)).toBeNull();
     expect(migrationFlags(db)).toEqual([]);

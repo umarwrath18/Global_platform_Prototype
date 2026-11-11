@@ -8,7 +8,8 @@ import { signIn } from './testing/sign-in';
 
 const KEY = 'mobi.gp.merchantdb';
 
-// Seed (Malaysia): Tanjung (APP-2026-0001) and Nusantara (APP-2026-9001) are live; Nusantara has two
+// Seed (Malaysia): Tanjung (APP-2026-0001) and Nusantara (APP-2026-9001) are live, and both also pay
+// out (Bank Transfer and Touch 'n Go, Fixed Fee). Nusantara has two
 // approved sub-merchants, the Online Store (own Cards rule, 1.9%) and the Penang Outlet (no rules).
 // PT Rasa Bali Kuliner's Malaysia MID (APP-2026-0010) is still in onboarding, so it isn't listed.
 
@@ -51,10 +52,10 @@ describe('Merchant Pricing (Part A)', () => {
   it('lists confirmed MIDs in the corridor with counts, MDR range and role actions (§7.1)', async () => {
     const list = (await call<MerchantPricingList>('GET', '/api/pricing/merchants?country=MY')).body;
     expect(list.rows.map((r) => [r.merchantName, r.mid !== null, r.subMerchantCount, r.status, `${r.activeRules}/${r.totalRules}`, r.mdr, r.pendingCount])).toEqual([
-      ['Nusantara Home Retail Sdn Bhd', true, 2, 'active', '5/5', '0.8%–2.2%', 0],
-      ['Tanjung Global Trading Sdn Bhd', true, 0, 'active', '4/5', '0.8%–2.2%', 1],
+      ['Nusantara Home Retail Sdn Bhd', true, 2, 'active', '7/7', '0.8%–2.2%', 0],
+      ['Tanjung Global Trading Sdn Bhd', true, 0, 'active', '6/7', '0.8%–2.2%', 1],
     ]);
-    expect([list.activeRules, list.pendingApprovals, list.canConfigure]).toEqual([9, 1, true]);
+    expect([list.activeRules, list.pendingApprovals, list.canConfigure]).toEqual([13, 1, true]);
     expect((await call<MerchantPricingList>('GET', '/api/pricing/merchants?country=MY', null, 'finops')).body.canConfigure).toBe(false);
     expect((await call('GET', '/api/pricing/merchants')).body.code).toBe('COUNTRY_NOT_SUPPORTED');
   });

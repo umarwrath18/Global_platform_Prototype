@@ -73,8 +73,12 @@ describe('Product & Payment Config', () => {
   describe('catalog and modes', () => {
     it('offers the corridor catalog, PayIn and PayOut (§3.3)', async () => {
       const names = async (id: string) => (await view(id)).methods.map((m) => `${m.flow}:${m.name}`);
-      expect(await names('APP-2026-0010')).toEqual(['payin:FPX', 'payin:DuitNow QR', "payin:Touch 'n Go", 'payin:GrabPay', 'payin:Cards', 'payout:Bank Transfer']);
-      expect(await names('APP-2026-0009')).toEqual(['payin:Virtual Account', 'payin:QRIS', 'payin:DANA', 'payin:OVO', 'payout:Bank Transfer']);
+      // §3.3 products plus the §3.1 additions for Malaysia and Indonesia.
+      expect(await names('APP-2026-0010')).toEqual([
+        'payin:FPX', 'payin:DuitNow QR', "payin:Touch 'n Go", 'payin:GrabPay', 'payin:Cards', 'payin:Boost', 'payin:ShopeePay', 'payin:EzyCash - COTC',
+        'payout:Bank Transfer', 'payout:Boost', "payout:Touch 'n Go", 'payout:GrabPay', 'payout:ShopeePay',
+      ]);
+      expect(await names('APP-2026-0009')).toEqual(['payin:Virtual Account', 'payin:QRIS', 'payin:DANA', 'payin:OVO', 'payin:LinkAja', 'payin:Shopee', 'payout:Bank Transfer', 'payout:OVO', 'payout:DANA', 'payout:LinkAja', 'payout:ShopeePay']);
       expect(await names('APP-2026-0007')).toEqual(['payin:VietQR', 'payin:MoMo', 'payin:ZaloPay', 'payin:Bank Transfer', 'payout:Bank Transfer']);
     });
 

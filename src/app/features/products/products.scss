@@ -135,6 +135,20 @@
   gap: 6px;
 }
 
+.chip-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chip-group-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
 .p-chip {
   display: inline-flex;
   align-items: center;

@@ -29,6 +29,8 @@ export interface PaymentMethodRule {
   flow: 'payin' | 'payout';
   /** Usual maximum MDR %: the pricing editor warns above it (hard limit 10%). */
   typicalMaxMdr: number;
+  /** Option group in pickers, e.g. "E-Wallets" (Pricing Engine §3.1). Ungrouped when absent. */
+  group?: string;
 }
 
 export interface DirectorRules {
@@ -73,7 +75,10 @@ export function subMerchantRoutes(cfg: Pick<CountryOnboardingConfig, 'subMerchan
   return { opsInitiated: cfg?.subMerchantCreation?.opsInitiated ?? true, parentInitiated: cfg?.subMerchantCreation?.parentInitiated ?? false };
 }
 
-const pm = (code: string, name: string, flow: PaymentMethodRule['flow'], typicalMaxMdr: number): PaymentMethodRule => ({ code, name, flow, typicalMaxMdr });
+const pm = (code: string, name: string, flow: PaymentMethodRule['flow'], typicalMaxMdr: number, group?: string): PaymentMethodRule => ({ code, name, flow, typicalMaxMdr, ...(group ? { group } : {}) });
+/** Pricing Engine §3.1 group labels. */
+const EWALLETS = 'E-Wallets';
+const EWALLET_PAYOUT = 'E-Wallet';
 /** Bank Transfer payout, in every corridor. */
 const PAYOUT = pm('bank_transfer_payout', 'Bank Transfer', 'payout', 5);
 
@@ -99,7 +104,13 @@ export const ONBOARDING_COUNTRIES: Record<string, CountryOnboardingConfig> = {
       { type: 'bank_statement', label: 'Bank statement (latest 3 months)', required: true },
       { type: 'sst_certificate', label: 'SST registration certificate', required: false },
     ],
-    paymentMethods: [pm('fpx', 'FPX', 'payin', 1.8), pm('duitnow_qr', 'DuitNow QR', 'payin', 1.5), pm('tng', "Touch 'n Go", 'payin', 2.5), pm('grabpay', 'GrabPay', 'payin', 5), pm('cards', 'Cards', 'payin', 3.5), PAYOUT],
+    // §3.3 products first (seed data depends on their order), then the §3.1 additions.
+    paymentMethods: [
+      pm('fpx', 'FPX', 'payin', 1.8), pm('duitnow_qr', 'DuitNow QR', 'payin', 1.5), pm('tng', "Touch 'n Go", 'payin', 2.5, EWALLETS), pm('grabpay', 'GrabPay', 'payin', 5, EWALLETS), pm('cards', 'Cards', 'payin', 3.5),
+      pm('boost', 'Boost', 'payin', 2.5, EWALLETS), pm('shopeepay', 'ShopeePay', 'payin', 2.5, EWALLETS), pm('ezycash', 'EzyCash - COTC', 'payin', 3),
+      PAYOUT,
+      pm('boost_payout', 'Boost', 'payout', 5, EWALLET_PAYOUT), pm('tng_payout', "Touch 'n Go", 'payout', 5, EWALLET_PAYOUT), pm('grabpay_payout', 'GrabPay', 'payout', 5, EWALLET_PAYOUT), pm('shopeepay_payout', 'ShopeePay', 'payout', 5, EWALLET_PAYOUT),
+    ],
   },
   ID: {
     ...COUNTRY_CATALOGUE['ID'],
@@ -121,7 +132,12 @@ export const ONBOARDING_COUNTRIES: Record<string, CountryOnboardingConfig> = {
       { type: 'director_id', label: 'Director KTP / passport copies', required: true },
       { type: 'bank_statement', label: 'Bank account proof', required: true },
     ],
-    paymentMethods: [pm('va', 'Virtual Account', 'payin', 1.5), pm('qris', 'QRIS', 'payin', 1.0), pm('dana', 'DANA', 'payin', 2.5), pm('ovo', 'OVO', 'payin', 2.5), PAYOUT],
+    paymentMethods: [
+      pm('va', 'Virtual Account', 'payin', 1.5), pm('qris', 'QRIS', 'payin', 1.0), pm('dana', 'DANA', 'payin', 2.5, EWALLETS), pm('ovo', 'OVO', 'payin', 2.5, EWALLETS),
+      pm('linkaja', 'LinkAja', 'payin', 2.5, EWALLETS), pm('shopee', 'Shopee', 'payin', 2.5, EWALLETS),
+      PAYOUT,
+      pm('ovo_payout', 'OVO', 'payout', 5, EWALLET_PAYOUT), pm('dana_payout', 'DANA', 'payout', 5, EWALLET_PAYOUT), pm('linkaja_payout', 'LinkAja', 'payout', 5, EWALLET_PAYOUT), pm('shopeepay_payout', 'ShopeePay', 'payout', 5, EWALLET_PAYOUT),
+    ],
   },
   VN: {
     ...COUNTRY_CATALOGUE['VN'],
