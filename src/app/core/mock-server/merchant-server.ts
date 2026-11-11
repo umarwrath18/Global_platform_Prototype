@@ -42,7 +42,7 @@ import { MigrationFlag, migrationFlags, MigrationLogEntry, normaliseMerchantDb, 
 import { addDemoSubMerchants, buildMerchantSeed, buildSeedAdditions, SEED_ADDITION_MERCHANT_IDS } from './merchant-seed';
 import { createSubMerchant, goLiveSubMerchant, reviewSubMerchant, setSubMerchantCheck, SubMerchantContext, subMerchantLifecycle, subMerchantsOf, submitSubMerchant } from './sub-merchants';
 import { approvalsFor, ChangeContext, decideChange, merchantRiskApproved, profileEvent, requestCountryChange, requestProfileChange, toChangeView, withdrawChange } from './change-requests';
-import { cancelPricing, checkDecision, decidePricing, DERIVED_CHECKLIST, mdrHistory, merchantPricingList, onboardingGaps, pricingApprovals, pricingAuditLog, subMerchantPricing, ProductContext, productState, productView, runPricingJob, saveProducts, setPricing, syncDerivedChecklist } from './product-pricing';
+import { cancelDeactivation, cancelPricing, checkDeactivation, checkDeactivationAction, checkDecision, deactivateMethod, reactivateMethod, decidePricing, DERIVED_CHECKLIST, mdrHistory, merchantPricingList, onboardingGaps, pricingApprovals, pricingAuditLog, subMerchantPricing, ProductContext, productState, productView, runPricingJob, saveProducts, setPricing, syncDerivedChecklist } from './product-pricing';
 import { ApiError, fail } from './server-errors';
 import { simulateVerification } from './verification';
 
@@ -76,7 +76,7 @@ export interface MerchantDb {
   version: number;
   /** Highest data upgrade applied (absent = before entities and MIDs). See merchant-migrations.ts. */
   schemaRevision?: number;
-  seq: { merchant: number; application: number; notification: number; entity?: number; mid?: number; mccRequest?: number; pricing?: number; pricingAudit?: number; changeRequest?: number };
+  seq: { merchant: number; application: number; notification: number; entity?: number; mid?: number; mccRequest?: number; pricing?: number; pricingAudit?: number; changeRequest?: number; deactivation?: number };
   merchants: MerchantRecord[];
   applications: CountryApplication[];
   notifications: PortalNotification[];
@@ -141,6 +141,8 @@ export interface AuthBridge {
   activateCountry(accountId: string | null, accountName: string, country: string, opts?: { merchantId?: string; reservedIds?: string[] }): Promise<string>;
   /** Re-authentication: checks a current code from the signed-in user's own authenticator. Throws when wrong. */
   verifyCode?(token: string | null, code: unknown): Promise<void>;
+  /** Re-authentication that stays valid for 5 minutes in this session (403 MFA_CODE_REQUIRED without a code). */
+  stepUp?(token: string | null, code: unknown): Promise<void>;
 }
 
 export interface MerchantServerOptions {
@@ -254,8 +256,38 @@ export class MerchantServer {
         if (id && sub === 'ipn' && m === 'PUT') return ok(this.setIpn(id, body, caller, role));
         if (id && sub === 'changes' && m === 'POST') return ok(this.changeAction(caller, role, (ctx) => requestCountryChange(ctx, id, body)), 201);
         if (id && sub === 'products' && m === 'GET') return ok(this.products(id, role));
-        if (id && sub === 'products' && m === 'PUT') return ok(this.productAction(id, caller, role, (ctx) => ({ message: saveProducts(ctx, body) })));
-        if (id && sub === 'pricing' && !subId && m === 'POST') return ok(this.productAction(id, caller, role, (ctx) => ({ version: setPricing(ctx, body) })), 201);
+        if (id && sub === 'products' && m === 'PUT') {
+          // Settlement changes need a current MFA code (5-minute window).
+          const db = this.load();
+          if (this.settlementChanges(db, this.findApplication(db, id), body)) {
+            const denied = await this.stepUp(token, body?.code);
+            if (denied) return denied;
+          }
+          return ok(this.productAction(id, caller, role, (ctx) => ({ message: saveProducts(ctx, body) })));
+        }
+        if (id && sub === 'pricing' && !subId && m === 'POST') {
+          // A USD fixed fee needs a current MFA code (5-minute window).
+          if (body?.draft?.technique === 'fixed_fee' && body?.draft?.currency === 'USD') {
+            const denied = await this.stepUp(token, body?.code);
+            if (denied) return denied;
+          }
+          return ok(this.productAction(id, caller, role, (ctx) => ({ version: setPricing(ctx, body) })), 201);
+        }
+        if (id && sub === 'deactivations' && !subId && m === 'POST') {
+          // All checks first, then the MFA code, then the change.
+          const db = this.load();
+          checkDeactivation(this.productContext(db, this.findApplication(db, id), caller, role), body);
+          const denied = await this.stepUp(token, body?.code);
+          if (denied) return denied;
+          return ok(this.productAction(id, caller, role, (ctx) => ({ deactivation: deactivateMethod(ctx, body) })), 201);
+        }
+        if (id && sub === 'deactivations' && subId && (action === 'cancel' || action === 'reactivate') && m === 'POST') {
+          const db = this.load();
+          checkDeactivationAction(this.productContext(db, this.findApplication(db, id), caller, role), subId, action);
+          const denied = await this.stepUp(token, body?.code);
+          if (denied) return denied;
+          return ok(this.productAction(id, caller, role, (ctx) => ({ deactivation: action === 'cancel' ? cancelDeactivation(ctx, subId) : reactivateMethod(ctx, subId) })));
+        }
         if (id && sub === 'pricing' && subId && action === 'cancel' && m === 'POST') return ok(this.productAction(id, caller, role, (ctx) => ({ version: cancelPricing(ctx, subId, body) })));
         if (id && sub === 'pricing' && subId && action === 'decision' && m === 'POST') {
           // Checks first, then re-authentication with the approver's own MFA code, then the decision.
@@ -1122,6 +1154,29 @@ export class MerchantServer {
     return { ...result, view: productView(db, app, role, this.now()) };
   }
 
+  /**
+   * Re-authentication with the 5-minute window (settlement, USD fees, deactivations). Returns the auth
+   * server's reply when no valid code was given (403 MFA_CODE_REQUIRED, wrong or blocked code), else null.
+   */
+  private async stepUp(token: string | null, code: unknown): Promise<ServerReply | null> {
+    if (!this.opts.auth.stepUp) fail(503, 'SERVICE_UNAVAILABLE', { message: 'Re-authentication is not available.' });
+    try {
+      await this.opts.auth.stepUp!(token, code);
+      return null;
+    } catch (e: any) {
+      if (e && typeof e.status === 'number' && e.body) return { status: e.status, body: e.body };
+      throw e;
+    }
+  }
+
+  /** True when a products save would change a settlement cycle of a product that stays on. */
+  private settlementChanges(db: MerchantDb, app: CountryApplication, body: any): boolean {
+    const current = productState(db, app).config.settlement;
+    const next: Record<string, unknown> = body?.settlement && typeof body.settlement === 'object' ? body.settlement : {};
+    const on = new Set((Array.isArray(body?.products) ? body.products : []).filter((p: any) => p?.enabled === true).map((p: any) => p.methodCode));
+    return [...new Set([...Object.keys(current), ...Object.keys(next)])].some((c) => on.has(c) && (current[c] ?? null) !== ((next[c] as string) || null));
+  }
+
   private productContext(db: MerchantDb, app: CountryApplication, caller: Caller, role: StaffRole): ProductContext {
     const merchant = this.findMerchant(db, app.merchantId);
     return {
@@ -1131,8 +1186,8 @@ export class MerchantServer {
       role,
       now: this.now(),
       record: (text, opts) => this.event(app, opts?.system ? null : caller, opts?.system ? 'system' : role, text, null, null, opts?.comment),
-      notify: (event, audience, title, body) => {
-        db.notifications.unshift({ id: `NT-${db.seq.notification++}`, at: this.now(), event, title, body, applicationId: app.id, merchantId: merchant.id, country: app.country, audience, readBy: [] });
+      notify: (event, audience, title, body, email) => {
+        db.notifications.unshift({ id: `NT-${db.seq.notification++}`, at: this.now(), event, title, body, applicationId: app.id, merchantId: merchant.id, country: app.country, audience, ...(email ? { email: { ...email, status: 'simulated' as const } } : {}), readBy: [] });
         db.notifications = db.notifications.slice(0, 300);
       },
     };

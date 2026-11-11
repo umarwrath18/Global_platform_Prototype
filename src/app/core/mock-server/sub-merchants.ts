@@ -1,7 +1,7 @@
 import { isEmail, isUrl } from '../merchants/application-rules';
 import { CountryApplication, StaffRole } from '../merchants/merchant-models';
 import { countryName, ONBOARDING_COUNTRIES, subMerchantRoutes } from '../merchants/onboarding-config';
-import { pricingInEffect, pricingSummary, todayIso } from '../merchants/products';
+import { deactivationFor, pricingInEffect, pricingSummary, todayIso } from '../merchants/products';
 import { regionForCountry } from '../merchants/regions';
 import { SUB_MERCHANT_CHECKS, SubMerchantView } from '../merchants/sub-merchants';
 import { entityOfApplication, entityProblems, formatEntityId, goLiveBlocker, isRuleError, issueMid, MerchantEntity, parentEntityOf, RegionalMid, toMidView } from './merchant-identity';
@@ -213,7 +213,8 @@ export function subMerchantView(db: MerchantDb, sub: MerchantEntity, now: number
   let products: SubMerchantView['inherited']['products'] = [];
   if (app) {
     const s = productState(db, app);
-    products = s.config.products.filter((p) => p.enabled).map((p) => ({
+    // A method deactivated for this sub-merchant isn't offered to it.
+    products = s.config.products.filter((p) => p.enabled && !deactivationFor(s.config, p.methodCode, p.flow, sub.id, todayIso(now))).map((p) => ({
       name: s.methods.find((m) => m.code === p.methodCode)?.name ?? p.methodCode,
       pricing: ((v) => (v ? pricingSummary(v) : null))(pricingInEffect(s.versions, p.methodCode, todayIso(now), p.flow)),
       settlement: s.config.settlement[p.methodCode] ?? null,

@@ -39,7 +39,7 @@
             <tbody>
               @for (i of rows(); track i.version.id) {
                 <tr class="clickable" tabindex="0" (click)="detail.set(i)" (keydown.enter)="detail.set(i)" [class.selected]="detail()?.version?.id === i.version.id">
-                  <td>{{ i.merchantName }}<div class="sub-line">{{ i.subMerchantName ?? 'Merchant Level' }}</div></td>
+                  <td>{{ i.merchantName }}<div class="sub-line">{{ i.subMerchantName ?? 'Master Merchant' }}</div></td>
                   <td>{{ i.country }}</td>
                   <td>{{ i.methodName }}<div class="sub-line">{{ flowLabel[i.version.flow] }} · v{{ i.version.version }}@if (vaText(i); as va) { · {{ va }}}</div></td>
                   <td>{{ technique(i.version.technique) }}</td>
@@ -80,7 +80,7 @@
         <div class="panel-body">
           <dl class="kv">
             <div><dt>Merchant</dt><dd>{{ i.merchantName }}</dd></div>
-            <div><dt>Sub-Merchant</dt><dd>{{ i.subMerchantName ?? 'Merchant Level' }}</dd></div>
+            <div><dt>Sub-Merchant</dt><dd>{{ i.subMerchantName ?? 'Master Merchant' }}</dd></div>
             <div><dt>Corridor</dt><dd>{{ i.countryName }}</dd></div>
             <div><dt>Flow Type</dt><dd>{{ flowLabel[x.flow] }}</dd></div>
             <div><dt>Payment Method</dt><dd>{{ i.methodName }}</dd></div>

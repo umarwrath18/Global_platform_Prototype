@@ -135,7 +135,7 @@ export function percentageDraft(methodCode: string, mdrPct: number, startDate: s
  * products (or switches on the first PayIn one), gives each PayIn product a T+1 settlement cycle
  * and prices any unpriced product at 1% (Percentage) from today.
  */
-export async function completeProductConfig(call: Call, applicationId: string) {
+export async function completeProductConfig(call: Call, applicationId: string, code?: () => Promise<string>) {
   const view = (await call('GET', `/api/applications/${applicationId}/products`, null, 'cs')).body as ProductPricingView;
   const anyOn = view.config.products.some((p) => p.enabled);
   const firstPayin = view.methods.find((m) => m.flow === 'payin')!.code;
@@ -147,7 +147,10 @@ export async function completeProductConfig(call: Call, applicationId: string) {
   const mid = (await call('GET', `/api/applications/${applicationId}/products`, null, 'cs')).body as ProductPricingView;
   const settlement = Object.fromEntries(mid.config.products.filter((p) => p.enabled && p.flow === 'payin').map((p) => [p.methodCode, mid.config.settlement[p.methodCode] ?? 'T+1']));
   if (JSON.stringify(settlement) !== JSON.stringify(mid.config.settlement)) {
-    const saved = await call('PUT', `/api/applications/${applicationId}/products`, { products: mid.config.products.map((p) => ({ methodCode: p.methodCode, enabled: p.enabled })), settlement, revision: mid.config.revision }, 'cs');
+    const body = { products: mid.config.products.map((p) => ({ methodCode: p.methodCode, enabled: p.enabled })), settlement, revision: mid.config.revision };
+    let saved = await call('PUT', `/api/applications/${applicationId}/products`, body, 'cs');
+    // Settlement changes need a current MFA code (5-minute window).
+    if (saved.body?.code === 'MFA_CODE_REQUIRED' && code) saved = await call('PUT', `/api/applications/${applicationId}/products`, { ...body, code: await code() }, 'cs');
     if (saved.status !== 200) throw new Error(`Saving settlement failed: ${JSON.stringify(saved.body)}`);
   }
   const after = (await call('GET', `/api/applications/${applicationId}/products`, null, 'cs')).body as ProductPricingView;

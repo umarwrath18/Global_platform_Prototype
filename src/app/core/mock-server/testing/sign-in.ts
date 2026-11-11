@@ -21,3 +21,8 @@ export async function signIn(server: AuthServer, loginId: string, password = DEM
   if (res.status !== 200) throw new Error(`2FA failed: ${JSON.stringify(res.body)}`);
   return (res.body as { token: string }).token;
 }
+
+/** Test helper: the current code from the signed-in user's demo authenticator (for re-authentication). */
+export async function currentCode(server: AuthServer, token: string): Promise<string> {
+  return (await server.demoAuthenticator('session', token))!.code;
+}

@@ -3,7 +3,7 @@ import { CountryApplication, GlobalMerchant, MerchantDetail, MerchantSummary, St
 import { AuthServer } from './auth-server';
 import { MerchantServer } from './merchant-server';
 import { completeApplicationData, completeProductConfig } from './testing/merchant-test-data';
-import { signIn } from './testing/sign-in';
+import { currentCode, signIn } from './testing/sign-in';
 
 class MemoryStorage {
   private data = new Map<string, string>();
@@ -197,7 +197,7 @@ describe('MerchantServer', () => {
     await call('POST', `/api/applications/${id}/readiness`, { action: 'start_configuration' }, 'cs');
     // Product & Payment Config must be complete first (settlement isn't set yet), then the checklist.
     expect((await call('POST', `/api/applications/${id}/readiness`, { action: 'generate_keys' }, 'cs')).body.code).toBe('PRODUCT_CONFIG_INCOMPLETE');
-    await completeProductConfig(call, id);
+    await completeProductConfig(call, id, () => ((now += 31_000), currentCode(auth, token)));
     expect((await call('POST', `/api/applications/${id}/readiness`, { action: 'generate_keys' }, 'cs')).body.code).toBe('CHECKLIST_INCOMPLETE');
     for (const key of ['settlement_account', 'merchant_portal']) {
       await call('POST', `/api/applications/${id}/readiness`, { action: 'set_item', stage: 'configuration', key, done: true }, 'cs');
@@ -227,7 +227,7 @@ describe('MerchantServer', () => {
     const id = 'APP-2026-0012';
     await call('POST', `/api/applications/${id}/review`, { decision: 'approve', evidenceReviewed: true }, 'risk');
     await call('POST', `/api/applications/${id}/readiness`, { action: 'start_configuration' }, 'cs');
-    await completeProductConfig(call, id);
+    await completeProductConfig(call, id, () => ((now += 31_000), currentCode(auth, token)));
     for (const key of ['settlement_account', 'merchant_portal']) await call('POST', `/api/applications/${id}/readiness`, { action: 'set_item', stage: 'configuration', key, done: true }, 'cs');
     await call('POST', `/api/applications/${id}/readiness`, { action: 'generate_keys' }, 'cs');
     await call('POST', `/api/applications/${id}/readiness`, { action: 'start_integration' }, 'cs');
@@ -302,7 +302,7 @@ describe('MerchantServer', () => {
     await g('POST', `/api/applications/${id}/readiness`, { action: 'start_configuration' }, 'cs');
     // Product & Payment Config is a configuration rule, not data entry: it applies in guided mode too.
     expect((await g('POST', `/api/applications/${id}/readiness`, { action: 'generate_keys' }, 'cs')).body.code).toBe('PRODUCT_CONFIG_INCOMPLETE');
-    await completeProductConfig(g, id);
+    await completeProductConfig(g, id, () => ((now += 31_000), currentCode(auth, token)));
     const keyed = (await g<CountryApplication>('POST', `/api/applications/${id}/readiness`, { action: 'generate_keys' }, 'cs')).body;
     expect(keyed.status).toBe('keys_generated');
     expect(keyed.readiness.configuration.every((i) => i.done)).toBe(true);
@@ -364,7 +364,7 @@ describe('MerchantServer', () => {
       const products = (await call<any>('GET', `/api/applications/${vn}/products`, null, 'cs')).body;
       expect(products).toMatchObject({ mode: 'read_only', notice: 'This MID is suspended. Pricing cannot change until it is reactivated.' });
       await lifecycle('GM-109001', 'reactivate', 'risk', 'Reviewed and cleared');
-      await completeProductConfig(call, vn);
+      await completeProductConfig(call, vn, () => ((now += 31_000), currentCode(auth, token)));
       await lifecycle('GM-109001', 'suspend', 'risk');
       await tick('configuration', ['settlement_account', 'merchant_portal']);
       expect((await ready({ action: 'generate_keys' })).body.status).toBe('keys_generated');

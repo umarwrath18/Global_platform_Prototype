@@ -3,8 +3,13 @@ import { ONBOARDING_COUNTRIES } from '../merchants/onboarding-config';
 import {
   activateVersion,
   classifyPeriod,
+  addDays,
   countryProducts,
+  Deactivation,
+  deactivationFor,
   FLOW_LABEL,
+  fmtDay,
+  scheduledDeactivation,
   gapCount,
   isIsoDate,
   overlapMessage,
@@ -61,8 +66,8 @@ export interface ProductContext {
   now: number;
   /** Adds an entry to the application history (by the caller, or by System). */
   record: (text: string, opts?: { comment?: string; system?: boolean }) => void;
-  /** In-app notification about this application (no email). */
-  notify: (event: 'pricing_approval_requested' | 'pricing_decided', audience: StaffRole[], title: string, body: string) => void;
+  /** In-app notification about this application; `email` records the (simulated) email too. */
+  notify: (event: 'pricing_approval_requested' | 'pricing_decided' | 'payment_method_deactivated' | 'pricing_alert', audience: StaffRole[], title: string, body: string, email?: { to: string[]; subject: string }) => void;
 }
 
 interface ProductState {
@@ -133,7 +138,8 @@ function nextPricingId(db: MerchantDb) {
 
 /** The daily status job, simulated: run whenever the data is loaded (§4.2). Returns true if anything changed. */
 export function runPricingJob(db: MerchantDb, now: number): boolean {
-  return runStatusJob(db.pricingVersions ?? [], todayIso(now)) > 0;
+  const deactivated = runDeactivationJob(db, now);
+  return runStatusJob(db.pricingVersions ?? [], todayIso(now)) > 0 || deactivated;
 }
 
 // ------------------------------------------------------------------ messages (§8.1–8.3, MP-2/3)
@@ -199,7 +205,7 @@ export function productView(db: MerchantDb, app: CountryApplication, role: Staff
     subMerchants: subMerchantsOf(db, app),
     gaps,
     gapCount: gapCount(gaps),
-    can: { editProducts: !pMsg, editPricing: !prMsg, decidePricing: mode === 'change' && role === 'finops' },
+    can: { editProducts: !pMsg, editPricing: !prMsg, decidePricing: mode === 'change' && role === 'finops', deactivate: mode === 'change' && role === 'sales' },
     productsMessage: pMsg,
     pricingMessage: prMsg,
     usdRate: USD_RATES[cfg.currency] ?? 1,
@@ -420,6 +426,13 @@ export function setPricing(ctx: ProductContext, body: any): PricingVersion {
     if (!subMerchantsOf(ctx.db, ctx.app).some((x) => x.id === draft.subMerchantId)) fail(422, 'VALIDATION_FAILED', { message: `That sub-merchant isn't part of ${merchantOf(ctx.db, ctx.app).legalName} in ${cfg.name}.` });
     if (mode !== 'change') fail(409, 'INVALID_TRANSITION', { message: 'Sub-merchant pricing can be set once onboarding is confirmed.' });
   }
+  // Deactivations: no pricing for a stopped method, and none running past a scheduled stop.
+  const stopped = deactivationFor(state.config, draft.methodCode, draft.flow, draft.subMerchantId ?? null, today);
+  if (stopped) fail(409, 'INVALID_TRANSITION', { message: draft.subMerchantId ? `${method!.name} is deactivated for ${subName(ctx.db, draft.subMerchantId)}. Reactivate it first.` : `${method!.name} is deactivated for this MID.` });
+  const stop = scheduledDeactivation(state.config, draft.methodCode, draft.flow, draft.subMerchantId ?? null) ?? (draft.subMerchantId ? scheduledDeactivation(state.config, draft.methodCode, draft.flow, null) : null);
+  if (stop && (draft.startDate >= stop.effectiveDate || draft.endDate === null || draft.endDate >= stop.effectiveDate)) {
+    fail(409, 'DEACTIVATION_SCHEDULED', { message: `${method!.name} stops ${scopeText(ctx.db, stop)} from ${fmtDay(stop.effectiveDate)}. Set an end date up to ${fmtDay(addDays(stop.effectiveDate, -1))}, or cancel the deactivation first.` });
+  }
   const issues = [...validatePrimary(draft, draft.endDate !== null), ...validateSecondary(draft)];
   if (!isIsoDate(draft.startDate)) issues.unshift({ field: 'startDate', message: 'Start date is required' });
   if (draft.endDate && !isIsoDate(draft.endDate)) issues.push({ field: 'endDate', message: 'End date is required when Set End Date is checked' });
@@ -541,6 +554,208 @@ export function decidePricing(ctx: ProductContext, versionId: string, body: any)
   return v;
 }
 
+// ------------------------------------------------------------------ deactivation (after onboarding)
+
+/** FinOps mailbox for alerts (simulated email). */
+export const FINOPS_MAILBOX = 'finops@mobi.xyz';
+
+/** Versions a deactivation affects: the whole MID = every level; a sub-merchant = its own rules only. */
+const inDeactivationScope = (v: PricingVersion, d: Pick<Deactivation, 'methodCode' | 'flow' | 'subMerchantId'>) =>
+  v.methodCode === d.methodCode && v.flow === d.flow && (d.subMerchantId === null || subOf(v) === d.subMerchantId);
+
+function deactivationMessage(mode: PricingMode, role: StaffRole, suspended: boolean): string | null {
+  if (suspended) return SUSPENDED;
+  if (mode !== 'change') return 'Payment methods can be deactivated once onboarding is confirmed. During onboarding, CS switches the product off.';
+  return role === 'sales' ? null : 'Only Ops can deactivate payment methods.';
+}
+
+const scopeText = (db: MerchantDb, d: Pick<Deactivation, 'subMerchantId'>) => (d.subMerchantId ? `for ${subName(db, d.subMerchantId)}` : 'for the Master Merchant and all sub-merchants');
+
+/**
+ * Stops a live payment method for the whole MID or one sub-merchant, now or from a later date. Ops
+ * only, after onboarding, with an MFA code (checked by the caller). Pricing in scope ends the day
+ * before (or today when immediate); later or pending pricing in scope is cancelled. FinOps is alerted.
+ */
+export function deactivateMethod(ctx: ProductContext, body: any): Deactivation {
+  checkDeactivation(ctx, body);
+  return applyDeactivationRequest(ctx, body);
+}
+
+/** All checks for a deactivation request, before the MFA code is asked for. Writes nothing. */
+export function checkDeactivation(ctx: ProductContext, body: any): void {
+  const mode = modeOf(ctx.db, ctx.app);
+  const msg = deactivationMessage(mode, ctx.role, suspendedOf(ctx.db, ctx.app));
+  if (msg) mode === 'change' && !suspendedOf(ctx.db, ctx.app) ? ROLE_ERROR(msg) : fail(409, 'INVALID_TRANSITION', { message: msg });
+  const state = productState(ctx.db, ctx.app);
+  const today = todayIso(ctx.now);
+  const flow: ProductFlow = body?.flow === 'payout' ? 'payout' : 'payin';
+  const method = state.methods.find((m) => m.code === body?.methodCode && m.flow === flow);
+  if (!method) fail(422, 'VALIDATION_FAILED', { message: 'Choose a payment method offered for this MID.' });
+  if (!state.config.products.find((p) => p.methodCode === method!.code)?.enabled) fail(409, 'INVALID_TRANSITION', { message: `${method!.name} isn't switched on for this MID.` });
+  const subId = str(body?.subMerchantId) || null;
+  if (subId && !subMerchantsOf(ctx.db, ctx.app).some((x) => x.id === subId)) fail(422, 'VALIDATION_FAILED', { message: `That sub-merchant isn't part of ${merchantOf(ctx.db, ctx.app).legalName} in ${ONBOARDING_COUNTRIES[ctx.app.country].name}.` });
+  if (subId && deactivationFor(state.config, method!.code, flow, subId, today)) fail(409, 'INVALID_TRANSITION', { message: `${method!.name} is already deactivated for ${subName(ctx.db, subId)}.` });
+  const pending = scheduledDeactivation(state.config, method!.code, flow, subId) ?? (subId ? scheduledDeactivation(state.config, method!.code, flow, null) : null);
+  if (pending) fail(409, 'DEACTIVATION_SCHEDULED', { message: `${method!.name} is already scheduled to stop ${scopeText(ctx.db, pending)} from ${fmtDay(pending.effectiveDate)}. Cancel that first to change it.` });
+  const errors: { section: 'pricing'; field: string; message: string }[] = [];
+  if (body?.when !== 'immediate' && body?.when !== 'scheduled') errors.push({ section: 'pricing', field: 'when', message: 'Choose Immediately or On a date.' });
+  if (body?.when === 'scheduled' && (!isIsoDate(body?.effectiveDate) || body.effectiveDate <= today)) errors.push({ section: 'pricing', field: 'effectiveDate', message: 'Choose a date from tomorrow.' });
+  if (!str(body?.reason, 500)) errors.push({ section: 'pricing', field: 'reason', message: 'Enter a reason for the deactivation.' });
+  if (errors.length) fail(422, 'VALIDATION_FAILED', { errors, message: errors.map((e) => e.message).join(' ') });
+}
+
+function applyDeactivationRequest(ctx: ProductContext, body: any): Deactivation {
+  const state = productState(ctx.db, ctx.app);
+  const stored = materialise(ctx, state);
+  const today = todayIso(ctx.now);
+  const immediate = body.when === 'immediate';
+  const flow: ProductFlow = body.flow === 'payout' ? 'payout' : 'payin';
+  const methodName = state.methods.find((m) => m.code === body.methodCode && m.flow === flow)!.name;
+  ctx.db.seq.deactivation ??= 1;
+  const d: Deactivation = {
+    id: `DA-${String(ctx.db.seq.deactivation++).padStart(5, '0')}`,
+    methodCode: body.methodCode,
+    flow,
+    subMerchantId: str(body.subMerchantId) || null,
+    effectiveDate: immediate ? today : body.effectiveDate,
+    immediate,
+    reason: str(body.reason, 500),
+    status: 'scheduled',
+    createdBy: ctx.caller.name,
+    createdById: ctx.caller.userId,
+    createdAt: ctx.now,
+    doneAt: null,
+    cancelledBy: null,
+    cancelledAt: null,
+    reactivatedBy: null,
+    reactivatedAt: null,
+    shortened: [],
+    cancelledVersions: [],
+  };
+  // Pricing in scope: pending, or starting on/after the stop date → cancelled; running past it → ends.
+  const lastDay = immediate ? today : addDays(d.effectiveDate, -1);
+  for (const v of (ctx.db.pricingVersions ?? []).filter((x) => x.applicationId === ctx.app.id && inDeactivationScope(x, d))) {
+    if (v.status === 'pending_approval' || (v.status === 'scheduled' && v.startDate >= d.effectiveDate) || (immediate && v.status === 'scheduled')) {
+      cancelVersion(ctx, v, `${methodName} deactivated`);
+      d.cancelledVersions.push(v.id);
+    } else if ((v.status === 'active' || v.status === 'scheduled') && (v.endDate === null || v.endDate > lastDay)) {
+      const before = periodText(v);
+      d.shortened.push({ versionId: v.id, previousEndDate: v.endDate });
+      v.endDate = lastDay;
+      if (immediate) v.status = 'expired';
+      audit(ctx, v, { role: AUDIT_ROLE[ctx.role], previous: before, next: `${periodText(v)} (${methodName} deactivated)`, status: v.status, reason: d.reason });
+    }
+  }
+  stored.deactivations = [...(stored.deactivations ?? []), d];
+  const when = immediate ? 'immediately' : `from ${fmtDay(d.effectiveDate)}`;
+  ctx.record(`${immediate ? 'Deactivated' : 'Scheduled deactivation of'} ${methodName} (${FLOW_LABEL[flow]}) ${scopeText(ctx.db, d)} ${when}`, { comment: d.reason });
+  if (immediate) completeDeactivation(ctx.db, ctx.app, stored, d, ctx.now);
+  stored.revision += 1;
+  stored.savedAt = ctx.now;
+  stored.savedBy = ctx.caller.name;
+  const merchant = merchantOf(ctx.db, ctx.app).legalName;
+  const title = `${methodName} ${immediate ? 'deactivated' : 'will be deactivated'}: ${merchant}`;
+  ctx.notify('payment_method_deactivated', ['finops'], title, `${ctx.caller.name} ${immediate ? 'deactivated' : 'scheduled the deactivation of'} ${methodName} (${FLOW_LABEL[flow]}) ${scopeText(ctx.db, d)} on ${ctx.app.id}, ${when}. Reason: ${d.reason}`, {
+    to: [FINOPS_MAILBOX],
+    subject: `[Mobi pricing] ${title}`,
+  });
+  syncDerivedChecklist(ctx);
+  return d;
+}
+
+/** Makes a deactivation take effect: MID scope switches the product off (and drops its settlement cycle). */
+function completeDeactivation(db: MerchantDb, app: CountryApplication, config: ProductConfig, d: Deactivation, now: number) {
+  d.status = 'done';
+  d.doneAt = now;
+  if (d.subMerchantId === null) {
+    const p = config.products.find((x) => x.methodCode === d.methodCode && x.flow === d.flow);
+    if (p) p.enabled = false;
+    delete config.settlement[d.methodCode];
+  }
+  const today = todayIso(now);
+  for (const v of (db.pricingVersions ?? []).filter((x) => x.applicationId === app.id && inDeactivationScope(x, d))) {
+    if ((v.status === 'active' || v.status === 'scheduled') && v.endDate !== null && v.endDate < today) v.status = 'expired';
+  }
+}
+
+/** The daily job for deactivations: scheduled ones whose date has come take effect. Returns true if anything changed. */
+export function runDeactivationJob(db: MerchantDb, now: number): boolean {
+  const today = todayIso(now);
+  let changed = false;
+  for (const config of db.productConfigs ?? []) {
+    for (const d of config.deactivations ?? []) {
+      if (d.status !== 'scheduled' || d.effectiveDate > today) continue;
+      const app = db.applications.find((a) => a.id === config.applicationId);
+      if (!app) continue;
+      completeDeactivation(db, app, config, d, now);
+      config.revision += 1;
+      const name = ONBOARDING_COUNTRIES[app.country]?.paymentMethods.find((m) => m.code === d.methodCode && m.flow === d.flow)?.name ?? d.methodCode;
+      app.history.push({ at: now, action: `Deactivated ${name} (${FLOW_LABEL[d.flow]}) ${scopeText(db, d)} as scheduled`, by: 'System', role: 'system', fromStatus: null, toStatus: null });
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function findDeactivation(ctx: ProductContext, id: string): { stored: ProductConfig; d: Deactivation } {
+  const stored = (ctx.db.productConfigs ?? []).find((c) => c.applicationId === ctx.app.id);
+  const d = stored?.deactivations?.find((x) => x.id === id);
+  if (!stored || !d) fail(404, 'NOT_FOUND', { message: 'Deactivation not found.' });
+  return { stored: stored!, d: d! };
+}
+
+/** Checks for cancelling a scheduled deactivation or reactivating a sub-merchant. Writes nothing. */
+export function checkDeactivationAction(ctx: ProductContext, id: string, action: 'cancel' | 'reactivate'): void {
+  const mode = modeOf(ctx.db, ctx.app);
+  const msg = deactivationMessage(mode, ctx.role, suspendedOf(ctx.db, ctx.app));
+  if (msg) mode === 'change' && !suspendedOf(ctx.db, ctx.app) ? ROLE_ERROR(msg) : fail(409, 'INVALID_TRANSITION', { message: msg });
+  const { d } = findDeactivation(ctx, id);
+  if (action === 'cancel' && d.status !== 'scheduled') fail(409, 'INVALID_TRANSITION', { message: 'Only a scheduled deactivation can be cancelled.' });
+  if (action === 'reactivate') {
+    if (d.status !== 'done') fail(409, 'INVALID_TRANSITION', { message: 'Only a deactivated payment method can be reactivated.' });
+    if (d.subMerchantId === null) fail(409, 'INVALID_TRANSITION', { message: 'To use this payment method on the MID again, switch the product on in Product & Payment Config and set its pricing.' });
+    if (!productState(ctx.db, ctx.app).config.products.find((p) => p.methodCode === d.methodCode && p.enabled)) fail(409, 'INVALID_TRANSITION', { message: 'Switch the product on for the MID first.' });
+  }
+}
+
+/** Cancels a scheduled deactivation: shortened pricing gets its end date back (cancelled pricing stays cancelled). */
+export function cancelDeactivation(ctx: ProductContext, id: string): Deactivation {
+  checkDeactivationAction(ctx, id, 'cancel');
+  const { stored, d } = findDeactivation(ctx, id);
+  for (const s of d.shortened) {
+    const v = (ctx.db.pricingVersions ?? []).find((x) => x.id === s.versionId);
+    if (!v || (v.status !== 'active' && v.status !== 'scheduled')) continue;
+    const before = periodText(v);
+    v.endDate = s.previousEndDate;
+    audit(ctx, v, { role: AUDIT_ROLE[ctx.role], previous: before, next: `${periodText(v)} (deactivation cancelled)`, status: v.status });
+  }
+  d.status = 'cancelled';
+  d.cancelledBy = ctx.caller.name;
+  d.cancelledAt = ctx.now;
+  stored.revision += 1;
+  const name = productState(ctx.db, ctx.app).methods.find((m) => m.code === d.methodCode && m.flow === d.flow)?.name ?? d.methodCode;
+  ctx.record(`Cancelled the deactivation of ${name} (${FLOW_LABEL[d.flow]}) ${scopeText(ctx.db, d)}`);
+  ctx.notify('payment_method_deactivated', ['finops'], `${name} deactivation cancelled: ${merchantOf(ctx.db, ctx.app).legalName}`, `${ctx.caller.name} cancelled the deactivation scheduled for ${fmtDay(d.effectiveDate)} on ${ctx.app.id}.`);
+  return d;
+}
+
+/** Reactivates a payment method for one sub-merchant: it inherits the Master Merchant's pricing again. */
+export function reactivateMethod(ctx: ProductContext, id: string): Deactivation {
+  checkDeactivationAction(ctx, id, 'reactivate');
+  const { stored, d } = findDeactivation(ctx, id);
+  d.status = 'reactivated';
+  d.reactivatedBy = ctx.caller.name;
+  d.reactivatedAt = ctx.now;
+  stored.revision += 1;
+  const name = productState(ctx.db, ctx.app).methods.find((m) => m.code === d.methodCode && m.flow === d.flow)?.name ?? d.methodCode;
+  ctx.record(`Reactivated ${name} (${FLOW_LABEL[d.flow]}) ${scopeText(ctx.db, d)}`);
+  ctx.notify('payment_method_deactivated', ['finops'], `${name} reactivated: ${subName(ctx.db, d.subMerchantId)}`, `${ctx.caller.name} reactivated ${name} for ${subName(ctx.db, d.subMerchantId)} on ${ctx.app.id}. It uses the Master Merchant's pricing unless the sub-merchant has its own.`, {
+    to: [FINOPS_MAILBOX],
+    subject: `[Mobi pricing] ${name} reactivated: ${subName(ctx.db, d.subMerchantId)}`,
+  });
+  return d;
+}
+
 // ------------------------------------------------------------------ queues and audit
 
 /** One approvals-list item: current vs proposed pricing for the change (§7.8, §8.7). */
@@ -637,10 +852,14 @@ export function subMerchantPricing(db: MerchantDb, country: string, now: number)
       let priced = 0;
       for (const key of codes) {
         const [flow, code] = key.split(':') as [ProductFlow, string];
-        const r = resolvePricing(versions, code, today, flow, sub.id);
-        if (r) priced++;
+        const off = deactivationFor(state.config, code, flow, sub.id, today);
+        const r = off ? null : resolvePricing(versions, code, today, flow, sub.id);
+        if (r || off) priced++;
+        const stop = scheduledDeactivation(state.config, code, flow, sub.id) ?? scheduledDeactivation(state.config, code, flow, null);
         out.push({
           ...base,
+          deactivated: off ? { effectiveDate: off.effectiveDate, scope: off.subMerchantId ? 'sub_merchant' : 'mid' } : null,
+          stopsOn: stop?.effectiveDate ?? null,
           methodCode: code,
           methodName: cfg.paymentMethods.find((m) => m.code === code)?.name ?? code,
           level: r?.level ?? null,

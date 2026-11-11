@@ -150,7 +150,8 @@ interface ChallengeRec {
 interface StepUpRec {
   tokenHash: string;
   userId: string;
-  purpose: 'admin' | 'replace';
+  /** admin: User security actions · replace: authenticator replacement · pricing: settlement, USD fee and deactivation changes. */
+  purpose: 'admin' | 'replace' | 'pricing';
   expiresAt: number;
   pendingSecretEnc: string | null;
   attempts: number;
@@ -1093,6 +1094,29 @@ export class AuthServer {
     if (typeof code !== 'string' || !/^\d{6}$/.test(code.trim())) fail(400, 'VALIDATION_FAILED');
     try {
       await this.checkCurrentCode(db, user, (code as string).trim(), 'step_up');
+    } finally {
+      this.save(db);
+    }
+  }
+
+  /**
+   * Re-authentication with a 5-minute window, bound to this session: settlement saves, USD fixed fee
+   * submissions and payment-method deactivations. Inside the window no code is asked again.
+   * Without a valid window: 403 MFA_CODE_REQUIRED when no code is sent, else the code is checked.
+   */
+  async stepUp(token: string | null, code: unknown): Promise<void> {
+    await this.ensureSeeded();
+    const db = this.load();
+    const { user } = await this.requireSession(db, token, false);
+    const hash = await sha256Hex(token!);
+    const now = this.now();
+    if (db.stepUps.some((s) => s.tokenHash === hash && s.userId === user.id && s.purpose === 'pricing' && s.expiresAt > now)) return;
+    if (code === undefined || code === null || code === '') fail(403, 'MFA_CODE_REQUIRED');
+    if (typeof code !== 'string' || !/^\d{6}$/.test(code.trim())) fail(400, 'VALIDATION_FAILED');
+    try {
+      await this.checkCurrentCode(db, user, (code as string).trim(), 'step_up');
+      db.stepUps = db.stepUps.filter((s) => !(s.userId === user.id && s.purpose === 'pricing'));
+      db.stepUps.push({ tokenHash: hash, userId: user.id, purpose: 'pricing', expiresAt: now + MFA_POLICY.stepUpTtlMs, pendingSecretEnc: null, attempts: 0 });
     } finally {
       this.save(db);
     }

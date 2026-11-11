@@ -16,7 +16,7 @@ import { MerchantPricingTabs } from './merchant-pricing-tabs';
       <div class="portal-head">
         <div>
           <h1>Sub-Merchant View</h1>
-          <p class="sub">Pricing that applies to each sub-merchant in {{ corridor.name() }}: its own rule, or the merchant-level rule.</p>
+          <p class="sub">Pricing that applies to each sub-merchant in {{ corridor.name() }}: its own rule, or inherited from the Master Merchant.</p>
         </div>
         <div class="head-tools"><app-corridor-select /></div>
       </div>
@@ -43,7 +43,7 @@ import { MerchantPricingTabs } from './merchant-pricing-tabs';
                     <td>{{ r.subMerchantName }}</td>
                     <td class="mono">{{ r.subMerchantId }}</td>
                     <td>{{ r.methodName ?? '—' }}</td>
-                    <td>{{ r.technique ?? 'No pricing' }}@if (r.level) {<div class="sub-line">{{ r.level === 'sub_merchant' ? 'Sub-merchant rule' : 'Merchant-level rule' }}</div>}</td>
+                    <td>{{ r.technique ?? 'No pricing' }}@if (r.level) {<div class="sub-line">{{ r.level === 'sub_merchant' ? 'Sub-merchant rule' : 'Inherited from Master Merchant' }}</div>}</td>
                     <td class="cfg">{{ r.pricing ?? 'No pricing' }}</td>
                     <td>{{ r.currency ?? '—' }}</td>
                     <td class="nowrap">{{ r.startDate ? day(r.startDate) : '—' }}</td>

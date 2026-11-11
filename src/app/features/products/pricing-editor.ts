@@ -107,7 +107,7 @@ export class PricingEditor implements OnInit, AfterViewInit {
   // Scope
   protected readonly flow = signal<ProductFlow>('payin');
   protected readonly methodCode = signal('');
-  /** Merchant Pricing: sub-merchant scope; '' = All Sub-Merchants (Merchant Level). */
+  /** Merchant Pricing: sub-merchant scope; '' = Master Merchant. */
   protected readonly subMerchantId = signal('');
   protected readonly vaBanks = signal<string[]>([]);
   protected readonly vaOpen = signal(false);
@@ -209,7 +209,7 @@ export class PricingEditor implements OnInit, AfterViewInit {
   protected readonly subName = computed(() => this.view().subMerchants.find((x) => x.id === this.subMerchantId())?.name ?? null);
   /** Sub-merchant chosen while the merchant has no merchant-level rule in this corridor (§7.4 Step 1). */
   protected readonly noMerchantLevel = computed(() => !!this.subMerchantId() && !this.view().versions.some((v) => !v.subMerchantId && ['active', 'scheduled', 'pending_approval'].includes(v.status)));
-  protected readonly scopeText = computed(() => `Scope: ${this.cname()} / ${this.view().merchantName}${this.subName() ? ` / ${this.subName()}` : ' (Merchant Level)'} / ${FLOW_LABEL[this.flow()]} / ${this.method()?.name ?? '–'}${this.showVa() ? ` / VA Banks: ${this.vaSummary()}` : ''}`);
+  protected readonly scopeText = computed(() => `Scope: ${this.cname()} / ${this.view().merchantName}${this.subName() ? ` / ${this.subName()}` : ' / Master Merchant'} / ${FLOW_LABEL[this.flow()]} / ${this.method()?.name ?? '–'}${this.showVa() ? ` / VA Banks: ${this.vaSummary()}` : ''}`);
   protected readonly effectiveSentence = computed(() => (this.startDate() && this.endChecked() && this.endDate() ? `Effective: ${fmtSlash(this.startDate())} – ${fmtSlash(this.endDate())}` : null));
   protected readonly supersession = computed(() => {
     const c = classifyPeriod(this.draft(), this.view().versions, this.editing()?.id);

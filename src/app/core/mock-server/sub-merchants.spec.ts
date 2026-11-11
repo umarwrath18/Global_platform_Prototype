@@ -8,7 +8,7 @@ import { CountryConfigServer } from './country-config-server';
 import { entityProblems } from './merchant-identity';
 import { MerchantDb, MerchantServer } from './merchant-server';
 import { FlakyStorage } from './testing/merchant-test-data';
-import { signIn } from './testing/sign-in';
+import { currentCode, signIn } from './testing/sign-in';
 
 const KEY = 'mobi.gp.merchantdb';
 
@@ -185,7 +185,7 @@ describe('Sub-merchants', () => {
   });
 
   it('shows the parent’s products, pricing and settlement for that country', async () => {
-    await call('PUT', '/api/applications/APP-2026-0001/products', { products: [{ methodCode: 'fpx', enabled: true }, { methodCode: 'duitnow_qr', enabled: true }, { methodCode: 'tng', enabled: true }, { methodCode: 'cards', enabled: true }, { methodCode: 'bank_transfer_payout', enabled: true }, { methodCode: 'tng_payout', enabled: true }], settlement: { fpx: 'T+1', duitnow_qr: 'T+1', tng: 'T+1', cards: 'T+2' }, revision: 1 }, 'sales');
+    await call('PUT', '/api/applications/APP-2026-0001/products', { products: [{ methodCode: 'fpx', enabled: true }, { methodCode: 'duitnow_qr', enabled: true }, { methodCode: 'tng', enabled: true }, { methodCode: 'cards', enabled: true }, { methodCode: 'bank_transfer_payout', enabled: true }, { methodCode: 'tng_payout', enabled: true }], settlement: { fpx: 'T+1', duitnow_qr: 'T+1', tng: 'T+1', cards: 'T+2' }, revision: 1, code: await ((now += 31_000), currentCode(auth, token)) }, 'sales');
     const s = (await create('GM-100101', { country: 'MY', displayName: 'Tanjung Outlet KL' })).body as SubMerchantView;
     expect(s.parentApplicationId).toBe('APP-2026-0001');
     expect(s.inherited.products).toEqual([

@@ -410,6 +410,8 @@ export type NotificationEvent =
   | 'mcc_change_decided'
   | 'pricing_approval_requested'
   | 'pricing_decided'
+  | 'payment_method_deactivated'
+  | 'pricing_alert'
   | 'change_requested'
   | 'change_decided'
   | 'sub_merchant_submitted'
@@ -435,6 +437,8 @@ export interface PortalNotification {
 
 export type MerchantApiErrorCode =
   | 'VALIDATION_FAILED'
+  | 'DEACTIVATION_SCHEDULED'
+  | 'MFA_CODE_REQUIRED'
   | 'DUPLICATE_MERCHANT'
   | 'POSSIBLE_DUPLICATE'
   | 'APPLICATION_EXISTS'

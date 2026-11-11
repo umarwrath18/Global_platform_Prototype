@@ -4,7 +4,7 @@ import { addDays, PricingApprovalsView, PricingAuditEvent, PricingDraft, Pricing
 import { AuthServer } from './auth-server';
 import { MerchantDb, MerchantServer } from './merchant-server';
 import { completeProductConfig, FlakyStorage, percentageDraft } from './testing/merchant-test-data';
-import { signIn } from './testing/sign-in';
+import { currentCode, signIn } from './testing/sign-in';
 
 const KEY = 'mobi.gp.merchantdb';
 const DAY = 24 * 60 * 60_000;
@@ -60,6 +60,10 @@ describe('Product & Payment Config', () => {
     maker = await signIn(auth, '123');
     now += 31_000;
     checker = await signIn(auth, 'TANJUNG-ADMIN');
+    // Settlement and USD fee changes need a recent MFA code; these tests confirm it once (5-minute window).
+    // Re-authentication itself is covered in pricing-deactivation.spec.ts.
+    now += 31_000;
+    await auth.stepUp(maker, await currentCode(auth, maker));
     call = callOn(server);
     asChecker = callOn(server, () => checker);
     await call('GET', '/api/merchants');

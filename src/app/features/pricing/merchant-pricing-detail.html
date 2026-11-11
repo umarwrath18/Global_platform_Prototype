@@ -24,9 +24,9 @@
       <div class="alert warning compact" role="alert">
         <app-icon name="alert-circle" />
         <div>
-          <strong>No Merchant-Level Pricing Configured</strong>
-          Transactions processed at the merchant level (not under any sub-merchant) will have no MDR applied.
-          @if (maker()) {<button type="button" class="link-button" (click)="configure(null)">Configure merchant-level pricing</button>}
+          <strong>No Master Merchant Pricing Configured</strong>
+          Transactions processed by the Master Merchant (not under any sub-merchant) will have no MDR applied.
+          @if (maker()) {<button type="button" class="link-button" (click)="configure(null)">Configure Master Merchant pricing</button>}
         </div>
       </div>
     }

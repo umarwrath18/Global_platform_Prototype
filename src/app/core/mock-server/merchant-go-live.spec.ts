@@ -4,7 +4,7 @@ import { AuthServer } from './auth-server';
 import { MerchantEntity } from './merchant-identity';
 import { MerchantDb, MerchantServer } from './merchant-server';
 import { completeApplicationData, completeProductConfig, FlakyStorage } from './testing/merchant-test-data';
-import { signIn } from './testing/sign-in';
+import { currentCode, signIn } from './testing/sign-in';
 
 const KEY = 'mobi.gp.merchantdb';
 const AUTH_KEY = 'mobi.gp.mockdb';
@@ -30,7 +30,7 @@ describe('go-live and live MIDs', () => {
     await call('POST', `/api/applications/${id}/submit`, { data: completeApplicationData('VN', 'Nusantara Home Retail Sdn Bhd') });
     await call('POST', `/api/applications/${id}/review`, { decision: 'approve', evidenceReviewed: true }, 'risk');
     await ready(id, { action: 'start_configuration' });
-    await completeProductConfig(call, id);
+    await completeProductConfig(call, id, () => ((now += 31_000), currentCode(auth, token)));
     await tick(id, 'configuration', ['settlement_account', 'merchant_portal']);
     await ready(id, { action: 'generate_keys' });
     await ready(id, { action: 'start_integration' });

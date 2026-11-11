@@ -700,6 +700,51 @@ export interface ProductConfig {
   revision: number;
   savedAt: number | null;
   savedBy: string | null;
+  /** Payment-method deactivations after onboarding (whole MID or one sub-merchant), newest last. */
+  deactivations?: Deactivation[];
+}
+
+/**
+ * Stopping a live payment method after onboarding. Scope: the whole MID (the Master Merchant and
+ * every sub-merchant) or one sub-merchant. Immediate stops it now; scheduled stops it from the
+ * start of `effectiveDate`. Ops does it with an MFA code; FinOps is alerted (no approval).
+ */
+export interface Deactivation {
+  id: string;
+  methodCode: string;
+  flow: ProductFlow;
+  /** Null = whole MID. */
+  subMerchantId: string | null;
+  /** First day the method no longer works. Today for an immediate deactivation. */
+  effectiveDate: string;
+  immediate: boolean;
+  reason: string;
+  /** scheduled → done on the effective date; scheduled → cancelled; done → reactivated (sub-merchant only). */
+  status: 'scheduled' | 'done' | 'cancelled' | 'reactivated';
+  createdBy: string;
+  createdById: string;
+  createdAt: number;
+  doneAt: number | null;
+  cancelledBy: string | null;
+  cancelledAt: number | null;
+  reactivatedBy: string | null;
+  reactivatedAt: number | null;
+  /** End dates this deactivation shortened, so cancelling it can put them back. */
+  shortened: { versionId: string; previousEndDate: string | null }[];
+  /** Versions this deactivation cancelled (scheduled or pending ones). */
+  cancelledVersions: string[];
+}
+
+export const DEACTIVATION_STATUS_LABEL: Record<Deactivation['status'], string> = { scheduled: 'Scheduled', done: 'Deactivated', cancelled: 'Cancelled', reactivated: 'Reactivated' };
+
+/** The deactivation that applies to a method for a sub-merchant (or the MID when null) on `day`, if any. */
+export function deactivationFor(config: Pick<ProductConfig, 'deactivations'>, methodCode: string, flow: ProductFlow, subMerchantId: string | null, day: string): Deactivation | null {
+  return (config.deactivations ?? []).find((d) => d.methodCode === methodCode && d.flow === flow && d.status === 'done' && d.effectiveDate <= day && (d.subMerchantId === null || d.subMerchantId === subMerchantId)) ?? null;
+}
+
+/** A scheduled (not yet effective) deactivation for the exact scope. */
+export function scheduledDeactivation(config: Pick<ProductConfig, 'deactivations'>, methodCode: string, flow: ProductFlow, subMerchantId: string | null): Deactivation | null {
+  return (config.deactivations ?? []).find((d) => d.methodCode === methodCode && d.flow === flow && d.status === 'scheduled' && d.subMerchantId === subMerchantId) ?? null;
 }
 
 /**
@@ -798,7 +843,8 @@ export interface ProductPricingView {
   subMerchants: { id: string; name: string }[];
   gaps: ProductGap[];
   gapCount: number;
-  can: { editProducts: boolean; editPricing: boolean; decidePricing: boolean };
+  /** deactivate: Ops after onboarding (not while suspended). */
+  can: { editProducts: boolean; editPricing: boolean; decidePricing: boolean; deactivate: boolean };
   /** Why the acting team can't change products / pricing, if it can't. */
   productsMessage: string | null;
   pricingMessage: string | null;
@@ -815,6 +861,19 @@ export interface SaveProductsRequest {
   revision: number;
   /** The user confirmed that switching products off cancels their pricing. */
   confirmCancelPricing?: boolean;
+}
+
+export interface DeactivateRequest {
+  methodCode: string;
+  flow: ProductFlow;
+  /** Null = whole MID (Master Merchant and every sub-merchant). */
+  subMerchantId: string | null;
+  when: 'immediate' | 'scheduled';
+  /** Scheduled only: first day the method stops (tomorrow at the earliest). */
+  effectiveDate?: string;
+  reason: string;
+  /** Authenticator code, unless a code was entered in the last 5 minutes. */
+  code?: string;
 }
 
 export interface SetPricingRequest {
@@ -900,6 +959,10 @@ export interface SubMerchantPricingRow {
   methodName: string | null;
   /** Where the pricing comes from; null = no pricing. */
   level: 'sub_merchant' | 'merchant' | null;
+  /** The method is deactivated for this sub-merchant (or the whole MID): no pricing applies. */
+  deactivated?: { effectiveDate: string; scope: 'mid' | 'sub_merchant' } | null;
+  /** A deactivation scheduled for this sub-merchant (or the whole MID). */
+  stopsOn?: string | null;
   technique: string | null;
   pricing: string | null;
   currency: string | null;

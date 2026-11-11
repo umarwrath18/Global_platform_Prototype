@@ -40,7 +40,7 @@ import { MerchantPricingTabs } from './merchant-pricing-tabs';
                     <td>{{ e.user }}</td>
                     <td>{{ e.role }}</td>
                     <td>{{ e.merchantName }}<div class="sub-line">{{ e.applicationId }}</div></td>
-                    <td>{{ e.subMerchantName ?? 'Merchant Level' }}</td>
+                    <td>{{ e.subMerchantName ?? 'Master Merchant' }}</td>
                     <td>{{ e.country }}</td>
                     <td>{{ e.methodName }}<div class="sub-line">v{{ e.version }}</div></td>
                     <td class="cfg">{{ e.previous }}</td>

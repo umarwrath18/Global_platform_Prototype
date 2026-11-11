@@ -78,7 +78,7 @@ export class MerchantPricingDetail {
       const rows = v.versions.filter((x) => x.status === s.status);
       const merchant = rows.filter((x) => !x.subMerchantId);
       const subs = v.subMerchants.map((sm) => ({ key: sm.id, label: sm.name, rows: rows.filter((x) => x.subMerchantId === sm.id) })).filter((g) => g.rows.length);
-      return { ...s, levels: [...(merchant.length ? [{ key: 'merchant', label: 'Merchant Level', rows: merchant }] : []), ...subs] };
+      return { ...s, levels: [...(merchant.length ? [{ key: 'merchant', label: 'Master Merchant', rows: merchant }] : []), ...subs] };
     }).filter((g) => g.levels.length);
   });
   /** Sub-merchant rules exist but no merchant-level rule (§7.2 warning). */
@@ -111,7 +111,7 @@ export class MerchantPricingDetail {
   }
 
   protected subName(x: PricingVersion) {
-    return x.subMerchantId ? (this.view()?.subMerchants.find((s) => s.id === x.subMerchantId)?.name ?? x.subMerchantId) : 'Merchant Level';
+    return x.subMerchantId ? (this.view()?.subMerchants.find((s) => s.id === x.subMerchantId)?.name ?? x.subMerchantId) : 'Master Merchant';
   }
 
   protected vaText(x: PricingVersion) {

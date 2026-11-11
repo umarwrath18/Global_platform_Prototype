@@ -40,7 +40,7 @@ import { MerchantPricingTabs } from './merchant-pricing-tabs';
                 @for (r of filtered(); track r.version.id; let i = $index) {
                   <tr [class.group-start]="i > 0 && filtered()[i - 1].merchantId !== r.merchantId">
                     <td><a class="row-link" [routerLink]="['/merchant-pricing', r.applicationId]">{{ r.merchantName }}</a></td>
-                    <td>{{ r.subMerchantName ?? 'Merchant Level' }}</td>
+                    <td>{{ r.subMerchantName ?? 'Master Merchant' }}</td>
                     <td>{{ r.methodName }}</td>
                     <td>{{ flowLabel[r.version.flow] }}</td>
                     <td>{{ technique(r.version.technique) }}</td>

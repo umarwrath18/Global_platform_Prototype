@@ -20,6 +20,8 @@ const EVENT_LABEL: Record<NotificationEvent, string> = {
   mcc_change_decided: 'MCC change decided',
   pricing_approval_requested: 'Pricing to approve',
   pricing_decided: 'Pricing decided',
+  payment_method_deactivated: 'Payment method deactivated',
+  pricing_alert: 'Unusual pricing change',
   change_requested: 'Change to review',
   change_decided: 'Change decided',
   sub_merchant_submitted: 'Sub-merchant to review',

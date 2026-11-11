@@ -43,7 +43,7 @@ function makeView(mode: PricingMode = 'onboarding', over: Partial<ProductPricing
     versions: [version('cards')],
     subMerchants: [],
     gaps: [], gapCount: 0,
-    can: { editProducts: true, editPricing: true, decidePricing: false },
+    can: { editProducts: true, editPricing: true, decidePricing: false, deactivate: false },
     productsMessage: null, pricingMessage: null, usdRate: 4.2, today: TODAY, now: NOW,
     ...over,
   };
@@ -152,7 +152,7 @@ describe('Pricing editor (§7.4, §8.5)', () => {
   it('walks Scope → Technique → Configure Rules → Summary, with the scope summary and six methods', async () => {
     const { el, settle, button } = await editor({ flow: 'payin', methodCode: 'fpx', editOf: null });
     expect(el.querySelector('.scope-strip')?.textContent).toContain('Corridor: 🇲🇾 Malaysia | Currency: MYR');
-    expect(el.querySelector('.scope-sum')?.textContent?.trim()).toBe('Scope: Malaysia / Kedai Ujian Sdn Bhd (Merchant Level) / PayIn / FPX');
+    expect(el.querySelector('.scope-sum')?.textContent?.trim()).toBe('Scope: Malaysia / Kedai Ujian Sdn Bhd / Master Merchant / PayIn / FPX');
     button('Next')!.click();
     await settle();
     expect([...el.querySelectorAll('.t-card strong')].map((x) => x.textContent)).toEqual(['Percentage', 'Fixed Fee', 'Percentage + Fixed Fee', 'Higher of Percentage or Fixed Fee', 'Volume-Based (Waterfall)', 'Historical Volume']);

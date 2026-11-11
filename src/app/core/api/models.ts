@@ -175,6 +175,7 @@ export interface OtpVerifyResponse {
 
 export type ApiErrorCode =
   | 'VALIDATION_FAILED'
+  | 'MFA_CODE_REQUIRED'
   | 'INVALID_CREDENTIALS'
   | 'LOGIN_LOCKED'
   | 'ACCOUNT_SUSPENDED'
