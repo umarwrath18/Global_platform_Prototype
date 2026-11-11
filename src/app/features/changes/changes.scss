@@ -1,3 +1,16 @@
+// Change-request form, shown in a side sheet.
+:host(.cr-sheet) {
+  --h-control: 44px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.cr-body {
+  gap: 16px;
+}
+
 // Change requests after Risk approval: pending list and request form.
 
 :host {
@@ -78,39 +91,8 @@
   font-size: 12px;
 }
 
-.cr-form {
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-  padding: 14px 16px;
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--mobi-blue);
-  border-radius: var(--r-card);
-  background: var(--surface);
 
-  .f-hint {
-    margin: 0;
-  }
-}
 
-.cr-form-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-
-  h3 {
-    margin: 0;
-    font-size: 15px;
-  }
-}
-
-.cr-form-foot {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
 
 .seg {
   display: inline-flex;

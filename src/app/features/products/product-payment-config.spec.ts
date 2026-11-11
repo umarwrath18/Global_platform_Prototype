@@ -82,14 +82,17 @@ describe('Products card (§8.2, §8.3)', () => {
     expect(button('Discard')).toBeTruthy();
   });
 
-  it('asks before switching off a product whose pricing will be cancelled', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
-    const { settle, button, api } = await render(ProductsCard, { view: makeView() });
+  it('asks before switching off a product whose pricing will be cancelled (inline, not a browser dialog)', async () => {
+    const { el, settle, button, api } = await render(ProductsCard, { view: makeView() });
     button('Cards')!.click();
     await settle();
     button('Save products')!.click();
     await settle();
-    expect(confirm).toHaveBeenCalledWith('Switching off Cards will cancel its pricing. Continue?');
+    expect(el.querySelector('[role="alertdialog"]')?.textContent).toContain('Switching off Cards will cancel its pricing. Continue?');
+    expect(api.saveProducts).not.toHaveBeenCalled();
+    button('Keep it on')!.click();
+    await settle();
+    expect(el.querySelector('[role="alertdialog"]')).toBeNull();
     expect(api.saveProducts).not.toHaveBeenCalled();
   });
 
@@ -181,7 +184,9 @@ describe('Pricing editor (§7.4, §8.5)', () => {
     button('Percentage')!.click();
     button('Next')!.click();
     await settle();
-    expect([...(el.querySelector('#pe-cur') as HTMLSelectElement).options].map((o) => o.value)).toEqual(['MYR']);
+    // Only the local currency is allowed, so it shows as text, not a one-option dropdown.
+    expect(el.querySelector('#pe-cur')).toBeNull();
+    expect(el.textContent).toContain("MYR (Malaysia's local currency)");
     button('Back')!.click();
     await settle();
     [...el.querySelectorAll<HTMLButtonElement>('.t-card')].find((b) => b.textContent?.includes('Charge a fixed amount'))!.click();

@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal, viewChild } from '@angular/core';
+import { CodePrompt, codeProblem } from '../../shared/code-prompt';
 import { MerchantApi, toMerchantError } from '../../core/merchants/merchant-api.service';
 import { FLOW_ROW_LABEL, groupMethods, pricingInEffect, ProductFlow, ProductPricingView, SETTLEMENT_CYCLES, SettlementCycle } from '../../core/merchants/products';
 import { Icon } from '../../shared/icon';
@@ -7,7 +8,7 @@ import { Icon } from '../../shared/icon';
 @Component({
   selector: 'app-products-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon],
+  imports: [Icon, CodePrompt],
   templateUrl: './products-card.html',
   styleUrl: './products.scss',
 })
@@ -101,24 +102,63 @@ export class ProductsCard {
     return (this.settlement()[code] ?? '') !== (this.view().config.settlement[code] ?? '');
   }
 
-  protected async save() {
+  /** Products to be switched off that have pricing: asked inline before saving. */
+  protected readonly askOff = signal<string | null>(null);
+  /** Settlement changes: the server asked for an authenticator code. */
+  protected readonly codeAsk = signal(false);
+  protected readonly codeError = signal<string | null>(null);
+  private readonly codePrompt = viewChild(CodePrompt);
+
+  protected save() {
     const v = this.view();
     const off = v.methods.filter((m) => this.savedOn().has(m.code) && !this.enabled()[m.code] && this.cancelledBySwitchOff(m.code));
-    if (off.length && !confirm(`Switching off ${off.map((m) => m.name).join(', ')} will cancel its pricing. Continue?`)) return;
+    if (off.length) {
+      this.askOff.set(`Switching off ${off.map((m) => m.name).join(', ')} will cancel its pricing. Continue?`);
+      return;
+    }
+    this.confirmedOff.set(new Set());
+    return this.send();
+  }
+
+  protected confirmOff() {
+    const v = this.view();
+    const off = v.methods.filter((m) => this.savedOn().has(m.code) && !this.enabled()[m.code] && this.cancelledBySwitchOff(m.code));
     this.confirmedOff.set(new Set(off.map((m) => m.code)));
+    this.askOff.set(null);
+    return this.send();
+  }
+
+  protected sendWithCode(code: string) {
+    return this.send(code);
+  }
+
+  private async send(code?: string) {
+    const v = this.view();
     this.saving.set(true);
     this.error.set(null);
+    this.codeError.set(null);
     try {
-      const settlement = Object.fromEntries(Object.entries(this.settlement()).filter(([code, c]) => c && this.enabled()[code]));
+      const settlement = Object.fromEntries(Object.entries(this.settlement()).filter(([c, cycle]) => cycle && this.enabled()[c]));
       const res = await this.api.saveProducts(v.applicationId, {
         products: v.methods.map((m) => ({ methodCode: m.code, enabled: !!this.enabled()[m.code] })),
         settlement,
         revision: v.config.revision,
         confirmCancelPricing: this.confirmedOff().size > 0,
+        ...(code ? { code } : {}),
       });
+      this.codeAsk.set(false);
       this.saved.emit({ view: res.view, message: res.message });
     } catch (e) {
-      this.error.set(toMerchantError(e).message ?? "We couldn't save the products. Your changes are still here.");
+      const err = toMerchantError(e);
+      const mfa = this.codeAsk() ? codeProblem(err.code, (err as { attemptsRemaining?: number }).attemptsRemaining) : null;
+      if (err.code === 'MFA_CODE_REQUIRED') this.codeAsk.set(true);
+      else if (mfa) {
+        this.codeError.set(mfa);
+        this.codePrompt()?.reset();
+      } else {
+        this.codeAsk.set(false);
+        this.error.set(err.message ?? "We couldn't save the products. Your changes are still here.");
+      }
     } finally {
       this.saving.set(false);
     }

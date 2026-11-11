@@ -709,6 +709,17 @@ a {
     }
   }
 
+  /* Secondary destructive action (e.g. Reject, Deactivate in a sheet footer). */
+  &.danger-outline {
+    border-color: var(--danger-border);
+    background: var(--surface);
+    color: var(--danger);
+
+    &:hover:not(:disabled) {
+      background: var(--danger-bg);
+    }
+  }
+
   &.ghost {
     border-color: transparent;
     background: transparent;

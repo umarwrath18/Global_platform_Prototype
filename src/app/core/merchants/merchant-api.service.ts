@@ -19,7 +19,7 @@ import {
 import type { MccChangeRequest } from './mcc';
 import type { ApprovalsView, ChangeRequest, CreateChangeRequest } from './change-requests';
 import type { CreateSubMerchantRequest, SubMerchantView } from './sub-merchants';
-import type { MdrHistoryRow, MerchantPricingList, SubMerchantPricingRow, PricingApprovalsView, PricingAuditEvent, PricingDecisionRequest, PricingVersion, ProductPricingView, SaveProductsRequest, SetPricingRequest } from './products';
+import type { Deactivation, DeactivateRequest, MdrHistoryRow, MerchantPricingList, SubMerchantPricingRow, PricingApprovalsView, PricingAuditEvent, PricingDecisionRequest, PricingVersion, ProductPricingView, SaveProductsRequest, SetPricingRequest } from './products';
 import { StaffRoleService } from './staff-role.service';
 
 export type MerchantClientError = MerchantApiError | { code: 'NETWORK_ERROR'; message?: string } | { code: 'UNKNOWN_ERROR'; message?: string };
@@ -177,6 +177,17 @@ export class MerchantApi {
   cancelPricing(applicationId: string, versionId: string, reason = '') {
     const url = `/api/applications/${encodeURIComponent(applicationId)}/pricing/${encodeURIComponent(versionId)}/cancel`;
     return this.run(this.http.post<PricingResult>(url, { reason }, { headers: this.headers }));
+  }
+
+  /** Ops: stop a live payment method for the whole MID or one sub-merchant (needs an MFA code). */
+  deactivateMethod(applicationId: string, req: DeactivateRequest) {
+    return this.run(this.http.post<{ deactivation: Deactivation; view: ProductPricingView }>(`/api/applications/${encodeURIComponent(applicationId)}/deactivations`, req, { headers: this.headers }), true);
+  }
+
+  /** Ops: cancel a scheduled deactivation, or reactivate a method for a sub-merchant (needs an MFA code). */
+  deactivationAction(applicationId: string, deactivationId: string, action: 'cancel' | 'reactivate', code?: string) {
+    const url = `/api/applications/${encodeURIComponent(applicationId)}/deactivations/${encodeURIComponent(deactivationId)}/${action}`;
+    return this.run(this.http.post<{ deactivation: Deactivation; view: ProductPricingView }>(url, code ? { code } : {}, { headers: this.headers }), true);
   }
 
   /** FinOps decision; `code` is the approver's current authenticator code (re-authentication). */

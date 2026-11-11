@@ -64,7 +64,7 @@ interface Reading {
       position: fixed;
       right: 20px;
       bottom: 20px;
-      z-index: 60;
+      z-index: 70; /* above side sheets */
       width: min(300px, calc(100vw - 32px));
       padding: 12px 14px;
       border: 1.5px dashed #d63384;

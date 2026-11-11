@@ -6,6 +6,7 @@ import { SecurityApi } from '../../core/auth/security-api.service';
 import { SECURITY_ROLE_LABEL, StaffRoleService } from '../../core/merchants/staff-role.service';
 import { DemoAuthenticatorService } from '../../shared/demo-authenticator';
 import { Icon } from '../../shared/icon';
+import { SideSheet } from '../../shared/side-sheet';
 import { fmtDateTime, fmtRelative } from '../../shared/merchant-ui';
 
 type Tab = 'users' | 'requests' | 'alerts' | 'audit';
@@ -47,7 +48,7 @@ const EVENT_LABEL: Record<string, string> = {
 @Component({
   selector: 'app-user-security',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon],
+  imports: [Icon, SideSheet],
   templateUrl: './user-security.html',
   styleUrl: './security.scss',
 })

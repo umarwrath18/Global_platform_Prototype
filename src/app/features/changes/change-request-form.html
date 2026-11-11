@@ -1,10 +1,14 @@
 @let d = draft();
 @let c = cfg();
-<section class="cr-form" aria-labelledby="cr-form-title">
-  <header class="cr-form-head">
-    <h3 id="cr-form-title">Request a change · {{ c.name }}</h3>
-    <button type="button" class="btn sm ghost" (click)="cancel()">Cancel</button>
-  </header>
+<header class="sheet-head">
+  <div class="sheet-titles">
+    <p class="sheet-eyebrow">Change request</p>
+    <h2 class="sheet-title" id="cr-form-title">Request a change · {{ c.name }}</h2>
+    <p class="sheet-sub">{{ merchant().legalName }} · {{ application().id }}</p>
+  </div>
+  <button type="button" class="sheet-close" (click)="cancel()" aria-label="Close"><app-icon name="x" [size]="18" /></button>
+</header>
+<div class="sheet-body cr-body">
   <p class="f-hint">Risk approved these details, so a change takes effect only when Risk approves it. The record of what Risk originally reviewed is kept.</p>
 
   <div class="seg" role="radiogroup" aria-label="What to change">
@@ -116,8 +120,20 @@
   </div>
   @if (error(); as e) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
   @if (attempted() && issues().length) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ issues().length }} item{{ issues().length === 1 ? '' : 's' }} must be fixed before sending.</div></div>}
-  <footer class="cr-form-foot">
-    <button type="button" class="btn sm" (click)="cancel()" [disabled]="saving()">Cancel</button>
-    <button type="button" class="btn sm primary" (click)="submit()" [disabled]="saving()">@if (saving()) {<span class="spinner" aria-hidden="true"></span>}Send to Risk</button>
+</div>
+@if (askDiscard(); as q) {
+  <div class="sheet-confirm" role="alertdialog" aria-labelledby="cr-discard">
+    <h3 id="cr-discard">{{ q.section ? 'Discard the changes to this section?' : 'Discard this change request?' }}</h3>
+    <p>What you've entered will be lost.</p>
+    <div class="sheet-confirm-actions">
+      <button type="button" class="btn" (click)="askDiscard.set(null)" autofocus>Keep editing</button>
+      <button type="button" class="btn danger" (click)="discard()">Discard</button>
+    </div>
+  </div>
+} @else {
+  <footer class="sheet-foot">
+    <span class="sheet-foot-note">Risk reviews it on Approvals.</span>
+    <button type="button" class="btn" (click)="cancel()" [disabled]="saving()">Cancel</button>
+    <button type="button" class="btn primary" (click)="submit()" [disabled]="saving()">@if (saving()) {<span class="spinner" aria-hidden="true"></span>}Send to Risk</button>
   </footer>
-</section>
+}

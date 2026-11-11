@@ -402,23 +402,6 @@
   }
 }
 
-.editor-backdrop {
-  align-items: start;
-  overflow-y: auto;
-}
-
-.editor-modal {
-  width: min(100%, 920px);
-  margin: 24px 0;
-  border-radius: var(--r-card);
-  background: var(--surface);
-  box-shadow: 0 20px 60px rgb(15 23 42 / 20%);
-
-  ::ng-deep .editor,
-  ::ng-deep .editor-done {
-    margin: 0;
-  }
-}
 
 .ppc-notice {
   display: flex;
@@ -451,4 +434,25 @@
 .pa-table td:first-child,
 .mp-table td:first-child {
   min-width: 180px;
+}
+
+.mp-reason {
+  height: auto;
+  min-height: 64px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.mp-lead {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.pa-reason {
+  height: auto;
+  min-height: 80px;
+  padding: 10px 12px;
+  resize: vertical;
 }

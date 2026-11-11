@@ -63,9 +63,7 @@
                     <td class="nowrap">{{ period(x) }}</td>
                     <td><span class="status" [class]="'status ' + tone[x.status]">{{ statusLabel[x.status] }}</span></td>
                     <td class="row-actions">
-                      <button type="button" class="btn sm ghost" (click)="selected.set(x)">View Details</button>
-                      @if (canEdit(x)) {<button type="button" class="btn sm ghost" [disabled]="!!editor()" (click)="edit(x)">Edit Pricing</button>}
-                      @if (canCancel(x)) {<button type="button" class="btn sm ghost" [disabled]="!!busy() || !!editor()" (click)="cancel(x)">Cancel Rule</button>}
+                      <button type="button" class="btn sm ghost" (click)="open(x)" [attr.aria-label]="'View ' + methodName(x) + ' v' + x.version">View</button>
                     </td>
                   </tr>
                 }
@@ -100,35 +98,113 @@
       </section>
     }
 
+    @if (deactivations().length) {
+      <section class="panel-card mp-section">
+        <div class="panel-head"><div><h2>Deactivated payment methods</h2><p>Stopped for the whole MID or for one sub-merchant</p></div></div>
+        <div class="table-wrap">
+          <table class="data-table mp-table">
+            <thead><tr><th scope="col">Payment Method</th><th scope="col">Applies to</th><th scope="col">From</th><th scope="col">Reason</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+            <tbody>
+              @for (d of deactivations(); track d.id) {
+                <tr>
+                  <td>{{ methodOf(d.methodCode, d.flow) }}<div class="sub-line">{{ flowLabel[d.flow] }}{{ d.immediate ? ' · Immediately' : '' }}</div></td>
+                  <td>{{ d.subMerchantId ? subNameOf(d.subMerchantId) : 'Master Merchant and all sub-merchants' }}</td>
+                  <td class="nowrap">{{ day(d.effectiveDate) }}</td>
+                  <td class="cfg">{{ d.reason }}<div class="sub-line">{{ d.createdBy }}</div></td>
+                  <td><span class="status" [class]="'status ' + deactivationTone[d.status]">{{ deactivationLabel[d.status] }}</span></td>
+                  <td class="row-actions">
+                    @if (canDeactivate() && d.status === 'scheduled') {<button type="button" class="btn sm ghost" (click)="deactivationAsk.set({ d, action: 'cancel' })">Cancel</button>}
+                    @if (canDeactivate() && d.status === 'done' && d.subMerchantId) {<button type="button" class="btn sm ghost" (click)="deactivationAsk.set({ d, action: 'reactivate' })">Reactivate</button>}
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    }
+
     @if (selected(); as x) {
-      <div class="modal-backdrop" (click)="selected.set(null)">
-        <section class="pa-modal panel-card wide-modal" role="dialog" aria-modal="true" aria-labelledby="vd-title" (click)="$event.stopPropagation()" (keydown.escape)="selected.set(null)">
-          <h2 id="vd-title">{{ methodName(x) }} · v{{ x.version }}</h2>
-          <dl class="kv">
-            <div><dt>Sub-Merchant</dt><dd>{{ subName(x) }}</dd></div>
-            <div><dt>Flow</dt><dd>{{ flowLabel[x.flow] }}</dd></div>
-            @if (vaText(x); as va) {<div><dt>VA Banks</dt><dd>{{ va }}</dd></div>}
-            <div><dt>Technique</dt><dd>{{ technique(x.technique) }}</dd></div>
-            <div class="wide"><dt>Pricing Details</dt><dd>{{ details(x) }}</dd></div>
-            @if (secondary(x); as s) {<div class="wide"><dt>Secondary Charges</dt><dd>{{ s }}</dd></div>}
-            <div><dt>Effective</dt><dd>{{ period(x) }}</dd></div>
-            <div><dt>Status</dt><dd>{{ statusLabel[x.status] }}</dd></div>
-            <div><dt>Created By</dt><dd>{{ x.createdBy }}</dd></div>
-            @if (x.approvedBy) {<div><dt>Approved By</dt><dd>{{ x.approvedBy }}</dd></div>}
-            @if (x.rejectionReason) {<div class="wide"><dt>Rejection reason</dt><dd>{{ x.rejectionReason }}</dd></div>}
-          </dl>
-          <div class="pa-modal-actions">
-            @if (canEdit(x)) {<button type="button" class="btn" (click)="edit(x)">Edit Pricing</button>}
-            <button type="button" class="btn primary" (click)="selected.set(null)">Close</button>
+      <app-side-sheet [label]="methodName(x) + ' v' + x.version" (dismiss)="closeDetails()">
+        <header class="sheet-head">
+          <div class="sheet-titles">
+            <p class="sheet-eyebrow">Pricing Detail</p>
+            <h2 class="sheet-title">{{ methodName(x) }} · v{{ x.version }} <span class="status" [class]="'status ' + tone[x.status]">{{ statusLabel[x.status] }}</span></h2>
+            <p class="sheet-sub">{{ v.merchantName }} · {{ subName(x) }} · {{ flowLabel[x.flow] }}</p>
           </div>
-        </section>
-      </div>
+          <button type="button" class="sheet-close" (click)="closeDetails()" aria-label="Close"><app-icon name="x" [size]="18" /></button>
+        </header>
+        <div class="sheet-body">
+          @if (previousOf(x); as p) {
+            <section class="sheet-section">
+              <h3>What changes</h3>
+              <div class="sheet-compare">
+                <div class="row head"><span></span><span>Previous · v{{ p.version }}</span><span>This · v{{ x.version }}</span></div>
+                <div class="row"><span class="k">Technique</span><span class="was">{{ technique(p.technique) }}</span><span class="now">{{ technique(x.technique) }}</span></div>
+                <div class="row"><span class="k">Rate</span><span class="was">{{ details(p) }}</span><span class="now">{{ details(x) }}</span></div>
+                <div class="row"><span class="k">Effective</span><span class="was">{{ period(p) }}</span><span class="now">{{ period(x) }}</span></div>
+              </div>
+            </section>
+          }
+          <section class="sheet-section">
+            <h3>Details</h3>
+            <dl class="sheet-dl">
+              <div><dt>Sub-Merchant</dt><dd>{{ subName(x) }}</dd></div>
+              <div><dt>Flow</dt><dd>{{ flowLabel[x.flow] }}</dd></div>
+              @if (vaText(x); as va) {<div class="wide"><dt>VA Banks</dt><dd>{{ va }}</dd></div>}
+              <div><dt>Technique</dt><dd>{{ technique(x.technique) }}</dd></div>
+              <div><dt>Version</dt><dd>v{{ x.version }}</dd></div>
+              <div class="wide"><dt>Pricing Details</dt><dd>{{ details(x) }}</dd></div>
+              @if (secondary(x); as sc) {<div class="wide"><dt>Secondary Charges</dt><dd>{{ sc }}</dd></div>}
+              <div><dt>Effective</dt><dd>{{ period(x) }}</dd></div>
+              @if (x.flow === 'payin') {<div><dt>Settlement Cycle</dt><dd>{{ x.settlementSnapshot ?? 'Not set' }}</dd></div>}
+              @if (x.rejectionReason) {<div class="wide"><dt>Rejection reason</dt><dd>{{ x.rejectionReason }}</dd></div>}
+            </dl>
+          </section>
+          <section class="sheet-section">
+            <h3>Activity</h3>
+            <ol class="sheet-timeline">
+              @for (a of activity(x); track $index) {
+                <li [class.waiting]="a.waiting" [class.bad]="a.bad"><div><strong>{{ a.title }}</strong><div class="meta">{{ a.meta }}</div></div></li>
+              }
+            </ol>
+          </section>
+          @if (actionError(); as e) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
+        </div>
+        @if (cancelAsk()) {
+          <div class="sheet-confirm" role="alertdialog" aria-labelledby="cr-t">
+            <h3 id="cr-t">Cancel {{ technique(x.technique) }} pricing for {{ methodName(x) }}?</h3>
+            <p>v{{ x.version }} won't take effect. This can't be undone.</p>
+            <label class="f-label" for="cr-reason">Reason (optional)</label>
+            <textarea id="cr-reason" class="f-input mp-reason" rows="2" maxlength="500" [value]="cancelReason()" (input)="cancelReason.set($any($event.target).value)"></textarea>
+            <div class="sheet-confirm-actions">
+              <button type="button" class="btn" (click)="cancelAsk.set(false)" [disabled]="!!busy()">Keep it</button>
+              <button type="button" class="btn danger" (click)="cancel(x)" [disabled]="!!busy()">@if (busy()) {<span class="spinner" aria-hidden="true"></span>}Cancel Rule</button>
+            </div>
+          </div>
+        } @else {
+          <footer class="sheet-foot">
+            @if (canDeactivate() && x.status === 'active') {<button type="button" class="btn danger-outline" (click)="startDeactivate(x)"><app-icon name="power" [size]="15" />Deactivate</button>}
+            <span class="sheet-foot-note"></span>
+            @if (canCancel(x)) {<button type="button" class="btn" (click)="cancelAsk.set(true)">Cancel Rule</button>}
+            @if (canEdit(x)) {<button type="button" class="btn primary" (click)="edit(x)"><app-icon name="edit" [size]="14" />Edit Pricing</button>}
+            @else {<button type="button" class="btn primary" (click)="closeDetails()">Close</button>}
+          </footer>
+        }
+      </app-side-sheet>
     }
 
     @if (picker()) {
-      <div class="modal-backdrop" (click)="picker.set(false)">
-        <section class="pa-modal panel-card wide-modal" role="dialog" aria-modal="true" aria-labelledby="sp-title" (click)="$event.stopPropagation()" (keydown.escape)="picker.set(false)">
-          <h2 id="sp-title">Select Pricing to Edit</h2>
+      <app-side-sheet label="Select Pricing to Edit" (dismiss)="picker.set(false)">
+        <header class="sheet-head">
+          <div class="sheet-titles">
+            <p class="sheet-eyebrow">Merchant Pricing</p>
+            <h2 class="sheet-title">Select Pricing to Edit</h2>
+            <p class="sheet-sub">{{ v.merchantName }} - {{ v.mid ? 'MID ' + v.mid : v.applicationId }}</p>
+          </div>
+          <button type="button" class="sheet-close" (click)="picker.set(false)" aria-label="Close"><app-icon name="x" [size]="18" /></button>
+        </header>
+        <div class="sheet-body">
           @if (v.versions.length) {
             <ul class="pick-list">
               @for (x of v.versions; track x.id) {
@@ -146,17 +222,53 @@
           } @else {
             <p>No pricing rules configured for this merchant.</p>
           }
-          <div class="pa-modal-actions"><button type="button" class="btn" (click)="picker.set(false)">Cancel</button></div>
-        </section>
-      </div>
+        </div>
+        <footer class="sheet-foot"><span class="sheet-foot-note"></span><button type="button" class="btn" (click)="picker.set(false)">Cancel</button></footer>
+      </app-side-sheet>
     }
 
-    @if (editor(); as p) {
-      <div class="modal-backdrop editor-backdrop">
-        <div class="editor-modal" role="dialog" aria-modal="true" aria-label="Configure pricing">
-          <app-pricing-editor [view]="v" [preset]="p" variant="merchant" (saved)="onSaved($event)" (closed)="closeEditor()" />
+    @if (deactivating(); as d) {
+      <app-deactivate-sheet [view]="v" [methodCode]="d.methodCode" [flow]="d.flow" [subMerchantId]="d.subMerchantId" (finished)="view.set($event)" (closed)="deactivating.set(null)" />
+    }
+
+    @if (deactivationAsk(); as q) {
+      <app-side-sheet [label]="(q.action === 'cancel' ? 'Cancel deactivation of ' : 'Reactivate ') + methodOf(q.d.methodCode, q.d.flow)" (dismiss)="deactivationAsk.set(null)">
+        <header class="sheet-head">
+          <div class="sheet-titles">
+            <p class="sheet-eyebrow">{{ q.action === 'cancel' ? 'Cancel deactivation' : 'Reactivate payment method' }}</p>
+            <h2 class="sheet-title">{{ methodOf(q.d.methodCode, q.d.flow) }}</h2>
+            <p class="sheet-sub">{{ q.d.subMerchantId ? subNameOf(q.d.subMerchantId) : 'Master Merchant and all sub-merchants' }}</p>
+          </div>
+          <button type="button" class="sheet-close" (click)="deactivationAsk.set(null)" aria-label="Close"><app-icon name="x" [size]="18" /></button>
+        </header>
+        <div class="sheet-body">
+          <p class="mp-lead">
+            @if (q.action === 'cancel') {
+              {{ methodOf(q.d.methodCode, q.d.flow) }} keeps working after {{ day(q.d.effectiveDate) }}. Pricing that was shortened gets its end date back; pricing that was cancelled stays cancelled.
+            } @else {
+              {{ subNameOf(q.d.subMerchantId!) }} can use {{ methodOf(q.d.methodCode, q.d.flow) }} again. It uses the Master Merchant's pricing unless you set its own.
+            }
+          </p>
+          @if (actionError(); as e) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
         </div>
-      </div>
+        @if (codeAsk()) {
+          <app-code-prompt
+            [title]="q.action === 'cancel' ? 'Confirm: cancel the deactivation' : 'Confirm: reactivate'"
+            message="This needs a code from your authenticator app. You won't be asked again for 5 minutes."
+            [confirmLabel]="q.action === 'cancel' ? 'Cancel deactivation' : 'Reactivate'"
+            [busy]="!!busy()"
+            [error]="codeError()"
+            (confirmed)="deactivationAction(q.d, q.action, $event)"
+            (cancelled)="codeAsk.set(false)"
+          />
+        } @else {
+          <footer class="sheet-foot">
+            <span class="sheet-foot-note">FinOps is told in-app.</span>
+            <button type="button" class="btn" (click)="deactivationAsk.set(null)" [disabled]="!!busy()">Back</button>
+            <button type="button" class="btn primary" (click)="deactivationAction(q.d, q.action)" [disabled]="!!busy()">@if (busy()) {<span class="spinner" aria-hidden="true"></span>}{{ q.action === 'cancel' ? 'Cancel deactivation' : 'Reactivate' }}</button>
+          </footer>
+        }
+      </app-side-sheet>
     }
 
     @if (toast(); as t) {<div class="p-toast" role="status"><app-icon name="check-circle" [size]="18" />{{ t }}</div>}

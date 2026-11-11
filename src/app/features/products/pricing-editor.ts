@@ -1,4 +1,6 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, computed, ElementRef, inject, input, OnInit, output, signal } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, computed, ElementRef, inject, input, OnInit, output, signal, viewChild } from '@angular/core';
+import { CodePrompt, codeProblem } from '../../shared/code-prompt';
+import { DateField, displayDate } from '../../shared/date-field';
 import { MerchantApi, toMerchantError } from '../../core/merchants/merchant-api.service';
 import {
   addDays,
@@ -67,11 +69,11 @@ const n = (v: string): number | null => (v.trim() === '' ? null : Number(v.repla
 @Component({
   selector: 'app-pricing-editor',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, DecimalPipe],
+  imports: [Icon, DecimalPipe, DateField, CodePrompt],
   templateUrl: './pricing-editor.html',
   styleUrl: './products.scss',
-  // Esc does not close the inline editor (§8.5); in the Merchant Pricing popup it dismisses an overlap error first, then closes (§7.4).
-  host: { '(keydown.escape)': 'onEscape($event)' },
+  // Shown inside a side sheet: header, scrolling body, footer. The sheet passes Esc / backdrop to requestClose().
+  host: { class: 'editor-sheet' },
 })
 export class PricingEditor implements OnInit, AfterViewInit {
   private readonly api = inject(MerchantApi);
@@ -79,7 +81,7 @@ export class PricingEditor implements OnInit, AfterViewInit {
 
   readonly view = input.required<ProductPricingView>();
   readonly preset = input.required<PricingPreset>();
-  /** `mid`: inline in Product & Payment Config (§8.5). `merchant`: popup in Merchant Pricing (§7.4). */
+  /** `mid`: from Product & Payment Config (§8.5). `merchant`: from Merchant Pricing (§7.4). Both open in a side sheet. */
   readonly variant = input<'mid' | 'merchant'>('mid');
   readonly saved = output<{ version: PricingVersion; view: ProductPricingView }>();
   readonly closed = output<void>();
@@ -103,6 +105,14 @@ export class PricingEditor implements OnInit, AfterViewInit {
   protected readonly saving = signal(false);
   protected readonly serverError = signal<string | null>(null);
   protected readonly done = signal<PricingVersion | null>(null);
+  /** Inline "Discard this pricing draft?" in the sheet footer (instead of a browser dialog). */
+  protected readonly askDiscard = signal(false);
+  /** USD fixed fee: the server asked for an authenticator code. */
+  protected readonly codeAsk = signal(false);
+  protected readonly codeError = signal<string | null>(null);
+  private readonly codePrompt = viewChild(CodePrompt);
+  protected readonly day = displayDate;
+  protected readonly eyebrow = computed(() => (this.variant() === 'merchant' ? 'Merchant Pricing' : 'Product & Payment Config'));
 
   // Scope
   protected readonly flow = signal<ProductFlow>('payin');
@@ -251,8 +261,7 @@ export class PricingEditor implements OnInit, AfterViewInit {
   }
 
   ngAfterViewInit() {
-    this.host.nativeElement.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
-    queueMicrotask(() => this.host.nativeElement.querySelector<HTMLElement>('select, input, button.t-card')?.focus());
+    queueMicrotask(() => this.host.nativeElement.querySelector<HTMLElement>('.sheet-body select, .sheet-body input, .sheet-body button.t-card')?.focus());
   }
 
   private prefill(e: PricingVersion) {
@@ -295,11 +304,13 @@ export class PricingEditor implements OnInit, AfterViewInit {
     }
   }
 
-  protected onEscape(e: Event) {
-    e.stopPropagation();
-    if (this.variant() !== 'merchant' || this.done()) return;
-    if (this.overlap()) this.overlap.set(null);
-    else this.cancel();
+  /** Esc or a click outside the sheet: an overlap error is dismissed first; a draft asks before it's discarded. */
+  requestClose() {
+    if (this.done()) return this.closed.emit();
+    if (this.askDiscard()) return this.askDiscard.set(false);
+    if (this.codeAsk()) return this.codeAsk.set(false);
+    if (this.overlap()) return this.overlap.set(null);
+    this.cancel();
   }
 
   /** True once past step 1 or in Phase 2, so closing it would lose work. */
@@ -427,8 +438,8 @@ export class PricingEditor implements OnInit, AfterViewInit {
   }
 
   protected cancel() {
-    if (this.hasProgress() && !confirm('Discard this pricing draft?')) return;
-    this.closed.emit();
+    if (this.hasProgress()) this.askDiscard.set(true);
+    else this.closed.emit();
   }
 
   /** "Skip – No Secondary Charges" submits without them; the main button submits what's configured. */
@@ -440,14 +451,33 @@ export class PricingEditor implements OnInit, AfterViewInit {
     const issues = validateSecondary(this.draft());
     this.errors.set([...new Set(issues.map((i) => i.message))]);
     if (issues.length) return;
+    await this.send();
+  }
+
+  protected submitWithCode(code: string) {
+    return this.send(code);
+  }
+
+  private async send(code?: string) {
     this.saving.set(true);
     this.serverError.set(null);
+    this.codeError.set(null);
     try {
-      const res = await this.api.setPricing(this.view().applicationId, { draft: this.draft(), editOf: this.editing()?.id ?? null });
+      const res = await this.api.setPricing(this.view().applicationId, { draft: this.draft(), editOf: this.editing()?.id ?? null, ...(code ? { code } : {}) });
+      this.codeAsk.set(false);
       this.done.set(res.version);
       this.saved.emit(res);
     } catch (e) {
-      this.serverError.set(toMerchantError(e).message ?? "We couldn't save the pricing. Your draft is still here.");
+      const err = toMerchantError(e);
+      const mfa = this.codeAsk() ? codeProblem(err.code, (err as { attemptsRemaining?: number }).attemptsRemaining) : null;
+      if (err.code === 'MFA_CODE_REQUIRED') this.codeAsk.set(true);
+      else if (mfa) {
+        this.codeError.set(mfa);
+        this.codePrompt()?.reset();
+      } else {
+        this.codeAsk.set(false);
+        this.serverError.set(err.message ?? "We couldn't save the pricing. Your draft is still here.");
+      }
     } finally {
       this.saving.set(false);
     }

@@ -115,10 +115,12 @@ describe('Change request form', () => {
     expect(el.querySelector('.f-error')?.textContent).toBeTruthy();
     expect((f.componentInstance as ChangeRequestForm).hasUnsavedChanges()).toBe(true);
 
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    // Switching section asks inline in the sheet footer, not with a browser dialog.
     button(el, 'Directors')!.click();
     await settle(f);
-    expect(confirm).toHaveBeenCalledWith('Discard the changes to this section?');
+    expect(el.querySelector('[role="alertdialog"]')?.textContent).toContain('Discard the changes to this section?');
+    button(el, 'Keep editing')!.click();
+    await settle(f);
     expect(el.querySelector('#cr-bank-accountNumber')).toBeTruthy();
   });
 });

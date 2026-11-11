@@ -1,3 +1,4 @@
+import { SideSheet } from '../../shared/side-sheet';
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { MerchantApi, toMerchantError } from '../../core/merchants/merchant-api.service';
@@ -25,7 +26,7 @@ import { PricingEditor, PricingPreset } from './pricing-editor';
 @Component({
   selector: 'app-pricing-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, PricingEditor, RouterLink],
+  imports: [Icon, PricingEditor, RouterLink, SideSheet],
   templateUrl: './pricing-panel.html',
   styleUrl: './products.scss',
 })
@@ -121,8 +122,12 @@ export class PricingPanel {
     this.changed.emit({ view: res.view, message: '' });
   }
 
+  /** Inline "Cancel … pricing?" under the table (instead of a browser dialog). */
+  protected readonly cancelAsk = signal<(PricingVersion & { method?: ProductMethod }) | null>(null);
+  protected readonly cancelQuestion = (x: PricingVersion & { method?: ProductMethod }) => `Cancel ${techniqueLabel(x.technique)} pricing for ${x.method?.name ?? x.methodCode}?`;
+
   protected async cancelVersion(x: PricingVersion & { method?: ProductMethod }) {
-    if (!confirm(`Cancel ${techniqueLabel(x.technique)} pricing for ${x.method?.name ?? x.methodCode}?`)) return;
+    this.cancelAsk.set(null);
     this.busy.set(x.id);
     this.error.set(null);
     try {

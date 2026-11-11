@@ -1,9 +1,15 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
+import { SideSheet } from '../../shared/side-sheet';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, viewChild } from '@angular/core';
+import { CodePrompt, codeProblem } from '../../shared/code-prompt';
+import { DeactivateSheet } from '../products/deactivate-sheet';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MerchantApi, MerchantClientError, toMerchantError } from '../../core/merchants/merchant-api.service';
 import {
+  Deactivation,
+  DEACTIVATION_STATUS_LABEL,
   FLOW_LABEL,
   fmtDay,
+  ProductFlow,
   periodText,
   pricingDetails,
   PRICING_STATUS_LABEL,
@@ -34,13 +40,14 @@ const SECTIONS: { status: PricingStatus; title: string }[] = [
 
 /**
  * Merchant Pricing – Merchant Detail (§7.2) for one MID: active, scheduled and pending rules at
- * merchant level and per sub-merchant, the version history, and the popup editor (§7.4, §7.7).
+ * Master Merchant level and per sub-merchant, the version history and deactivated payment methods.
+ * Details, the editor (§7.4, §7.7) and deactivation open in side sheets.
  * Changes follow the shared MID rules: Ops submits, FinOps approves.
  */
 @Component({
   selector: 'app-merchant-pricing-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, RouterLink, PricingEditor, MerchantPricingTabs],
+  imports: [Icon, RouterLink, PricingEditor, MerchantPricingTabs, SideSheet, CodePrompt, DeactivateSheet],
   templateUrl: './merchant-pricing-detail.html',
   styleUrl: './pricing.scss',
 })
@@ -59,6 +66,18 @@ export class MerchantPricingDetail {
   protected readonly busy = signal<string | null>(null);
   protected readonly toast = signal<string | null>(null);
   protected readonly actionError = signal<string | null>(null);
+  /** Inline "Cancel Rule?" in the details sheet. */
+  protected readonly cancelAsk = signal(false);
+  protected readonly cancelReason = signal('');
+  /** Deactivation sheet for a method (scope preset). */
+  protected readonly deactivating = signal<{ methodCode: string; flow: ProductFlow; subMerchantId: string | null } | null>(null);
+  /** Cancel a scheduled deactivation, or reactivate a sub-merchant. */
+  protected readonly deactivationAsk = signal<{ d: Deactivation; action: 'cancel' | 'reactivate' } | null>(null);
+  protected readonly codeAsk = signal(false);
+  protected readonly codeError = signal<string | null>(null);
+  private readonly codePrompt = viewChild(CodePrompt);
+  protected readonly deactivationLabel = DEACTIVATION_STATUS_LABEL;
+  protected readonly deactivationTone: Record<Deactivation['status'], string> = { scheduled: 'warning', done: 'danger', cancelled: '', reactivated: 'success' };
 
   protected readonly flowLabel = FLOW_LABEL;
   protected readonly technique = techniqueLabel;
@@ -86,6 +105,9 @@ export class MerchantPricingDetail {
     const live = (this.view()?.versions ?? []).filter((x) => ['active', 'scheduled', 'pending_approval'].includes(x.status));
     return live.some((x) => x.subMerchantId) && !live.some((x) => !x.subMerchantId);
   });
+  protected readonly canDeactivate = computed(() => !!this.view()?.can.deactivate);
+  /** Newest first. */
+  protected readonly deactivations = computed(() => [...(this.view()?.config.deactivations ?? [])].reverse());
   protected readonly history = computed(() => [...(this.view()?.versions ?? [])].sort((a, b) => b.createdAt - a.createdAt));
 
   constructor() {
@@ -119,6 +141,75 @@ export class MerchantPricingDetail {
     return x.vaBanks.length ? x.vaBanks.map((b) => VA_BANKS.find((v) => v.code === b)?.name ?? b).join(', ') : 'All VA Banks';
   }
 
+  protected methodOf(code: string, flow: ProductFlow) {
+    return this.view()?.methods.find((m) => m.code === code && m.flow === flow)?.name ?? code;
+  }
+
+  protected subNameOf(id: string) {
+    return this.view()?.subMerchants.find((s) => s.id === id)?.name ?? id;
+  }
+
+  protected open(x: PricingVersion) {
+    this.actionError.set(null);
+    this.cancelAsk.set(false);
+    this.cancelReason.set('');
+    this.selected.set(x);
+  }
+
+  protected closeDetails() {
+    if (this.cancelAsk()) return this.cancelAsk.set(false);
+    this.selected.set(null);
+  }
+
+  /** The version this one replaces (edit), else the previous version in the same scope. */
+  protected previousOf(x: PricingVersion): PricingVersion | null {
+    const all = this.view()?.versions ?? [];
+    const byEdit = x.editOf ? all.find((o) => o.id === x.editOf) : undefined;
+    if (byEdit) return byEdit;
+    return all.filter((o) => o.id !== x.id && o.methodCode === x.methodCode && o.flow === x.flow && (o.subMerchantId ?? null) === (x.subMerchantId ?? null) && o.version < x.version).sort((a, b) => b.version - a.version)[0] ?? null;
+  }
+
+  protected activity(x: PricingVersion): { title: string; meta: string; waiting?: boolean; bad?: boolean }[] {
+    const when = (t: number) => new Date(t).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const out: { title: string; meta: string; waiting?: boolean; bad?: boolean }[] = [{ title: x.source === 'change' ? 'Submitted for approval' : 'Set during onboarding', meta: `${x.createdBy} · ${when(x.createdAt)}` }];
+    if (x.approvedBy && x.approvedAt) out.push({ title: 'Approved by FinOps', meta: `${x.approvedBy} · ${when(x.approvedAt)}` });
+    if (x.rejectedBy && x.rejectedAt) out.push({ title: 'Rejected by FinOps', meta: `${x.rejectedBy} · ${when(x.rejectedAt)}`, bad: true });
+    if (x.cancelledBy && x.cancelledAt) out.push({ title: 'Cancelled', meta: `${x.cancelledBy} · ${when(x.cancelledAt)}`, bad: true });
+    if (x.status === 'pending_approval') out.push({ title: 'Waiting for FinOps', meta: 'The current pricing stays in effect until FinOps decides.', waiting: true });
+    return out;
+  }
+
+  protected startDeactivate(x: PricingVersion) {
+    this.selected.set(null);
+    this.deactivating.set({ methodCode: x.methodCode, flow: x.flow, subMerchantId: x.subMerchantId ?? null });
+  }
+
+  protected async deactivationAction(d: Deactivation, action: 'cancel' | 'reactivate', code?: string) {
+    this.busy.set(d.id);
+    this.actionError.set(null);
+    this.codeError.set(null);
+    try {
+      const res = await this.api.deactivationAction(this.view()!.applicationId, d.id, action, code);
+      this.view.set(res.view);
+      this.codeAsk.set(false);
+      this.deactivationAsk.set(null);
+      this.flash(action === 'cancel' ? 'Deactivation cancelled' : `${this.methodOf(d.methodCode, d.flow)} reactivated`);
+    } catch (e) {
+      const err = toMerchantError(e) as { code?: string; message?: string; attemptsRemaining?: number };
+      const mfa = this.codeAsk() ? codeProblem(err.code, err.attemptsRemaining) : null;
+      if (err.code === 'MFA_CODE_REQUIRED') this.codeAsk.set(true);
+      else if (mfa) {
+        this.codeError.set(mfa);
+        this.codePrompt()?.reset();
+      } else {
+        this.codeAsk.set(false);
+        this.actionError.set(err.message ?? "We couldn't do that.");
+      }
+    } finally {
+      this.busy.set(null);
+    }
+  }
+
   protected canEdit(x: PricingVersion) {
     const v = this.view()!;
     return this.maker() && (x.status === 'active' || x.status === 'scheduled') && !v.versions.some((o) => o.methodCode === x.methodCode && o.flow === x.flow && (o.subMerchantId ?? null) === (x.subMerchantId ?? null) && o.status === 'pending_approval');
@@ -145,12 +236,13 @@ export class MerchantPricingDetail {
   }
 
   protected async cancel(x: PricingVersion) {
-    if (!confirm(`Cancel ${techniqueLabel(x.technique)} pricing for ${this.methodName(x)}?`)) return;
     this.busy.set(x.id);
     this.actionError.set(null);
     try {
-      const res = await this.api.cancelPricing(this.view()!.applicationId, x.id);
+      const res = await this.api.cancelPricing(this.view()!.applicationId, x.id, this.cancelReason().trim());
       this.view.set(res.view);
+      this.cancelAsk.set(false);
+      this.selected.set(null);
       this.flash(`Cancelled pricing v${x.version}`);
     } catch (e) {
       this.actionError.set(toMerchantError(e).message ?? "We couldn't cancel the pricing.");

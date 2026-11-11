@@ -14,6 +14,7 @@ import { REGISTRATION_COUNTRIES, countryName } from '../../core/merchants/onboar
 import { StaffRoleService } from '../../core/merchants/staff-role.service';
 import { isStrictValidation } from '../../core/merchants/validation-mode';
 import { Icon } from '../../shared/icon';
+import { SideSheet } from '../../shared/side-sheet';
 import { StatusBadge, fmtDate, fmtDateTime } from '../../shared/merchant-ui';
 
 interface ProfileDraft {
@@ -30,7 +31,7 @@ const STAGES = ['draft', 'pending_risk_review', ...READINESS_STATUSES];
 @Component({
   selector: 'app-merchant-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Icon, StatusBadge, PendingChanges, SubMerchantsPanel],
+  imports: [RouterLink, Icon, StatusBadge, PendingChanges, SubMerchantsPanel, SideSheet],
   templateUrl: './merchant-detail.html',
   styleUrl: './merchant-detail.scss',
 })
@@ -222,14 +223,19 @@ export class MerchantDetailPage {
     this.idReason.set('');
     this.idError.set(null);
     this.idIssues.set([]);
+    this.idDiscardAsk.set(false);
     this.identityForm.set(true);
   }
+
+  /** Inline "Discard this change request?" in the sheet footer. */
+  protected readonly idDiscardAsk = signal(false);
 
   protected closeIdentityForm() {
     const m = this.detail()!.merchant;
     const d = this.idDraft();
     const dirty = d.legalName !== m.legalName || d.registrationCountry !== m.registrationCountry || d.registrationNumber !== m.registrationNumber || this.idReason().trim() !== '';
-    if (dirty && !confirm('Discard this change request?')) return;
+    if (this.idDiscardAsk()) return this.idDiscardAsk.set(false);
+    if (dirty) return this.idDiscardAsk.set(true);
     this.identityForm.set(false);
   }
 

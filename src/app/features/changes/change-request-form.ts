@@ -31,6 +31,7 @@ const newId = () => `c${Date.now().toString(36)}${uid++}`;
   imports: [Icon, PhoneField],
   templateUrl: './change-request-form.html',
   styleUrl: './changes.scss',
+  host: { class: 'cr-sheet' },
 })
 export class ChangeRequestForm implements OnInit {
   private readonly api = inject(MerchantApi);
@@ -101,8 +102,8 @@ export class ChangeRequestForm implements OnInit {
 
   protected chooseSection(s: CountrySection) {
     if (s === this.section()) return;
-    if (this.dirty() && !confirm('Discard the changes to this section?')) return;
-    this.reset(s);
+    if (this.dirty()) this.askDiscard.set({ section: s });
+    else this.reset(s);
   }
 
   protected err(field: string) {
@@ -181,9 +182,25 @@ export class ChangeRequestForm implements OnInit {
     this.edit((d) => (d.documents = d.documents.filter((x) => x.id !== id)));
   }
 
+  /** Inline confirmation in the sheet footer: close the form, or switch to another section. */
+  protected readonly askDiscard = signal<{ section: CountrySection | null } | null>(null);
+
   protected cancel() {
-    if (this.dirty() && !confirm('Discard this change request?')) return;
-    this.closed.emit();
+    if (this.dirty()) this.askDiscard.set({ section: null });
+    else this.closed.emit();
+  }
+
+  /** Esc or a click outside the sheet. */
+  requestClose() {
+    if (this.askDiscard()) this.askDiscard.set(null);
+    else this.cancel();
+  }
+
+  protected discard() {
+    const q = this.askDiscard();
+    this.askDiscard.set(null);
+    if (q?.section) this.reset(q.section);
+    else this.closed.emit();
   }
 
   protected async submit() {

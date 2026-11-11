@@ -153,7 +153,9 @@
                 @if (role() === 'sales' && !changeForm()) {<button type="button" class="btn sm" (click)="changeForm.set(true)">Request a change</button>}
               </div>
               @if (changeForm()) {
-                <app-change-request-form [application]="a" [merchant]="m" (submitted)="onChangeSubmitted($event)" (closed)="changeForm.set(false)" />
+                <app-side-sheet size="editor" label="Request a change" (dismiss)="crf.requestClose()">
+                  <app-change-request-form #crf [application]="a" [merchant]="m" (submitted)="onChangeSubmitted($event)" (closed)="changeForm.set(false)" />
+                </app-side-sheet>
               }
               @if (d.changes.length) {
                 <app-pending-changes [changes]="d.changes" title="Change requests" (changed)="onChangeAction($event)" />

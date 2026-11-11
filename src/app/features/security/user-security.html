@@ -198,71 +198,74 @@
 
   <!-- ------------------------------------------------ Action dialog -->
   @if (action(); as a) {
-    <div class="modal-backdrop" (click)="close()">
-      <section class="modal panel-card" role="dialog" aria-modal="true" aria-labelledby="action-title" (click)="$event.stopPropagation()">
-        <div class="panel-head">
-          <div>
-            <h2 id="action-title">{{ a.kind === 'request' ? 'Open reset request' : a.kind === 'reset' ? 'Verify identity and reset MFA' : 'Waive security block' }}</h2>
-            <p>{{ a.user.name }} · {{ a.user.loginId }} · {{ a.user.accountName }}</p>
-          </div>
-          <button type="button" class="btn sm" (click)="close()" [disabled]="busy()">Cancel</button>
+    <app-side-sheet [label]="a.kind === 'request' ? 'Open reset request' : a.kind === 'reset' ? 'Verify identity and reset MFA' : 'Waive security block'" (dismiss)="close()">
+      <header class="sheet-head">
+        <div class="sheet-titles">
+          <p class="sheet-eyebrow">User security</p>
+          <h2 class="sheet-title" id="action-title">{{ a.kind === 'request' ? 'Open reset request' : a.kind === 'reset' ? 'Verify identity and reset MFA' : 'Waive security block' }}</h2>
+          <p class="sheet-sub">{{ a.user.name }} · {{ a.user.loginId }} · {{ a.user.accountName }}</p>
         </div>
-        <div class="panel-body">
-          @if (needsStepUp()) {
-            <p class="step">Confirm it’s you</p>
-            <p class="lead">Enter the current code from <strong>your own</strong> authenticator app. You’ll stay confirmed for 5 minutes.</p>
-            @if (actionErrorText(); as msg) {
-              <div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ msg }}</div></div>
-            }
-            <form class="code-form" (submit)="$event.preventDefault(); confirmIdentity()" novalidate>
-              <label class="f-label" for="stepup">Your authenticator code</label>
-              <div class="code-row">
-                <input id="stepup" class="input code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" (input)="onCode($any($event.target).value, $any($event.target))" />
-                <button type="submit" class="btn primary" [disabled]="code().length !== 6 || busy()">@if (busy()) {<span class="spinner" aria-hidden="true"></span>}Confirm</button>
-              </div>
-            </form>
-          } @else {
-            @switch (a.kind) {
-              @case ('request') {
-                <div class="alert compact" role="note"><app-icon name="info" /><div>Use this when the user has lost access to their authenticator app. A Security Admin must verify their identity before the reset happens.</div></div>
-                <div class="f-field"><label for="ref">Support ticket reference <span class="req">*</span></label><input id="ref" class="f-input" maxlength="64" placeholder="e.g. CS-48213" (input)="reference.set($any($event.target).value)" /></div>
-                <div class="f-field"><label for="reason">Reason <span class="req">*</span></label><textarea id="reason" class="f-input" maxlength="500" placeholder="What did the user report?" (input)="reason.set($any($event.target).value)"></textarea></div>
-              }
-              @case ('reset') {
-                <div class="alert warning compact" role="note">
-                  <app-icon name="alert-circle" />
-                  <div>
-                    <strong>Request {{ a.user.openRequestId }}</strong>
-                    Resetting deletes this user’s authenticator and signs them out everywhere. They must register a new authenticator at next sign-in, and we’ll email them.
-                  </div>
-                </div>
-                <div class="f-field">
-                  <label for="method">How was the user’s identity verified? <span class="req">*</span></label>
-                  <input id="method" class="f-input" maxlength="200" placeholder="Describe the check you completed" (input)="method.set($any($event.target).value)" />
-                  <p class="f-hint">Follow the approved identity-verification process. That process is still to be defined by Risk / Security (PRD open question 5).</p>
-                </div>
-                <label class="check"><input type="checkbox" [checked]="identityVerified()" (change)="identityVerified.set($any($event.target).checked)" /><span>I confirm I verified this user’s identity using the approved process</span></label>
-                <div class="f-field"><label for="reason">Reason <span class="req">*</span></label><textarea id="reason" class="f-input" maxlength="500" placeholder="Why is this reset needed?" (input)="reason.set($any($event.target).value)"></textarea></div>
-              }
-              @case ('waive') {
-                <div class="alert compact" role="note"><app-icon name="info" /><div>The user’s failed-attempt count is cleared and they can sign in again with their authenticator. The open Tech alert is resolved.</div></div>
-                <div class="f-field"><label for="reason">Reason <span class="req">*</span></label><textarea id="reason" class="f-input" maxlength="500" placeholder="Why is it safe to remove this block?" (input)="reason.set($any($event.target).value)"></textarea></div>
-              }
-            }
-            @if (actionErrorText(); as msg) {
-              <div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ msg }}</div></div>
-            }
-            <div class="actions" style="justify-content: flex-end">
+        <button type="button" class="sheet-close" (click)="close()" [disabled]="busy()" aria-label="Close"><app-icon name="x" [size]="18" /></button>
+      </header>
+      @if (needsStepUp()) {
+        <div class="sheet-body">
+          <p class="lead">Before you change anyone's security settings, confirm it's you with <strong>your own</strong> authenticator app. You'll stay confirmed for 5 minutes.</p>
+        </div>
+        <div class="sheet-confirm" role="group" aria-labelledby="stepup-t">
+          <h3 id="stepup-t">Confirm it’s you</h3>
+          <form class="code-form" (submit)="$event.preventDefault(); confirmIdentity()" novalidate>
+            <label class="f-label" for="stepup">Your authenticator code</label>
+            <input id="stepup" class="code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" (input)="onCode($any($event.target).value, $any($event.target))" />
+            @if (actionErrorText(); as msg) {<p class="f-error" role="alert">{{ msg }}</p>}
+            <div class="sheet-confirm-actions">
               <button type="button" class="btn" (click)="close()" [disabled]="busy()">Cancel</button>
-              <button type="button" class="btn" [class.danger]="a.kind === 'reset'" [class.primary]="a.kind !== 'reset'" [disabled]="!canSubmit()" (click)="submit()">
-                @if (busy()) {<span class="spinner" aria-hidden="true"></span>}
-                {{ a.kind === 'request' ? 'Open request' : a.kind === 'reset' ? 'Reset MFA' : 'Waive block' }}
-              </button>
+              <button type="submit" class="btn primary" [disabled]="code().length !== 6 || busy()">@if (busy()) {<span class="spinner" aria-hidden="true"></span>}Confirm</button>
             </div>
+          </form>
+        </div>
+      } @else {
+        <div class="sheet-body">
+          @switch (a.kind) {
+            @case ('request') {
+              <div class="alert compact" role="note"><app-icon name="info" /><div>Use this when the user has lost access to their authenticator app. A Security Admin must verify their identity before the reset happens.</div></div>
+              <div class="f-field"><label for="ref">Support ticket reference <span class="req">*</span></label><input id="ref" class="f-input" maxlength="64" placeholder="e.g. CS-48213" (input)="reference.set($any($event.target).value)" /></div>
+              <div class="f-field"><label for="reason">Reason <span class="req">*</span></label><textarea id="reason" class="f-input" maxlength="500" placeholder="What did the user report?" (input)="reason.set($any($event.target).value)"></textarea></div>
+            }
+            @case ('reset') {
+              <div class="alert warning compact" role="note">
+                <app-icon name="alert-circle" />
+                <div>
+                  <strong>Request {{ a.user.openRequestId }}</strong>
+                  Resetting deletes this user’s authenticator and signs them out everywhere. They must register a new authenticator at next sign-in, and we’ll email them.
+                </div>
+              </div>
+              <div class="f-field">
+                <label for="method">How was the user’s identity verified? <span class="req">*</span></label>
+                <input id="method" class="f-input" maxlength="200" placeholder="Describe the check you completed" (input)="method.set($any($event.target).value)" />
+                <p class="f-hint">Follow the approved identity-verification process. That process is still to be defined by Risk / Security (PRD open question 5).</p>
+              </div>
+              <label class="check"><input type="checkbox" [checked]="identityVerified()" (change)="identityVerified.set($any($event.target).checked)" /><span>I confirm I verified this user’s identity using the approved process</span></label>
+              <div class="f-field"><label for="reason">Reason <span class="req">*</span></label><textarea id="reason" class="f-input" maxlength="500" placeholder="Why is this reset needed?" (input)="reason.set($any($event.target).value)"></textarea></div>
+            }
+            @case ('waive') {
+              <div class="alert compact" role="note"><app-icon name="info" /><div>The user’s failed-attempt count is cleared and they can sign in again with their authenticator. The open Tech alert is resolved.</div></div>
+              <div class="f-field"><label for="reason">Reason <span class="req">*</span></label><textarea id="reason" class="f-input" maxlength="500" placeholder="Why is it safe to remove this block?" (input)="reason.set($any($event.target).value)"></textarea></div>
+            }
+          }
+          @if (actionErrorText(); as msg) {
+            <div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ msg }}</div></div>
           }
         </div>
-      </section>
-    </div>
+        <footer class="sheet-foot">
+          <span class="sheet-foot-note">Recorded in the audit log.</span>
+          <button type="button" class="btn" (click)="close()" [disabled]="busy()">Cancel</button>
+          <button type="button" class="btn" [class.danger]="a.kind === 'reset'" [class.primary]="a.kind !== 'reset'" [disabled]="!canSubmit()" (click)="submit()">
+            @if (busy()) {<span class="spinner" aria-hidden="true"></span>}
+            {{ a.kind === 'request' ? 'Open request' : a.kind === 'reset' ? 'Reset MFA' : 'Waive block' }}
+          </button>
+        </footer>
+      }
+    </app-side-sheet>
   }
 
   @if (toast(); as t) {

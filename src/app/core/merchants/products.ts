@@ -861,6 +861,8 @@ export interface SaveProductsRequest {
   revision: number;
   /** The user confirmed that switching products off cancels their pricing. */
   confirmCancelPricing?: boolean;
+  /** Authenticator code, when settlement changes (unless one was entered in the last 5 minutes). */
+  code?: string;
 }
 
 export interface DeactivateRequest {
@@ -878,6 +880,8 @@ export interface DeactivateRequest {
 
 export interface SetPricingRequest {
   draft: PricingDraft;
+  /** Authenticator code, for a USD fixed fee (unless one was entered in the last 5 minutes). */
+  code?: string;
   /** Editing: the active or scheduled version this replaces (technique and scope stay the same). */
   editOf?: string | null;
 }
@@ -957,6 +961,7 @@ export interface SubMerchantPricingRow {
   subMerchantName: string;
   methodCode: string | null;
   methodName: string | null;
+  flow?: ProductFlow | null;
   /** Where the pricing comes from; null = no pricing. */
   level: 'sub_merchant' | 'merchant' | null;
   /** The method is deactivated for this sub-merchant (or the whole MID): no pricing applies. */

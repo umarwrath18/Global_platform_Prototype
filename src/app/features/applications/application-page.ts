@@ -1,3 +1,4 @@
+import { SideSheet } from '../../shared/side-sheet';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, viewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { MerchantApi, MerchantClientError, toMerchantError } from '../../core/merchants/merchant-api.service';
@@ -41,7 +42,7 @@ const NEXT_OWNER: Partial<Record<ApplicationStatus, { role: StaffRole; text: str
 @Component({
   selector: 'app-application-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Icon, StatusBadge, StatusTracker, ApplicationForm, ApplicationSummaryView, ReviewPanel, ReadinessPanel, ProductPaymentConfig, ChangeRequestForm, PendingChanges],
+  imports: [RouterLink, Icon, StatusBadge, StatusTracker, ApplicationForm, ApplicationSummaryView, ReviewPanel, ReadinessPanel, ProductPaymentConfig, ChangeRequestForm, PendingChanges, SideSheet],
   templateUrl: './application-page.html',
   styleUrl: './application-page.scss',
 })

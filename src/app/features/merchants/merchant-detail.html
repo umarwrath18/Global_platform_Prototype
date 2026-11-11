@@ -66,26 +66,7 @@
             }
           </div>
           <div class="panel-body">
-            @if (identityForm()) {
-              <form class="id-form" (submit)="$event.preventDefault(); requestIdentity()" novalidate aria-labelledby="id-form-title">
-                <h3 id="id-form-title">Request a legal identity change</h3>
-                <p class="f-hint">Nothing changes until Risk approves. Risk sees the current and proposed values side by side.</p>
-                <div class="f-grid">
-                  <div class="f-field full"><label for="id-name">Legal name</label><input id="id-name" class="f-input" [value]="idDraft().legalName" (input)="setId('legalName', $any($event.target).value)" />@if (idIssue('identity.legalName'); as m) {<p class="f-error">{{ m }}</p>}</div>
-                  <div class="f-field"><label for="id-rc">Registration country</label>
-                    <select id="id-rc" class="f-input" (change)="setId('registrationCountry', $any($event.target).value)">
-                      @for (c of regCountries; track c.code) {<option [value]="c.code" [selected]="c.code === idDraft().registrationCountry">{{ c.name }}</option>}
-                    </select></div>
-                  <div class="f-field"><label for="id-rn">Registration number</label><input id="id-rn" class="f-input" [value]="idDraft().registrationNumber" (input)="setId('registrationNumber', $any($event.target).value)" />@if (idIssue('identity.registrationNumber'); as m) {<p class="f-error">{{ m }}</p>}</div>
-                  <div class="f-field full"><label for="id-reason">Reason <span class="req">*</span></label><textarea id="id-reason" class="f-input" rows="2" maxlength="500" [value]="idReason()" (input)="idReason.set($any($event.target).value)"></textarea><p class="f-hint">At least 10 characters.</p></div>
-                </div>
-                @if (idError(); as e) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
-                <div class="actions edit-actions">
-                  <button type="button" class="btn" (click)="closeIdentityForm()" [disabled]="idBusy()">Cancel</button>
-                  <button type="submit" class="btn primary" [disabled]="idBusy()">@if (idBusy()) {<span class="spinner" aria-hidden="true"></span>}Send to Risk</button>
-                </div>
-              </form>
-            } @else if (editing() && draft(); as p) {
+            @if (editing() && draft(); as p) {
               <form (submit)="$event.preventDefault(); saveProfile()" novalidate>
                 @if (saveError(); as msg) {
                   <div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ msg }}</div></div>
@@ -386,6 +367,47 @@
         </section>
       </div>
     }
+  }
+  @if (identityForm() && detail(); as d) {
+    <app-side-sheet size="editor" label="Request a legal identity change" (dismiss)="closeIdentityForm()">
+      <header class="sheet-head">
+        <div class="sheet-titles">
+          <p class="sheet-eyebrow">Change request</p>
+          <h2 class="sheet-title">Request a legal identity change</h2>
+          <p class="sheet-sub">{{ d.merchant.legalName }} · {{ d.merchant.id }}</p>
+        </div>
+        <button type="button" class="sheet-close" (click)="closeIdentityForm()" aria-label="Close"><app-icon name="x" [size]="18" /></button>
+      </header>
+      <form class="sheet-body id-sheet" id="id-form" (submit)="$event.preventDefault(); requestIdentity()" novalidate>
+        <p class="f-hint">Nothing changes until Risk approves. Risk sees the current and proposed values side by side.</p>
+        <div class="f-grid">
+          <div class="f-field full"><label for="id-name">Legal name</label><input id="id-name" class="f-input" [value]="idDraft().legalName" (input)="setId('legalName', $any($event.target).value)" />@if (idIssue('identity.legalName'); as m) {<p class="f-error">{{ m }}</p>}</div>
+          <div class="f-field"><label for="id-rc">Registration country</label>
+            <select id="id-rc" class="f-input" (change)="setId('registrationCountry', $any($event.target).value)">
+              @for (c of regCountries; track c.code) {<option [value]="c.code" [selected]="c.code === idDraft().registrationCountry">{{ c.name }}</option>}
+            </select></div>
+          <div class="f-field"><label for="id-rn">Registration number</label><input id="id-rn" class="f-input" [value]="idDraft().registrationNumber" (input)="setId('registrationNumber', $any($event.target).value)" />@if (idIssue('identity.registrationNumber'); as m) {<p class="f-error">{{ m }}</p>}</div>
+          <div class="f-field full"><label for="id-reason">Reason <span class="req">*</span></label><textarea id="id-reason" class="f-input" rows="3" maxlength="500" [value]="idReason()" (input)="idReason.set($any($event.target).value)"></textarea><p class="f-hint">At least 10 characters.</p></div>
+        </div>
+        @if (idError(); as e) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
+      </form>
+      @if (idDiscardAsk()) {
+        <div class="sheet-confirm" role="alertdialog" aria-labelledby="id-discard">
+          <h3 id="id-discard">Discard this change request?</h3>
+          <p>What you've entered will be lost.</p>
+          <div class="sheet-confirm-actions">
+            <button type="button" class="btn" (click)="idDiscardAsk.set(false)" autofocus>Keep editing</button>
+            <button type="button" class="btn danger" (click)="identityForm.set(false)">Discard</button>
+          </div>
+        </div>
+      } @else {
+        <footer class="sheet-foot">
+          <span class="sheet-foot-note">Risk reviews it on Approvals.</span>
+          <button type="button" class="btn" (click)="closeIdentityForm()" [disabled]="idBusy()">Cancel</button>
+          <button type="submit" form="id-form" class="btn primary" [disabled]="idBusy()">@if (idBusy()) {<span class="spinner" aria-hidden="true"></span>}Send to Risk</button>
+        </footer>
+      }
+    </app-side-sheet>
   }
   @if (toast(); as t) {
     <div class="p-toast" role="status"><app-icon name="check-circle" [size]="18" />{{ t }}</div>

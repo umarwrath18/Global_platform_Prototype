@@ -21,6 +21,7 @@ import {
 import { StaffRoleService } from '../../core/merchants/staff-role.service';
 import { DemoAuthenticatorService } from '../../shared/demo-authenticator';
 import { Icon } from '../../shared/icon';
+import { SideSheet } from '../../shared/side-sheet';
 import { fmtDateTime } from '../../shared/merchant-ui';
 import { CorridorSelect, CorridorService } from './corridor';
 import { MerchantPricingTabs } from './merchant-pricing-tabs';
@@ -46,7 +47,7 @@ const CHIPS: { key: Chip; label: string }[] = [
 @Component({
   selector: 'app-pricing-approvals',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, CorridorSelect, MerchantPricingTabs],
+  imports: [Icon, CorridorSelect, MerchantPricingTabs, SideSheet],
   templateUrl: './pricing-approvals.html',
   styleUrl: './pricing.scss',
 })
@@ -125,17 +126,31 @@ export class PricingApprovals {
     return `${pricingShort(i.version)}${sec ? ` · ${sec}` : ''}`;
   }
 
+  protected openDetail(item: PricingApprovalItem) {
+    this.dialog.set(null);
+    this.detail.set(item);
+  }
+
+  /** Approve / reject from a row or the sheet: the decision opens in the sheet's footer. */
   protected open(item: PricingApprovalItem, decision: 'approve' | 'reject', e?: Event) {
     e?.stopPropagation();
+    this.detail.set(item);
     this.dialog.set({ item, decision });
     this.reason.set('');
     this.code.set('');
     this.dialogError.set(null);
-    queueMicrotask(() => document.querySelector<HTMLElement>('.pa-modal textarea, .pa-modal input')?.focus());
+    setTimeout(() => document.querySelector<HTMLElement>('.sheet-confirm textarea, .sheet-confirm input')?.focus());
   }
 
   protected close() {
     if (!this.busy()) this.dialog.set(null);
+  }
+
+  /** Esc / backdrop / close: leave the decision first, then the sheet. */
+  protected dismissDetail() {
+    if (this.busy()) return;
+    if (this.dialog()) this.dialog.set(null);
+    else this.detail.set(null);
   }
 
   protected setCode(value: string, el: HTMLInputElement) {

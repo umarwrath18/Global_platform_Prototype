@@ -375,89 +375,119 @@
   margin: 12px 16px;
 }
 
-// Inline pricing editor
-.editor,
-.editor-done {
-  margin: 12px 16px 16px;
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--mobi-blue);
-  border-radius: var(--r-card);
-  background: var(--surface);
-}
-
-.editor-head {
+// Pricing editor, shown in a side sheet (shared/side-sheet.ts): header with the step bar,
+// scrolling body, footer that stays put. Controls are 44 px tall in sheets.
+:host(.editor-sheet) {
+  --h-control: 44px;
+  flex: 1;
+  min-height: 0;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 14px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border-soft);
-
-  h3 {
-    margin: 0;
-    font-size: 14px;
-  }
-
-  .btn {
-    margin-left: auto;
-  }
+  flex-direction: column;
 }
 
-.editor-title p {
-  margin: 2px 0 0;
-  font-size: 12px;
-  color: var(--text-muted);
+.editor-sheet-head {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 18px;
+  padding-bottom: 16px;
 }
 
-.step-bar {
+.editor-head-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.sheet-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text-subtle);
 
   li {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
   }
 
-  .n {
-    display: inline-grid;
-    place-items: center;
-    width: 18px;
-    height: 18px;
-    border: 1px solid var(--border-strong);
-    border-radius: 50%;
-    font-size: 11px;
+  .bar {
+    height: 4px;
+    border-radius: 4px;
+    background: var(--border);
+  }
+
+  .lbl {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .done {
+    color: var(--success);
+
+    .bar {
+      background: var(--mobi-green);
+    }
   }
 
   .current {
     color: var(--mobi-blue);
-    font-weight: 600;
 
-    .n {
-      border-color: var(--mobi-blue);
+    .bar {
       background: var(--mobi-blue);
-      color: #fff;
-    }
-  }
-
-  .done {
-    color: var(--text-muted);
-
-    .n {
-      border-color: var(--mobi-blue);
-      color: var(--mobi-blue);
     }
   }
 }
 
+.sheet-phase {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mobi-blue);
+}
+
+.f-affix {
+  position: relative;
+  display: flex;
+  align-items: center;
+
+  .f-input {
+    width: 100%;
+  }
+
+  .prefix,
+  .suffix {
+    position: absolute;
+    font-size: 14px;
+    color: var(--text-muted);
+    pointer-events: none;
+  }
+
+  .prefix {
+    left: 12px;
+  }
+
+  .suffix {
+    right: 12px;
+  }
+
+  .prefix + .f-input {
+    padding-left: 52px;
+  }
+
+  &:has(.suffix) .f-input {
+    padding-right: 32px;
+  }
+}
+
 .editor-body {
-  padding: 14px;
+  gap: 16px;
 }
 
 .f-row {
@@ -531,33 +561,27 @@
   }
 }
 
-.editor-foot {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 10px 14px;
-  border-top: 1px solid var(--border-soft);
-}
-
 .editor-done {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  border-left-color: var(--success);
-  font-size: 13px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 0;
 
-  app-icon {
+  .done-icon {
     color: var(--success);
   }
 
-  strong {
-    margin-right: 6px;
+  h3 {
+    margin: 4px 0 0;
+    font-size: 18px;
   }
 
-  .btn {
-    margin-left: auto;
+  p {
+    margin: 0;
+    font-size: 14px;
+    color: var(--text-muted);
+    line-height: 1.5;
   }
 }
 
@@ -577,13 +601,6 @@
   box-shadow: var(--shadow-pop);
 }
 
-.editor-body > * + * {
-  margin-top: 12px;
-}
-
-.editor-foot .spacer {
-  flex: 1;
-}
 
 .existing {
   margin-top: 4px;

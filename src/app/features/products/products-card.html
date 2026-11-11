@@ -65,14 +65,32 @@
       } @else {
         <p class="flow-empty">Switch on and save the product first.</p>
       }
-      <p class="f-hint">Settlement changes apply once saved and are recorded in the audit trail.</p>
+      <p class="f-hint">Settlement changes apply once saved and are recorded in the audit trail. Saving asks for your authenticator code.</p>
     </div>
 
     @if (!edit && v.productsMessage) {<p class="f-hint" role="note"><app-icon name="lock" [size]="13" /> {{ v.productsMessage }}</p>}
     @if (error(); as e) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
   </div>
 
-  @if (dirty()) {
+  @if (askOff(); as q) {
+    <div class="sheet-confirm" role="alertdialog" aria-labelledby="off-q">
+      <p id="off-q"><strong>{{ q }}</strong></p>
+      <div class="sheet-confirm-actions">
+        <button type="button" class="btn" (click)="askOff.set(null)" autofocus>Keep it on</button>
+        <button type="button" class="btn danger" (click)="confirmOff()" [disabled]="saving()">Switch off</button>
+      </div>
+    </div>
+  } @else if (codeAsk()) {
+    <app-code-prompt
+      title="Confirm the settlement change"
+      message="Settlement changes need a code from your authenticator app. You won't be asked again for 5 minutes."
+      confirmLabel="Save settlement"
+      [busy]="saving()"
+      [error]="codeError()"
+      (confirmed)="sendWithCode($event)"
+      (cancelled)="codeAsk.set(false)"
+    />
+  } @else if (dirty()) {
     <footer class="step-foot">
       <span class="foot-status"><span class="dot-unsaved" aria-hidden="true"></span>{{ footText() }}</span>
       <div class="foot-actions">
