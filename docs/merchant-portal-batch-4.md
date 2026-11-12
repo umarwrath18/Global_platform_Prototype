@@ -22,7 +22,7 @@ Status: **Built on sample data. Needs Mobi's transaction and balance APIs before
 | Merchant login | New user **`TANJUNG-MERCHANT`** (Farah Ismail, Tanjung Global Trading `GM-100101` / `GA-1001`), 2FA not set up yet. Plus **`LUMI-MERCHANT`** (Lumi Home Living `GM-100102`, no live countries, 2FA on) for isolation and empty-state testing. Password `Mobi@123`. |
 | Internal vs merchant users | A user record now has `portal: 'merchant'` + `merchantId`. All existing users stay internal and unchanged. |
 | Data | No transaction or balance source exists, so the simulated backend generates **sample data** (about 90 days, 1–4 a day). It covers only the merchant's live countries and switched-on PayIn methods, and every screen is tagged *Sample data · not live*. |
-| Statuses | Successful, Failed, Pending, Refunded. The Dashboard shows Total (all statuses), Successful and Failed. |
+| Statuses | **Updated in Transactions phase 1:** Pending, Processing, Successful, Failed, Expired (Refunded is no longer a status; see `transaction-management-phase-1.md`). The Dashboard shows Total (all statuses), Successful and Failed for pay-ins. |
 | Currency | One available-balance figure per currency (MYR, IDR, VND), never converted. Amounts show in their own currency. |
 | Date filters | Dashboard: Today, Last 7 days, Last 30 days. My Transactions: the same, plus a custom from–to date (up to 1 year). |
 
@@ -36,7 +36,7 @@ Status: **Built on sample data. Needs Mobi's transaction and balance APIs before
 
 Navigation is exactly **Dashboard** and **My Transactions**, plus the user menu (Account security, Sign out).
 No View as switcher, internal modules, filters, search or staff notifications.
-Status labels: Successful (green), Failed (red), Pending (amber), Refunded (blue).
+Status labels: Pending (grey), Processing (blue), Successful (green), Failed (red), Expired (amber) – the same in both apps.
 Nothing about hosts, providers or routing is shown.
 
 **CSV export.**
@@ -62,7 +62,7 @@ Proposed contract: `src/app/core/merchants/merchant-portal.ts`. The simulated ve
 
 | Endpoint | Returns | Notes |
 | --- | --- | --- |
-| `GET /api/merchant-portal/overview` | merchant `{id, name}`, `balances[] {currency, available}`, `asOf`, `paymentMethods[] {code, name, country}`, `sampleData` | Available balance must come from the ledger (after settlements, reserves, fees). The sample uses successful minus refunded amounts of the last 7 days, which is **not** a real balance. |
+| `GET /api/merchant-portal/overview` | merchant `{id, name}`, `balances[] {currency, available}`, `asOf`, `paymentMethods[] {code, name, country}`, `sampleData` | Available balance must come from the ledger (after settlements, reserves, fees). The sample uses the net of the last 7 days' successful pay-ins, which is **not** a real balance. |
 | `GET /api/merchant-portal/summary?range=today\|7d\|30d` | `{from, to, total, successful, failed}` | Ranges in the merchant's local time zone (open question). |
 | `GET /api/merchant-portal/transactions?range&from&to&method&status&q&page&pageSize` | `{items[], total, page, pageSize}` | Payment-method level only; newest first; `pageSize` 10/25/50/100. |
 | `GET /api/merchant-portal/transactions/export?…same filters` | `{filename, csv, rows}` | Could also be an async export job for large volumes. |

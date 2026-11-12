@@ -8,6 +8,7 @@ import { MccCatalogueServer } from './mcc-catalogue-server';
 import { MCC_STANDARD_LIST, MCC_STANDARD_NAME, MCC_STANDARD_VERSION } from '../merchants/mcc-standard';
 import { MerchantPortalServer } from './merchant-portal-server';
 import { MerchantServer } from './merchant-server';
+import { TransactionServer } from './transaction-server';
 import { isStrictValidation, setStrictValidation } from '../merchants/validation-mode';
 
 /**
@@ -35,8 +36,11 @@ export class MockBackend {
 
   readonly merchants: MerchantServer = new MerchantServer({ storage: localStorage, auth: this.server, strictValidation: isStrictValidation, countryConfig: this.countryConfig, mcc: this.mcc, fixedTeams: true });
 
-  /** Merchant-facing portal (sample transactions and balance; see merchant-portal-server.ts). */
-  readonly merchantPortal = new MerchantPortalServer({ storage: localStorage, auth: this.server, profile: (id) => this.merchants.portalProfile(id) });
+  /** Transactions (sample records for live MIDs; see transaction-server.ts). Shared by both apps. */
+  readonly transactions = new TransactionServer({ storage: localStorage, auth: this.server, sources: () => this.merchants.transactionSources() });
+
+  /** Merchant-facing portal (Dashboard, My Transactions; see merchant-portal-server.ts). */
+  readonly merchantPortal = new MerchantPortalServer({ storage: localStorage, auth: this.server, profile: (id) => this.merchants.portalProfile(id), transactions: this.transactions });
 
   constructor() {
     (window as any).mobiDemo = {
@@ -54,7 +58,10 @@ export class MockBackend {
         await this.merchants.resetAll();
         await this.countryConfig.resetAll();
         this.merchantPortal.resetAll();
+        this.transactions.resetAll();
       },
+      // Transactions: the audit log (views, exports, notes, flags), newest first.
+      transactionAudit: () => console.table(this.transactions.auditLog().map((e) => ({ ...e, at: new Date(e.at).toISOString() }))),
       resetMerchants: () => this.merchants.resetAll(),
       // Merchant data upgrade (schema revision 3): status, flagged records, and a manual restore.
       merchantDataReport: () => this.merchants.dataReport(),
@@ -83,6 +90,8 @@ export const mockBackendInterceptor: HttpInterceptorFn = (req, next) => {
     const token = req.headers.get('Authorization')?.replace(/^Bearer /, '') ?? null;
     const handle = MerchantPortalServer.handles(req.url)
       ? () => backend.merchantPortal.handle(req.method, req.urlWithParams, token)
+      : TransactionServer.handles(req.url)
+      ? () => backend.transactions.handle(req.method, req.urlWithParams, req.body, token, req.headers.get('X-Demo-Role'))
       : MerchantServer.handles(req.url)
       ? () => backend.merchants.handle(req.method, req.urlWithParams, req.body, token, req.headers.get('X-Demo-Role'))
       : MccCatalogueServer.handles(req.url)

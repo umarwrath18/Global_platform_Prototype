@@ -6,6 +6,7 @@ Angular 21 prototype of the Global Platform:
 - **Batch 4:** Merchant Portal MVP for merchant users: Dashboard (available balance, transaction summary) and My Transactions (filters, CSV export).
 - **Batch 3:** Two-factor authentication (Merchant Portal MFA, Phase 1: authenticator app / TOTP).
 - **Batch 2:** Merchant Management & Onboarding (Global Merchants, country applications, country expansion, Risk review, simulated CS readiness and go-live, notifications).
+- **Transaction Management, phase 1:** Transactions (PayIn and Payout lists, details, filters, export, notes and investigation flags) in the Global Platform, and the same records in the Merchant Portal's My Transactions.
 
 Other MVP modules are intentionally not built yet.
 
@@ -92,10 +93,14 @@ Open the **Merchant Portal app** (http://localhost:4201 locally) and sign in as 
 (after 2FA). There are three screens:
 - **Dashboard:** available balance (one figure per currency the merchant trades in, never converted),
   and total, successful and failed transaction counts for Today, Last 7 days or Last 30 days.
-- **My Transactions:** invoice ID, transaction ID, payment method, date and time, amount, currency and
-  status, with filters for date range (presets or custom), payment method, status and transaction ID.
+- **My Transactions:** **PayIn | Payout** tabs and payment type chips; date and time, invoice ID,
+  transaction ID, sub-merchant (when the merchant has live ones), payment method, amount, **Fee**,
+  **Net amount** (payouts: Total debited), currency and status (Pending, Processing, Successful,
+  Failed, Expired). Filters: search (Transaction ID or Invoice ID), date range, country, sub-merchant,
+  payment method, status; a summary of gross volume, fees and net per currency. A row opens the
+  details in a side sheet (payment path, fees, customer, bank reference, settlement, IPN, timeline).
   **Export CSV** downloads every record matching the filters, as
-  `<merchant-name>-transactions-YYYY-MM-DD.csv`.
+  `<merchant-name>-<flow>-transactions-YYYY-MM-DD.csv`.
 - **Pricing & settings** (read only): for each live country, the pricing in effect per product, any
   approved change that starts later, the settlement cycle, the IPN callback URL, limits and the MID.
   `NUSANTARA-MERCHANT` shows the most data.
@@ -104,7 +109,7 @@ Merchant users never see internal modules, the View as switcher, filters or staf
 internal API refuses them, and the merchant API refuses internal users. A merchant's data always comes from
 its session, never from the request. **There is no transaction or balance service yet:** the figures are
 generated sample data for the merchant's live countries and switched-on payment methods, marked
-*Sample data · not live*. See [`docs/merchant-portal-batch-4.md`](docs/merchant-portal-batch-4.md) for the
+*Sample data · not live*. They are the same records the Global Platform's Transactions page shows. See [`docs/merchant-portal-batch-4.md`](docs/merchant-portal-batch-4.md) for the
 API contracts the real backend needs to provide.
 
 ### MFA (Batch 3)
@@ -302,6 +307,23 @@ rule and the Penang Outlet inherits the Master Merchant's. See
 Not built: settlement cycles per sub-merchant (MID only, by decision), Slack alerts (pipeline), host
 management.
 
+**Transactions (Transaction Management phase 1).** Sidebar → **Transactions** (under Dashboard) for
+Sales / Ops, Risk, CS, FinOps and Mobi Support; Security Admin has no access. Built from
+[`docs/transaction-management-phase-1.md`](docs/transaction-management-phase-1.md):
+- **PayIn | Payout** tabs (separate APIs and tables) and **Payment type** chips (Online Banking,
+  E-Wallets, QR, Cards, Virtual Account, Over the Counter, Bank Transfer; payouts: Bank Transfer,
+  E-Wallet). A chosen type adds its own columns.
+- Search by exact Transaction ID or Invoice ID (ignores other filters), date range (default Last 24
+  hours), country, merchant, sub-merchant, payment method, **Provider**, status, and More filters
+  (currency, amount, flags). Filters stay in the URL. Summary per status and currency; Export CSV.
+- Details in a side sheet: the **payment path** (Customer → Merchant → Mobi → Provider → Bank) and the
+  same sections, plus Timeline, IPN, Notes and Audit tabs. **Flag for investigation** / Clear flag and
+  **Add note**. Fees only for Sales / Ops, CS and FinOps; IP address and device only for Risk and Mobi
+  Support; customer email and phone masked for staff.
+- Records are **sample data** generated from each live MID's real setup (switched-on products, live
+  sub-merchants, pricing in effect), so fees follow Merchant Pricing. Recent ones move from Pending to
+  their outcome as time passes. Requery, refunds and payout retry come later.
+
 **Changes after Risk approval.** Once Risk has approved a merchant, anything Risk reviewed changes
 only through a change request that Risk approves: the legal identity (merchant page → "Request
 identity change") and, per country, business details, bank / settlement account, transaction settings,
@@ -358,7 +380,8 @@ mobiDemo.enableUser('123')
 mobiDemo.expireSessions()            // simulate 30-minute idle timeout
 mobiDemo.clearAuthenticator('123')   // forget a user's authenticator so 2FA setup can be tested again
 mobiDemo.audit()                     // print audit events
-mobiDemo.reset()                     // restore all demo data (auth, merchants, country configuration)
+mobiDemo.transactionAudit()          // print the transactions audit log (views, exports, notes, flags)
+mobiDemo.reset()                     // restore all demo data (auth, merchants, country configuration, transaction notes and flags)
 mobiDemo.resetMerchants()            // restore only the merchant data
 mobiDemo.resetCountryConfig()        // restore the default country configuration
 mobiDemo.merchantDataReport()        // upgrade status, backup, and records flagged for review
@@ -393,6 +416,7 @@ adding `PORTAL`, add it and choose **Redeploy**.
 
 - [`docs/testing-guide.md`](docs/testing-guide.md): demo logins, teams and a step-by-step test walkthrough.
 - [`docs/pricing-engine-part-c.md`](docs/pricing-engine-part-c.md): Master Merchant, §3.1 methods, deactivation, MFA re-authentication, unusual-change alerts and side sheets.
+- [`docs/transaction-management-phase-1.md`](docs/transaction-management-phase-1.md): Transactions phase 1 – decisions, data model (Option A), screens, labels and API.
 - [`docs/transaction-management-requirements.md`](docs/transaction-management-requirements.md): Transaction Management requirements (draft for review).
 - [`docs/authentication-batch-1.md`](docs/authentication-batch-1.md): login workflows, rules, security controls, QA cases and open decisions.
 - [`docs/merchant-onboarding-batch-2.md`](docs/merchant-onboarding-batch-2.md): merchant data model, workflows, statuses, demo data, QA cases, limitations and open questions.

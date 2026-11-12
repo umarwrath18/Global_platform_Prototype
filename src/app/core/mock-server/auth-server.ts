@@ -1125,14 +1125,27 @@ export class AuthServer {
   async authenticate(
     token: string | null,
     portal: 'internal' | 'merchant' = 'internal',
-  ): Promise<{ ok: true; caller: { userId: string; name: string; accountId: string; merchantId: string | null; team: StaffTeam | null } } | { ok: false; response: ServerResponse }> {
+  ): Promise<{ ok: true; caller: { userId: string; name: string; accountId: string; merchantId: string | null; team: StaffTeam | null; countries: string[]; readOnly: boolean } } | { ok: false; response: ServerResponse }> {
     await this.ensureSeeded();
     const db = this.load();
     try {
       const { user } = await this.requireSession(db, token, true);
       const userPortal = user.portal === 'merchant' ? 'merchant' : 'internal';
       if (userPortal !== portal || (portal === 'merchant' && !user.merchantId)) fail(403, 'ROLE_NOT_PERMITTED');
-      return { ok: true, caller: { userId: user.id, name: user.name, accountId: user.accountId, merchantId: user.merchantId ?? null, team: user.portal === 'merchant' ? null : (user.team ?? 'sales') } };
+      const account = db.accounts.find((a) => a.id === user.accountId);
+      return {
+        ok: true,
+        caller: {
+          userId: user.id,
+          name: user.name,
+          accountId: user.accountId,
+          merchantId: user.merchantId ?? null,
+          team: user.portal === 'merchant' ? null : (user.team ?? 'sales'),
+          // Countries the login can access (active on its account), and whether it is a read-only viewer.
+          countries: (account?.countries ?? []).filter((c) => c.status === 'active').map((c) => c.code),
+          readOnly: user.roleId === 'role-viewer',
+        },
+      };
     } catch (e) {
       if (e instanceof HttpError) return { ok: false, response: { status: e.status, body: e.body } };
       throw e;

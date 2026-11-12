@@ -107,6 +107,28 @@ export interface MerchantPortalProfile {
   settings: MerchantSettingsView;
 }
 
+/** A live MID, as the transaction service sees it (see transactionSources()). */
+export interface TxnSource {
+  gmid: string;
+  merchantName: string;
+  suspended: boolean;
+  applicationId: string;
+  country: string;
+  countryName: string;
+  currency: string;
+  mid: string;
+  midIssuedAt: number;
+  /** Demo or migrated MIDs get the full sample history; a MID issued in a test gets transactions from its go-live. */
+  midDemo: boolean;
+  ipnCallbackUrl: string;
+  minTransactionValue: number | null;
+  products: { methodCode: string; methodName: string; flow: 'payin' | 'payout' }[];
+  settlement: Record<string, string>;
+  versions: PricingVersion[];
+  deactivations: NonNullable<ProductConfig['deactivations']>;
+  subMerchants: { id: string; name: string; mid: string; issuedAt: number; demo: boolean }[];
+}
+
 export interface MerchantDataReport {
   schemaRevision: number | null;
   backupKey: string;
@@ -1368,6 +1390,53 @@ export class MerchantServer {
         }),
     };
     return { id: merchant.id, legalName: merchant.legalName, countries, settings };
+  }
+
+  // ------------------------------------------------ transactions (read only)
+
+  /**
+   * Live MIDs with what the transaction service needs to know about them: merchant, sub-merchants,
+   * products switched on, pricing versions, settlement and transaction settings. Read by the
+   * sample transaction data (transaction-data.ts); the real gateway keeps its own copy.
+   */
+  transactionSources(): TxnSource[] {
+    this.ensureSeeded();
+    const db = this.load();
+    const out: TxnSource[] = [];
+    for (const app of db.applications.filter((a) => a.status === 'operational')) {
+      const merchant = db.merchants.find((m) => m.id === app.merchantId);
+      const mid = (db.mids ?? []).find((m) => m.applicationId === app.id);
+      const cfg = ONBOARDING_COUNTRIES[app.country];
+      if (!merchant || !mid || !cfg) continue;
+      const state = productState(db, app);
+      const subMerchants = (db.entities ?? [])
+        .filter((e) => e.gmid === merchant.id && e.kind === 'sub' && e.country === app.country && e.status === 'live')
+        .map((e) => ({ e, mid: (db.mids ?? []).find((m) => m.entityId === e.id) }))
+        .filter((x) => !!x.mid)
+        .map(({ e, mid: sm }) => ({ id: e.id, name: e.displayName || e.legalEntity?.legalName || e.id, mid: sm!.mid, issuedAt: sm!.issuedAt, demo: sm!.demo || sm!.source === 'migrated' }));
+      out.push({
+        gmid: merchant.id,
+        merchantName: merchant.legalName,
+        suspended: (merchant.lifecycleStatus ?? 'active') === 'suspended',
+        applicationId: app.id,
+        country: app.country,
+        countryName: cfg.name,
+        currency: cfg.currency,
+        mid: mid.mid,
+        midIssuedAt: mid.issuedAt,
+        midDemo: mid.demo || mid.source === 'migrated',
+        ipnCallbackUrl: app.data.transaction.ipnCallbackUrl,
+        minTransactionValue: app.data.transaction.minTransactionValue,
+        products: state.config.products
+          .filter((p) => p.enabled)
+          .map((p) => ({ methodCode: p.methodCode, methodName: state.methods.find((m) => m.code === p.methodCode)?.name ?? p.methodCode, flow: p.flow })),
+        settlement: { ...state.config.settlement },
+        versions: state.versions,
+        deactivations: state.config.deactivations ?? [],
+        subMerchants,
+      });
+    }
+    return out;
   }
 
   // ---------------------------------------------------------------- storage

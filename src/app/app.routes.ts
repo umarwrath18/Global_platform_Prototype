@@ -41,6 +41,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/dashboard/dashboard').then((m) => m.Dashboard),
       },
       {
+        path: 'transactions',
+        title: 'Transactions · Mobi Global Platform',
+        loadComponent: () => import('./features/transactions/transactions-page').then((m) => m.TransactionsPage),
+      },
+      {
         path: 'merchants',
         title: 'Merchants · Mobi Global Platform',
         loadComponent: () => import('./features/merchants/merchant-list').then((m) => m.MerchantList),

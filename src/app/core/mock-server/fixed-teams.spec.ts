@@ -4,6 +4,7 @@ import { StaffRole } from '../merchants/merchant-models';
 import { AuthServer } from './auth-server';
 import { MerchantPortalServer } from './merchant-portal-server';
 import { MerchantDb, MerchantServer } from './merchant-server';
+import { TransactionServer } from './transaction-server';
 import { FlakyStorage } from './testing/merchant-test-data';
 import { signIn } from './testing/sign-in';
 
@@ -92,7 +93,8 @@ describe('Fixed teams, IPN after go-live and the Merchant Portal settings', () =
   });
 
   it('shows the merchant its pricing, settlement and IPN read-only in the Merchant Portal', async () => {
-    const portal = new MerchantPortalServer({ storage, auth, profile: (id) => server.portalProfile(id), now: () => now });
+    const transactions = new TransactionServer({ storage, auth, sources: () => server.transactionSources(), now: () => now });
+    const portal = new MerchantPortalServer({ storage, auth, profile: (id) => server.portalProfile(id), transactions, now: () => now });
     const res = await portal.handle('GET', '/api/merchant-portal/settings', await as('NUSANTARA-MERCHANT'));
     expect(res.status).toBe(200);
     const view = res.body as MerchantSettingsView;

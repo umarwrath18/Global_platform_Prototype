@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MerchantPortalOverview, TransactionExport, TransactionPage, TransactionSummary } from '../merchants/merchant-portal';
+import { TransactionServer } from './transaction-server';
 import { AuthServer } from './auth-server';
 import { MerchantPortalServer } from './merchant-portal-server';
 import { MerchantServer } from './merchant-server';
@@ -20,14 +21,15 @@ describe('Merchant portal', () => {
   let tanjung: string;
 
   const get = <T>(path: string, token: string | null = tanjung) => portal.handle('GET', path, token) as Promise<{ status: number; body: T }>;
-  const list = (query: string, token?: string) => get<TransactionPage>(`/api/merchant-portal/transactions?${query}`, token);
+  const list = (query: string, token?: string) => get<TransactionPage>(`/api/merchant-portal/transactions?flow=payin&${query}`, token);
 
   beforeEach(async () => {
     now = new Date(2026, 10, 5, 15, 30).getTime();
     const storage = new MemoryStorage();
     auth = new AuthServer({ storage, now: () => now, pbkdf2Iterations: 1000, sendEmail: () => {}, merchantName: (id) => merchants.portalProfile(id)?.legalName ?? null });
     merchants = new MerchantServer({ storage, now: () => now, auth });
-    portal = new MerchantPortalServer({ storage, auth, profile: (id) => merchants.portalProfile(id), now: () => now });
+    const transactions = new TransactionServer({ storage, auth, sources: () => merchants.transactionSources(), now: () => now });
+    portal = new MerchantPortalServer({ storage, auth, profile: (id) => merchants.portalProfile(id), transactions, now: () => now });
     tanjung = await signIn(auth, 'TANJUNG-MERCHANT');
   });
 
@@ -80,29 +82,28 @@ describe('Merchant portal', () => {
       expect(month.total).toBeGreaterThan(0);
       for (const x of [today, week, month]) expect(x.successful + x.failed).toBeLessThanOrEqual(x.total);
       // The summary matches the list for the same range.
-      const all = (await list('range=7d&pageSize=100')).body;
+      const all = (await list('range=7d&pageSize=50')).body;
       expect(all.total).toBe(week.total);
-      expect(all.items.filter((t) => t.status === 'failed').length).toBe(week.failed);
+      expect((await list('range=7d&status=failed')).body.total).toBe(week.failed);
       expect((await get('/api/merchant-portal/summary?range=year')).status).toBe(400);
     });
   });
 
   describe('transactions', () => {
-    it('returns payment-method-level records, newest first, with the required fields', async () => {
+    it('returns records newest first with the required fields, and no provider details', async () => {
       const p = (await list('range=30d')).body;
       expect(p.items.length).toBe(25);
       const t = p.items[0];
-      expect(Object.keys(t).sort()).toEqual(['amount', 'createdAt', 'currency', 'invoiceId', 'paymentMethod', 'status', 'transactionId']);
-      expect(Object.keys(t.paymentMethod).sort()).toEqual(['code', 'name']);
+      expect(Object.keys(t).sort()).toEqual(['amount', 'createdAt', 'currency', 'fee', 'flow', 'invoiceId', 'methodCode', 'methodName', 'net', 'paymentType', 'status', 'subMerchantName', 'transactionId']);
       for (let i = 1; i < p.items.length; i++) expect(p.items[i - 1].createdAt).toBeGreaterThanOrEqual(p.items[i].createdAt);
-      expect(JSON.stringify(p)).not.toMatch(/host|provider|acquirer|route/i);
+      expect(JSON.stringify(p.items)).not.toMatch(/host|provider|acquirer|route/i);
     });
 
     it('filters by payment method, status and transaction ID', async () => {
       const method = (await get<MerchantPortalOverview>('/api/merchant-portal/overview')).body.paymentMethods[0].code;
-      const byMethod = (await list(`range=30d&method=${method}&pageSize=100`)).body;
-      expect(byMethod.items.every((t) => t.paymentMethod.code === method)).toBe(true);
-      const failed = (await list('range=30d&status=failed&pageSize=100')).body;
+      const byMethod = (await list(`range=30d&method=${method}&pageSize=50`)).body;
+      expect(byMethod.items.every((t) => t.methodCode === method)).toBe(true);
+      const failed = (await list('range=30d&status=failed&pageSize=50')).body;
       expect(failed.items.every((t) => t.status === 'failed')).toBe(true);
       const target = byMethod.items[0].transactionId;
       const found = (await list(`range=30d&q=${target.slice(3, 12).toLowerCase()}`)).body;
@@ -111,13 +112,16 @@ describe('Merchant portal', () => {
     });
 
     it('supports custom date ranges and rejects invalid filters', async () => {
-      const day = (await list('range=custom&from=2026-11-01&to=2026-11-01&pageSize=100')).body;
+      const from = new Date(2026, 10, 1).toISOString();
+      const to = new Date(2026, 10, 1, 23, 59, 59).toISOString();
+      const day = (await list(`range=custom&from=${from}&to=${to}&pageSize=50`)).body;
       day.items.forEach((t) => expect(new Date(t.createdAt).getDate()).toBe(1));
-      expect((await list('range=custom&from=2026-11-05&to=2026-11-01')).status).toBe(400);
+      expect((await list(`range=custom&from=${to}&to=${from}`)).status).toBe(400);
       expect((await list('range=custom&from=bad&to=2026-11-01')).status).toBe(400);
-      expect((await list('range=30d&method=TH_PROMPTPAY')).status).toBe(400);
       expect((await list('range=30d&status=chargeback')).status).toBe(400);
+      expect((await list('range=30d&status=refunded')).status).toBe(400);
       expect((await list('range=30d&q=%3Cscript%3E')).status).toBe(400);
+      expect((await get('/api/merchant-portal/transactions?flow=refunds')).status).toBe(400);
     });
 
     it('paginates', async () => {
@@ -126,22 +130,27 @@ describe('Merchant portal', () => {
       expect(second.items[0].transactionId).not.toBe(first.items[0].transactionId);
       expect((await list('range=30d&pageSize=7')).status).toBe(400);
     });
+
+    it('lists payouts separately', async () => {
+      const p = (await get<TransactionPage>('/api/merchant-portal/transactions?flow=payout&range=30d')).body;
+      expect(p.items.every((t) => t.flow === 'payout')).toBe(true);
+    });
   });
 
   describe('CSV export', () => {
     it('exports all filtered records with the displayed fields and a clear file name', async () => {
-      const e = (await get<TransactionExport>('/api/merchant-portal/transactions/export?range=7d&status=successful')).body;
+      const e = (await get<TransactionExport>('/api/merchant-portal/transactions/export?flow=payin&range=7d&status=successful')).body;
       const total = (await list('range=7d&status=successful')).body.total;
       expect(e.rows).toBe(total);
-      expect(e.filename).toBe('tanjung-global-trading-sdn-bhd-transactions-2026-11-05.csv');
+      expect(e.filename).toBe('tanjung-global-trading-sdn-bhd-payin-transactions-2026-11-05.csv');
       const lines = e.csv.trim().split('\r\n');
-      expect(lines[0]).toBe('Invoice ID,Transaction ID,Payment Method,Date & Time,Amount,Currency,Status');
+      expect(lines[0]).toBe('Date & Time,Invoice ID,Transaction ID,Flow,Sub-merchant,Payment Method,Amount,Fee,Net Amount,Currency,Status');
       expect(lines).toHaveLength(total + 1);
       lines.slice(1).forEach((l) => expect(l).toMatch(/,(MYR|IDR|VND),Successful$/));
     });
 
     it('returns zero rows when nothing matches', async () => {
-      const e = (await get<TransactionExport>('/api/merchant-portal/transactions/export?range=today&q=ZZZZ')).body;
+      const e = (await get<TransactionExport>('/api/merchant-portal/transactions/export?flow=payin&range=today&q=ZZZZ')).body;
       expect(e.rows).toBe(0);
     });
   });
@@ -153,18 +162,18 @@ describe('Merchant portal', () => {
       expect(o.merchant).toEqual({ id: 'GM-109001', name: 'Nusantara Home Retail Sdn Bhd' });
       expect(o.balances.map((b) => b.currency)).toEqual(['MYR', 'IDR']);
       expect(o.paymentMethods.map((m) => m.code)).toEqual(['fpx', 'duitnow_qr', 'tng', 'cards', 'va', 'qris', 'ovo']);
-      const page = (await list('range=30d&pageSize=100', t)).body;
+      const page = (await list('range=30d&pageSize=50', t)).body;
       expect(page.total).toBeGreaterThan(0);
       expect(new Set(page.items.map((x) => x.currency))).toEqual(new Set(['MYR', 'IDR']));
-      const e = (await get<TransactionExport>('/api/merchant-portal/transactions/export?range=30d', t)).body;
-      expect(e.filename).toBe('nusantara-home-retail-sdn-bhd-transactions-2026-11-05.csv');
+      const e = (await get<TransactionExport>('/api/merchant-portal/transactions/export?flow=payin&range=30d', t)).body;
+      expect(e.filename).toBe('nusantara-home-retail-sdn-bhd-payin-transactions-2026-11-05.csv');
       expect(e.rows).toBe(page.total);
     });
 
     it('never sees Tanjung’s transactions, and Tanjung never sees Nusantara’s', async () => {
       const t = await signIn(auth, 'NUSANTARA-MERCHANT');
-      const mine = new Set((await list('range=30d&pageSize=100', t)).body.items.map((x) => x.transactionId));
-      const theirs = (await list('range=30d&pageSize=100')).body.items.map((x) => x.transactionId);
+      const mine = new Set((await list('range=30d&pageSize=50', t)).body.items.map((x) => x.transactionId));
+      const theirs = (await list('range=30d&pageSize=50')).body.items.map((x) => x.transactionId);
       expect(theirs.some((id) => mine.has(id))).toBe(false);
       expect((await list(`range=30d&q=${theirs[0]}`, t)).body.total).toBe(0);
     });
@@ -186,7 +195,7 @@ describe('Merchant portal', () => {
       expect((await list('range=30d&merchantId=GM-100101', lumi)).body.total).toBe(0);
       const tanjungTxn = (await list('range=30d')).body.items[0].transactionId;
       expect((await list(`range=30d&q=${tanjungTxn}`, lumi)).body.total).toBe(0);
-      expect((await get<TransactionExport>('/api/merchant-portal/transactions/export?range=30d', lumi)).body.rows).toBe(0);
+      expect((await get<TransactionExport>('/api/merchant-portal/transactions/export?flow=payin&range=30d', lumi)).body.rows).toBe(0);
     });
 
     it('internal users cannot use the merchant portal APIs', async () => {

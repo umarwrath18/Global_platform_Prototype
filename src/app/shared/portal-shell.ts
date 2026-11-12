@@ -26,6 +26,7 @@ interface NavItem {
 /** Modules built so far. */
 const NAV: NavItem[] = [
   { label: 'Dashboard', icon: 'grid', link: '/dashboard' },
+  { label: 'Transactions', icon: 'swap', link: '/transactions' },
   { label: 'Merchants', icon: 'store', link: '/merchants' },
   { label: 'Applications', icon: 'file', link: '/applications' },
   { label: 'Notifications', icon: 'bell', link: '/notifications' },
@@ -33,7 +34,14 @@ const NAV: NavItem[] = [
   { label: 'Merchant Pricing', icon: 'card', link: '/merchant-pricing' },
 ];
 
-/** What Mobi Support and Security Admin see: they have no merchant permissions. */
+/** What Mobi Support sees: no merchant permissions, but Transactions (view, notes and flags) to answer queries. */
+const SUPPORT_NAV: NavItem[] = [
+  { label: 'Dashboard', icon: 'grid', link: '/dashboard' },
+  { label: 'Transactions', icon: 'swap', link: '/transactions' },
+  { label: 'User security', icon: 'shield', link: '/security/users' },
+];
+
+/** What Security Admin sees: no merchant or transaction permissions. */
 const SECURITY_NAV: NavItem[] = [
   { label: 'Dashboard', icon: 'grid', link: '/dashboard' },
   { label: 'User security', icon: 'shield', link: '/security/users' },
@@ -44,7 +52,6 @@ const LATER: NavItem[] = [
   { label: 'Pay-ins', icon: 'arrow-down' },
   { label: 'Payouts', icon: 'arrow-up' },
   { label: 'Settlements', icon: 'settle' },
-  { label: 'Transactions', icon: 'swap' },
   { label: 'Payment Methods', icon: 'card' },
   { label: 'Hosts & Routing', icon: 'route' },
   { label: 'Reports', icon: 'bar-chart' },
@@ -86,7 +93,7 @@ export class PortalShell {
   private readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
 
   protected readonly session = this.auth.session;
-  protected readonly nav = computed(() => (this.roles.securityRole() ? SECURITY_NAV : NAV));
+  protected readonly nav = computed(() => (this.roles.securityRole() === 'support' ? SUPPORT_NAV : this.roles.securityRole() ? SECURITY_NAV : NAV));
   protected readonly later = LATER;
   protected readonly menuOpen = signal(false);
   protected readonly bellOpen = signal(false);
