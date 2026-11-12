@@ -8,7 +8,9 @@ import {
   nextSubscriptionCharge,
   periodText,
   pricingInEffect,
+  pricingDetails,
   pricingShort,
+  secondarySummary,
   PRICING_STATUS_LABEL,
   PRICING_STATUS_TONE,
   PricingVersion,
@@ -133,16 +135,47 @@ export class PricingPanel {
     this.changed.emit({ view: res.view, message: '' });
   }
 
-  /** Inline "Cancel … pricing?" under the table (instead of a browser dialog). */
+  /** Cancel opens the Pricing Detail side sheet with the confirmation inside it (as in Merchant Pricing). */
   protected readonly cancelAsk = signal<(PricingVersion & { method?: ProductMethod }) | null>(null);
+  protected readonly cancelReason = signal('');
   protected readonly cancelQuestion = (x: PricingVersion & { method?: ProductMethod }) => `Cancel ${techniqueLabel(x.technique)} pricing for ${x.method?.name ?? x.methodCode}?`;
+  protected readonly details = pricingDetails;
+  protected readonly secondary = (x: PricingVersion) => secondarySummary(x) || null;
+
+  protected openCancel(x: PricingVersion & { method?: ProductMethod }) {
+    this.error.set(null);
+    this.cancelReason.set('');
+    this.cancelAsk.set(x);
+  }
+
+  protected closeCancel() {
+    if (this.busy()) return;
+    this.cancelAsk.set(null);
+  }
+
+  /** The version this one replaces (edit), else the previous version in the same scope. */
+  protected previousOf(x: PricingVersion): PricingVersion | null {
+    const all = this.view().versions;
+    const byEdit = x.editOf ? all.find((o) => o.id === x.editOf) : undefined;
+    if (byEdit) return byEdit;
+    return all.filter((o) => o.id !== x.id && o.methodCode === x.methodCode && o.flow === x.flow && (o.subMerchantId ?? null) === (x.subMerchantId ?? null) && o.version < x.version).sort((a, b) => b.version - a.version)[0] ?? null;
+  }
+
+  protected activity(x: PricingVersion): { title: string; meta: string; waiting?: boolean; bad?: boolean }[] {
+    const when = (t: number) => new Date(t).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const out: { title: string; meta: string; waiting?: boolean; bad?: boolean }[] = [{ title: x.source === 'change' ? 'Submitted for approval' : 'Set during onboarding', meta: `${x.createdBy} · ${when(x.createdAt)}` }];
+    if (x.approvedBy && x.approvedAt) out.push({ title: 'Approved by FinOps', meta: `${x.approvedBy} · ${when(x.approvedAt)}` });
+    if (x.status === 'pending_approval') out.push({ title: 'Waiting for FinOps', meta: 'The current pricing stays in effect until FinOps decides.', waiting: true });
+    return out;
+  }
 
   protected async cancelVersion(x: PricingVersion & { method?: ProductMethod }) {
-    this.cancelAsk.set(null);
     this.busy.set(x.id);
     this.error.set(null);
     try {
-      const res = await this.api.cancelPricing(this.view().applicationId, x.id);
+      const res = await this.api.cancelPricing(this.view().applicationId, x.id, this.cancelReason().trim());
+      this.busy.set(null);
+      this.cancelAsk.set(null);
       this.changed.emit({ view: res.view, message: `Cancelled pricing v${x.version}` });
     } catch (e) {
       this.error.set(toMerchantError(e).message ?? "We couldn't cancel the pricing.");
