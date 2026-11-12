@@ -409,7 +409,11 @@ To create the Merchant Portal project:
 3. Open **Environment Variables**, add `PORTAL` with value `merchant` (all environments), then **Deploy**.
 4. Optional: **Settings → Domains** to add a custom domain, e.g. `merchant.mobi.xyz`.
 
-Every push to `main` redeploys both projects. If you created the Merchant Portal project before
+Every push to `main` redeploys the Global Platform. **Merchant Portal production deploys are on hold**
+(since 12 Nov 2026, because its link has been shared): `vercel.json` skips them and
+`scripts/vercel-build.mjs` stops any that start, so the live Merchant Portal stays as it is. Branch
+previews still build. To release, remove the hold, or set `MERCHANT_RELEASE` = `true` on the Merchant
+Portal project and redeploy. If you created the Merchant Portal project before
 adding `PORTAL`, add it and choose **Redeploy**.
 
 ## Documentation

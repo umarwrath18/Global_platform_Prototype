@@ -3,6 +3,7 @@
   "framework": "angular",
   "installCommand": "npm install",
   "buildCommand": "npm run vercel-build",
+  "ignoreCommand": "if [ \"$PORTAL\" = \"merchant\" ] && { [ \"$VERCEL_ENV\" = \"production\" ] || [ \"$VERCEL_GIT_COMMIT_REF\" = \"main\" ]; } && [ \"$MERCHANT_RELEASE\" != \"true\" ]; then exit 0; else exit 1; fi",
   "outputDirectory": "dist/vercel",
   "rewrites": [
     {
