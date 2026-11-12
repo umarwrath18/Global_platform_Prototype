@@ -2,6 +2,7 @@
 
 **Status:** Draft for review by Product, Operations and Engineering · **Date:** 11 Nov 2026
 **Scope:** requirements only. No application code is changed by this document.
+**Phase 1 built (12 Nov 2026):** see [`transaction-management-phase-1.md`](transaction-management-phase-1.md) for what was built and the decisions taken on the open questions.
 
 How to read the tags:
 - **[CONFIRM-P] / [CONFIRM-O] / [CONFIRM-E]**: needs a decision from Product, Operations or Engineering.

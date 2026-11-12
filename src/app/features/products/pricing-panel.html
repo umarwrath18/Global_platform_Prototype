@@ -80,7 +80,7 @@
                 <button type="button" class="btn sm ghost" [disabled]="productsDirty() || !!busy()" (click)="openEditor({ flow: x.flow, methodCode: x.methodCode, editOf: x.id })">Edit</button>
               }
               @if (maker() && canCancelRow(x)) {
-                <button type="button" class="btn sm ghost" [disabled]="open() || !!busy()" (click)="cancelAsk.set(x)">@if (busy() === x.id) {<span class="spinner" aria-hidden="true"></span>}Cancel</button>
+                <button type="button" class="btn sm ghost" [disabled]="open() || !!busy()" (click)="openCancel(x)">Cancel</button>
               }
             </td>
           </tr>
@@ -97,14 +97,60 @@
   </div>
 
   @if (cancelAsk(); as x) {
-    <div class="sheet-confirm" role="alertdialog" aria-labelledby="pp-cancel">
-      <h3 id="pp-cancel">{{ cancelQuestion(x) }}</h3>
-      <p>v{{ x.version }} won't take effect. This can't be undone.</p>
-      <div class="sheet-confirm-actions">
-        <button type="button" class="btn" (click)="cancelAsk.set(null)" autofocus>Keep it</button>
-        <button type="button" class="btn danger" (click)="cancelVersion(x)" [disabled]="!!busy()">Cancel pricing</button>
+    <!-- Cancel opens the Pricing Detail side sheet (as in Merchant Pricing), with the confirmation inside it. -->
+    <app-side-sheet [label]="(x.method?.name ?? x.methodCode) + ' v' + x.version" (dismiss)="closeCancel()">
+      <header class="sheet-head">
+        <div class="sheet-titles">
+          <p class="sheet-eyebrow">Pricing Detail</p>
+          <h2 class="sheet-title">{{ x.method?.name ?? x.methodCode }} · v{{ x.version }} <span class="status" [class]="'status ' + tone[x.status]">{{ statusLabel[x.status] }}</span></h2>
+          <p class="sheet-sub">{{ v.countryName }} · {{ flowLabel[x.flow] }}</p>
+        </div>
+        <button type="button" class="sheet-close" (click)="closeCancel()" aria-label="Close"><app-icon name="x" [size]="18" /></button>
+      </header>
+      <div class="sheet-body">
+        @if (previousOf(x); as p) {
+          <section class="sheet-section">
+            <h3>What changes</h3>
+            <div class="sheet-compare">
+              <div class="row head"><span></span><span>Previous · v{{ p.version }}</span><span>This · v{{ x.version }}</span></div>
+              <div class="row"><span class="k">Technique</span><span class="was">{{ technique(p.technique) }}</span><span class="now">{{ technique(x.technique) }}</span></div>
+              <div class="row"><span class="k">Rate</span><span class="was">{{ details(p) }}</span><span class="now">{{ details(x) }}</span></div>
+              <div class="row"><span class="k">Effective</span><span class="was">{{ period(p) }}</span><span class="now">{{ period(x) }}</span></div>
+            </div>
+          </section>
+        }
+        <section class="sheet-section">
+          <h3>Details</h3>
+          <dl class="sheet-dl">
+            <div><dt>Flow</dt><dd>{{ flowLabel[x.flow] }}</dd></div>
+            <div><dt>Technique</dt><dd>{{ technique(x.technique) }}</dd></div>
+            <div><dt>Version</dt><dd>v{{ x.version }}</dd></div>
+            <div><dt>Effective</dt><dd>{{ period(x) }}</dd></div>
+            <div class="wide"><dt>Pricing Details</dt><dd>{{ details(x) }}</dd></div>
+            @if (secondary(x); as sc) {<div class="wide"><dt>Secondary Charges</dt><dd>{{ sc }}</dd></div>}
+          </dl>
+        </section>
+        <section class="sheet-section">
+          <h3>Activity</h3>
+          <ol class="sheet-timeline">
+            @for (a of activity(x); track $index) {
+              <li [class.waiting]="a.waiting" [class.bad]="a.bad"><div><strong>{{ a.title }}</strong><div class="meta">{{ a.meta }}</div></div></li>
+            }
+          </ol>
+        </section>
+        @if (error(); as e) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
       </div>
-    </div>
+      <div class="sheet-confirm" role="alertdialog" aria-labelledby="pp-cancel">
+        <h3 id="pp-cancel">{{ cancelQuestion(x) }}</h3>
+        <p>v{{ x.version }} won't take effect. This can't be undone.</p>
+        <label class="f-label" for="pp-cancel-reason">Reason (optional)</label>
+        <textarea id="pp-cancel-reason" class="f-input" rows="2" maxlength="500" [value]="cancelReason()" (input)="cancelReason.set($any($event.target).value)"></textarea>
+        <div class="sheet-confirm-actions">
+          <button type="button" class="btn" (click)="closeCancel()" [disabled]="!!busy()">Keep it</button>
+          <button type="button" class="btn danger" (click)="cancelVersion(x)" [disabled]="!!busy()">@if (busy()) {<span class="spinner" aria-hidden="true"></span>}Cancel Rule</button>
+        </div>
+      </div>
+    </app-side-sheet>
   }
 
   @if (v.can.decidePricing && v.versions.some(x => x.status === 'pending_approval')) {

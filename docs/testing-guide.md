@@ -34,8 +34,9 @@ same way real staff will. To see another team's view, sign in with that team's l
 `123` has access to **Malaysia, Indonesia and Vietnam**. The sidebar shows the login's team as a
 fixed **Team** label; only `MOBI-ADMIN` gets the **View as** dropdown.
 
-Mobi Support and Security Admin have no merchant permissions. They see only Dashboard and User
-security, and the system refuses any merchant change they try.
+Mobi Support and Security Admin have no merchant permissions. Mobi Support sees Dashboard,
+**Transactions** and User security; Security Admin sees Dashboard and User security. The system refuses
+any merchant change they try.
 
 ## Merchant Portal
 
@@ -45,7 +46,8 @@ security, and the system refuses any merchant change they try.
 | `TANJUNG-MERCHANT`   | Tanjung Global Trading (MFA setup on first sign-in) |
 | `LUMI-MERCHANT`      | Lumi Home Living, no live countries yet          |
 
-Screens: **Dashboard**, **My Transactions** and **Pricing & settings**. Pricing & settings is read
+Screens: **Dashboard**, **My Transactions** (PayIn | Payout, with Fee and Net amount, and details in a
+side sheet) and **Pricing & settings**. Pricing & settings is read
 only: it shows the pricing in effect, any approved change that starts later, the settlement cycle,
 the IPN callback URL, limits and the MID for each live country. Transactions and balances are sample
 data.
@@ -76,6 +78,17 @@ Shortcut: the seeded Nusantara Home Retail (Malaysia) is already live, so you ca
 
 ## Other things to try
 
+- **Transactions:** as `TANJUNG-ADMIN` (FinOps) open **Transactions**. Switch PayIn / Payout, pick a
+  payment type (e.g. E-Wallets adds *Wallet account*), filter by country, provider or status, and click a
+  row: the side sheet shows the payment path and the details. Try the same row as `MOBI-RISK`: no fees,
+  but IP address and Device. Search a transaction ID while on the wrong tab to see "Show in …".
+- **Investigation flag and notes:** in a transaction's sheet choose **Flag for investigation** (reason,
+  optional ticket), then **Add note**. The flag shows in the list and under More filters → Flags.
+  **Clear flag** asks for a resolution note. `TANJUNG-VIEWER` can look but not add notes or flags.
+- **Same records in both apps:** open a Nusantara Home Retail transaction in the Global Platform, then
+  find it by ID in the Merchant Portal as `NUSANTARA-MERCHANT`: same amount, fee and status, without the
+  provider details.
+
 - **Deactivate a payment method:** as `123`, open Merchant Pricing → a live merchant → **View** on an
   active rule → **Deactivate**. Choose the whole MID or one sub-merchant, Immediately or On a date,
   add a reason, then enter your authenticator code. Sign in as `TANJUNG-ADMIN` to see the FinOps alert
@@ -104,5 +117,6 @@ Shortcut: the seeded Nusantara Home Retail (Malaysia) is already live, so you ca
 ## What isn't real
 
 No emails are sent: OTP codes appear in an on-screen **Email preview**, and Tech alert emails are
-recorded as simulated. There is no transaction service, and the exchange rates used for pricing
-limits are fixed sample rates.
+recorded as simulated. There is no transaction service: transactions are sample data generated
+from each live merchant's setup and pricing. The exchange rates used for pricing limits are fixed
+sample rates.

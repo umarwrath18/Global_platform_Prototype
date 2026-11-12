@@ -1,34 +1,30 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { toClientError } from '@gp/core/api/api-error';
-import {
-  DATE_PRESET_LABEL,
-  DatePreset,
-  formatAmount,
-  MerchantPortalOverview,
-  TRANSACTION_STATUS_LABEL,
-  TransactionPage,
-  TransactionQuery,
-  TransactionStatus,
-} from '@gp/core/merchants/merchant-portal';
+import { TransactionPage } from '@gp/core/merchants/merchant-portal';
 import { MerchantPortalApi } from '@gp/core/merchants/merchant-portal-api.service';
+import { CurrencyAmount, fmtAmount, fmtDateTime, fmtMoney, PAYMENT_TYPE_LABEL, PaymentType, TXN_FLOW_LABEL, TXN_RANGE_LABEL, TXN_STATUS_LABEL, TXN_STATUSES, TxnFlow, TxnRange, TxnStatus } from '@gp/core/transactions/transactions';
+import { TxnQuery } from '@gp/core/transactions/transactions-api.service';
 import { Icon } from '@gp/shared/icon';
-import { fmtDateTime } from '@gp/shared/merchant-ui';
+import { Pager } from '@gp/shared/pager';
+import { TxnStatusBadge } from '@gp/shared/txn-ui';
+import { MerchantTransactionSheet } from './transaction-sheet';
 
-const STATUS_TONE: Record<TransactionStatus, string> = { successful: 'success', failed: 'danger', pending: 'warning', refunded: 'info' };
-const PAGE_SIZE = 25;
-
-/** My Transactions: payment-method-level records with filters, search and CSV export. */
+/**
+ * My Transactions: PayIn | Payout tabs, payment type chips, filters, a summary per currency, the
+ * list with Fee and Net amount, CSV export, and the details in a side sheet. The records are the
+ * same ones the Global Platform shows (sample data until the transaction service exists).
+ */
 @Component({
   selector: 'app-merchant-transactions',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon],
+  imports: [Icon, Pager, TxnStatusBadge, MerchantTransactionSheet],
   styleUrl: './merchant-portal.scss',
   template: `
     <main class="page">
       <div class="portal-head">
         <div>
           <h1>My Transactions</h1>
-          <p class="sub">Payments received through each of your payment methods.</p>
+          <p class="sub">Your payments and payouts. Amounts are in each transaction's own currency.</p>
         </div>
         <div class="actions">
           @if (page()?.sampleData) {
@@ -45,56 +41,75 @@ const PAGE_SIZE = 25;
         <div class="alert compact" [class]="n.tone" role="status"><app-icon [name]="n.tone === 'danger' ? 'alert-circle' : 'info'" /><div>{{ n.text }}</div></div>
       }
 
+      <div class="txn-tabs" role="tablist" aria-label="Flow">
+        @for (f of flows; track f) {
+          <button type="button" role="tab" [attr.aria-selected]="flow() === f" [class.on]="flow() === f" (click)="setFlow(f)">{{ flowLabel[f] }}</button>
+        }
+      </div>
+
+      @let opts = page()?.options;
+      <div class="txn-chips" role="group" aria-label="Payment type">
+        <span class="txn-chips-label">Payment type</span>
+        <button type="button" [class.on]="!type()" [attr.aria-pressed]="!type()" (click)="setType('')">All</button>
+        @for (t of opts?.paymentTypes ?? []; track t) {
+          <button type="button" [class.on]="type() === t" [attr.aria-pressed]="type() === t" (click)="setType(t)">{{ typeLabel[flow()][t] }}</button>
+        }
+      </div>
+
       <section class="panel-card">
-        <form class="filters-bar" (submit)="$event.preventDefault(); applySearch()" role="search" aria-label="Filter transactions">
+        <form class="txn-filters" (submit)="$event.preventDefault(); applySearch()" role="search" aria-label="Filter transactions">
+          <label class="fld search">
+            Search
+            <span class="search-row">
+              <input class="f-input" type="search" placeholder="Transaction ID or Invoice ID" maxlength="64" [value]="search()" (input)="search.set($any($event.target).value)" />
+              <button type="submit" class="btn" aria-label="Search"><app-icon name="search" [size]="16" /></button>
+            </span>
+          </label>
           <label class="fld">
-            <span class="f-label">Date range</span>
-            <select class="f-input" (change)="setRange($any($event.target).value)" aria-label="Date range">
-              @for (p of presets; track p) {
-                <option [value]="p" [selected]="range() === p">{{ presetLabel[p] }}</option>
-              }
+            Date range
+            <select class="f-input" (change)="setRange($any($event.target).value)">
+              @for (r of ranges; track r[0]) {<option [value]="r[0]" [selected]="range() === r[0]">{{ r[1] }}</option>}
               <option value="custom" [selected]="range() === 'custom'">Custom range</option>
             </select>
           </label>
           @if (range() === 'custom') {
+            <label class="fld">From<input class="f-input" type="date" [value]="from()" [max]="to() || today" (change)="setDate('from', $any($event.target).value)" /></label>
+            <label class="fld">To<input class="f-input" type="date" [value]="to()" [min]="from()" [max]="today" (change)="setDate('to', $any($event.target).value)" /></label>
+          }
+          @if ((opts?.countries?.length ?? 0) > 1) {
             <label class="fld">
-              <span class="f-label">From</span>
-              <input class="f-input" type="date" [value]="from()" [max]="to() || today" (change)="setDate('from', $any($event.target).value)" />
+              Country
+              <select class="f-input" (change)="setFilter('country', $any($event.target).value)">
+                <option value="" [selected]="!country()">All countries</option>
+                @for (c of opts!.countries; track c.code) {<option [value]="c.code" [selected]="country() === c.code">{{ c.name }}</option>}
+              </select>
             </label>
+          }
+          @if (opts?.subMerchants?.length) {
             <label class="fld">
-              <span class="f-label">To</span>
-              <input class="f-input" type="date" [value]="to()" [min]="from()" [max]="today" (change)="setDate('to', $any($event.target).value)" />
+              Sub-merchant
+              <select class="f-input" (change)="setFilter('subMerchant', $any($event.target).value)">
+                <option value="" [selected]="!subMerchant()">All</option>
+                <option value="master" [selected]="subMerchant() === 'master'">Master Merchant</option>
+                @for (s of opts!.subMerchants; track s.id) {<option [value]="s.id" [selected]="subMerchant() === s.id">{{ s.name }}</option>}
+              </select>
             </label>
           }
           <label class="fld">
-            <span class="f-label">Payment method</span>
-            <select class="f-input" (change)="setFilter('method', $any($event.target).value)" aria-label="Payment method">
+            Payment method
+            <select class="f-input" (change)="setFilter('method', $any($event.target).value)">
               <option value="" [selected]="!method()">All methods</option>
-              @for (m of methods(); track m.code) {
-                <option [value]="m.code" [selected]="method() === m.code">{{ m.name }}{{ multiCountry() ? ' (' + m.country + ')' : '' }}</option>
-              }
+              @for (m of methods(); track m.code) {<option [value]="m.code" [selected]="method() === m.code">{{ m.name }}</option>}
             </select>
           </label>
           <label class="fld">
-            <span class="f-label">Status</span>
-            <select class="f-input" (change)="setFilter('status', $any($event.target).value)" aria-label="Status">
+            Status
+            <select class="f-input" (change)="setFilter('status', $any($event.target).value)">
               <option value="" [selected]="!status()">All statuses</option>
-              @for (s of statuses; track s) {
-                <option [value]="s" [selected]="status() === s">{{ statusLabel[s] }}</option>
-              }
+              @for (s of statuses; track s) {<option [value]="s" [selected]="status() === s">{{ statusLabel[s] }}</option>}
             </select>
           </label>
-          <label class="fld grow">
-            <span class="f-label">Transaction ID</span>
-            <span class="search-box">
-              <app-icon name="search" [size]="16" />
-              <input class="f-input" type="search" placeholder="Search by transaction ID" maxlength="64" [value]="search()" (input)="search.set($any($event.target).value)" (search)="applySearch()" />
-            </span>
-          </label>
-          <button type="submit" class="btn">Search</button>
-          @if (hasFilters()) {
-            <button type="button" class="btn ghost" (click)="clearFilters()">Clear</button>
-          }
+          @if (hasFilters()) {<button type="button" class="btn ghost" (click)="clearFilters()">Clear filters</button>}
         </form>
 
         @if (dateError()) {
@@ -111,80 +126,94 @@ const PAGE_SIZE = 25;
         } @else if (!page() && loading()) {
           <div class="skeleton-rows" aria-busy="true"><span></span><span></span><span></span><span></span><span></span></div>
         } @else if (page(); as p) {
+          <div class="txn-strip" aria-label="Summary for these filters">
+            <div class="txn-kpi"><div class="txn-kl">Transactions</div><div class="txn-kv">{{ p.summary.total.toLocaleString('en-US') }}</div></div>
+            <div class="txn-kpi"><div class="txn-kl">Successful</div><div class="txn-kv success">{{ p.summary.successful.toLocaleString('en-US') }}</div></div>
+            <div class="txn-kpi"><div class="txn-kl">Gross volume</div>@for (a of amounts(p.summary.gross); track a) {<div class="txn-ka strong">{{ a }}</div>} @empty {<div class="txn-kv">—</div>}</div>
+            <div class="txn-kpi"><div class="txn-kl">Fees</div>@for (a of amounts(p.summary.fees); track a) {<div class="txn-ka strong">{{ a }}</div>} @empty {<div class="txn-kv">—</div>}</div>
+            <div class="txn-kpi"><div class="txn-kl">{{ flow() === 'payin' ? 'Net amount' : 'Total debited' }}</div>@for (a of amounts(p.summary.net); track a) {<div class="txn-ka strong">{{ a }}</div>} @empty {<div class="txn-kv">—</div>}</div>
+          </div>
           @if (p.total === 0) {
             <div class="empty-state">
               <div class="icon-tile"><app-icon name="swap" /></div>
-              <h3>No transactions found</h3>
-              <p>{{ hasFilters() || range() !== '30d' ? 'Try a different date range or clear the filters.' : 'Transactions will appear here once you start receiving payments.' }}</p>
-              @if (hasFilters()) {
-                <button type="button" class="btn" (click)="clearFilters()">Clear filters</button>
-              }
+              <h3>No transactions match these filters.</h3>
+              <p>{{ hasFilters() ? 'Try a different date range or clear the filters.' : 'Try a longer date range.' }}</p>
+              @if (hasFilters()) {<button type="button" class="btn" (click)="clearFilters()">Clear filters</button>}
             </div>
           } @else {
             <div class="table-wrap" [class.dim]="loading()" [attr.aria-busy]="loading()">
-              <table class="data-table">
+              <table class="data-table txn-table">
                 <thead>
                   <tr>
-                    <th>Invoice ID</th>
-                    <th>Transaction ID</th>
-                    <th>Payment method</th>
-                    <th>Date &amp; time</th>
-                    <th class="num">Amount</th>
-                    <th>Currency</th>
-                    <th>Status</th>
+                    <th scope="col">Date &amp; time</th>
+                    <th scope="col">Invoice ID</th>
+                    <th scope="col">Transaction ID</th>
+                    @if (showSub()) {<th scope="col">Sub-merchant</th>}
+                    <th scope="col">Payment method</th>
+                    <th scope="col" class="num">Amount</th>
+                    <th scope="col" class="num">Fee</th>
+                    <th scope="col" class="num">{{ flow() === 'payin' ? 'Net amount' : 'Total debited' }}</th>
+                    <th scope="col">Currency</th>
+                    <th scope="col">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   @for (t of p.items; track t.transactionId) {
-                    <tr>
-                      <td class="mono">{{ t.invoiceId }}</td>
-                      <td class="mono">{{ t.transactionId }}</td>
-                      <td>{{ t.paymentMethod.name }}</td>
+                    <tr class="clickable" [class.selected]="openId() === t.transactionId" (click)="openId.set(t.transactionId)">
                       <td class="muted">{{ dateTime(t.createdAt) }}</td>
+                      <td class="mono">{{ t.invoiceId }}</td>
+                      <td><a class="txn-id" href="" (click)="$event.preventDefault(); $event.stopPropagation(); openId.set(t.transactionId)">{{ t.transactionId }}</a></td>
+                      @if (showSub()) {<td>{{ t.subMerchantName ?? 'Master Merchant' }}</td>}
+                      <td>{{ t.methodName }}</td>
                       <td class="num mono">{{ amount(t.amount, t.currency) }}</td>
+                      <td class="num mono" [class.muted]="t.fee === null">{{ t.fee === null ? '—' : amount(t.fee, t.currency) }}</td>
+                      <td class="num mono" [class.muted]="t.net === null">{{ t.net === null ? '—' : amount(t.net, t.currency) }}</td>
                       <td>{{ t.currency }}</td>
-                      <td><span class="status" [class]="tone[t.status]">{{ statusLabel[t.status] }}</span></td>
+                      <td><app-txn-status [status]="t.status" /></td>
                     </tr>
                   }
                 </tbody>
               </table>
             </div>
-            <div class="pager">
-              <span class="muted">{{ rangeText() }}</span>
-              <div class="actions">
-                <button type="button" class="btn sm" (click)="go(p.page - 1)" [disabled]="p.page <= 1 || loading()">Previous</button>
-                <span class="muted">Page {{ p.page }} of {{ pages() }}</span>
-                <button type="button" class="btn sm" (click)="go(p.page + 1)" [disabled]="p.page >= pages() || loading()">Next</button>
-              </div>
-            </div>
+            <app-pager [total]="p.total" [page]="pageIndex()" (pageChange)="go($event)" [pageSize]="pageSize()" (pageSizeChange)="setPageSize($event)" />
           }
         }
       </section>
+
+      @if (openId(); as id) {
+        <app-merchant-transaction-sheet [flow]="flow()" [id]="id" (closed)="openId.set(null)" />
+      }
     </main>
   `,
 })
 export class MerchantTransactions {
   private readonly api = inject(MerchantPortalApi);
 
-  protected readonly presets: DatePreset[] = ['today', '7d', '30d'];
-  protected readonly presetLabel = DATE_PRESET_LABEL;
-  protected readonly statuses = Object.keys(TRANSACTION_STATUS_LABEL) as TransactionStatus[];
-  protected readonly statusLabel = TRANSACTION_STATUS_LABEL;
-  protected readonly tone = STATUS_TONE;
-  protected readonly amount = formatAmount;
-  protected readonly dateTime = fmtDateTime;
+  protected readonly flows: TxnFlow[] = ['payin', 'payout'];
+  protected readonly flowLabel = TXN_FLOW_LABEL;
+  protected readonly typeLabel = PAYMENT_TYPE_LABEL;
+  protected readonly ranges = Object.entries(TXN_RANGE_LABEL) as [Exclude<TxnRange, 'custom'>, string][];
+  protected readonly statuses = TXN_STATUSES;
+  protected readonly statusLabel = TXN_STATUS_LABEL;
+  protected readonly amount = fmtAmount;
+  protected readonly dateTime = (t: number) => fmtDateTime(t);
   protected readonly today = isoDate(new Date());
 
-  protected readonly range = signal<DatePreset | 'custom'>('30d');
-  protected readonly from = signal(isoDate(daysAgo(29)));
+  protected readonly flow = signal<TxnFlow>('payin');
+  protected readonly type = signal<PaymentType | ''>('');
+  protected readonly range = signal<TxnRange>('24h');
+  protected readonly from = signal(isoDate(daysAgo(6)));
   protected readonly to = signal(this.today);
+  protected readonly country = signal('');
+  protected readonly subMerchant = signal('');
   protected readonly method = signal('');
-  protected readonly status = signal<TransactionStatus | ''>('');
+  protected readonly status = signal<TxnStatus | ''>('');
   protected readonly search = signal('');
   private readonly appliedSearch = signal('');
-  protected readonly pageNo = signal(1);
+  protected readonly pageIndex = signal(0);
+  protected readonly pageSize = signal(25);
+  protected readonly openId = signal<string | null>(null);
 
-  protected readonly overview = signal<MerchantPortalOverview | null>(null);
   protected readonly page = signal<TransactionPage | null>(null);
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -193,33 +222,31 @@ export class MerchantTransactions {
   private request = 0;
   private noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
-  protected readonly methods = computed(() => this.overview()?.paymentMethods ?? []);
-  protected readonly multiCountry = computed(() => new Set(this.methods().map((m) => m.country)).size > 1);
-  protected readonly hasFilters = computed(() => !!(this.method() || this.status() || this.appliedSearch()));
-  protected readonly pages = computed(() => Math.max(1, Math.ceil((this.page()?.total ?? 0) / PAGE_SIZE)));
+  protected readonly methods = computed(() => (this.page()?.options.methods ?? []).filter((m) => !this.type() || m.type === this.type()));
+  /** Live sub-merchants only (they have their own MID); none → no column. */
+  protected readonly showSub = computed(() => this.flow() === 'payin' && !!this.page()?.options.subMerchants.length);
+  protected readonly hasFilters = computed(() => !!(this.type() || this.country() || this.subMerchant() || this.method() || this.status() || this.appliedSearch()) || this.range() !== '24h');
   protected readonly dateError = computed(() => (this.range() === 'custom' && (!this.from() || !this.to() || this.from() > this.to()) ? 'Choose a start date on or before the end date.' : null));
-  protected readonly rangeText = computed(() => {
-    const p = this.page();
-    if (!p || !p.total) return '';
-    const start = (p.page - 1) * p.pageSize + 1;
-    return `${start}–${Math.min(p.total, start + p.items.length - 1)} of ${p.total} transactions`;
-  });
 
   constructor() {
     inject(DestroyRef).onDestroy(() => clearTimeout(this.noticeTimer));
-    this.api.overview().then((o) => this.overview.set(o)).catch(() => undefined);
     void this.load();
   }
 
-  private query(): TransactionQuery {
+  private query(): TxnQuery {
+    const custom = this.range() === 'custom';
     return {
       range: this.range(),
-      ...(this.range() === 'custom' ? { from: this.from(), to: this.to() } : {}),
-      method: this.method() || undefined,
-      status: this.status() || undefined,
-      q: this.appliedSearch() || undefined,
-      page: this.pageNo(),
-      pageSize: PAGE_SIZE,
+      from: custom ? new Date(`${this.from()}T00:00:00`).toISOString() : '',
+      to: custom ? new Date(`${this.to()}T23:59:59`).toISOString() : '',
+      type: this.type(),
+      country: this.country(),
+      subMerchant: this.subMerchant(),
+      method: this.method(),
+      status: this.status(),
+      q: this.appliedSearch(),
+      page: this.pageIndex() + 1,
+      pageSize: this.pageSize(),
     };
   }
 
@@ -229,7 +256,7 @@ export class MerchantTransactions {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const p = await this.api.transactions(this.query());
+      const p = await this.api.transactions(this.flow(), this.query());
       if (id === this.request) this.page.set(p);
     } catch (e) {
       if (id !== this.request) return;
@@ -242,11 +269,27 @@ export class MerchantTransactions {
   }
 
   private reload() {
-    this.pageNo.set(1);
+    this.pageIndex.set(0);
     void this.load();
   }
 
-  protected setRange(v: DatePreset | 'custom') {
+  protected setFlow(f: TxnFlow) {
+    if (f === this.flow()) return;
+    this.flow.set(f);
+    this.type.set('');
+    this.method.set('');
+    this.subMerchant.set('');
+    this.openId.set(null);
+    this.reload();
+  }
+
+  protected setType(t: PaymentType | '') {
+    this.type.set(t);
+    this.method.set('');
+    this.reload();
+  }
+
+  protected setRange(v: TxnRange) {
     this.range.set(v);
     this.reload();
   }
@@ -256,16 +299,21 @@ export class MerchantTransactions {
     this.reload();
   }
 
-  protected setFilter(which: 'method' | 'status', v: string) {
-    if (which === 'method') this.method.set(v);
-    else this.status.set(v as TransactionStatus | '');
+  protected setFilter(which: 'country' | 'subMerchant' | 'method' | 'status', v: string) {
+    if (which === 'country') {
+      this.country.set(v);
+      this.method.set('');
+      this.subMerchant.set('');
+    } else if (which === 'subMerchant') this.subMerchant.set(v);
+    else if (which === 'method') this.method.set(v);
+    else this.status.set(v as TxnStatus | '');
     this.reload();
   }
 
   protected applySearch() {
     const v = this.search().trim().toUpperCase();
     if (v && /[^A-Z0-9-]/.test(v)) {
-      this.flash('danger', 'Transaction IDs contain only letters, numbers and dashes.');
+      this.flash('danger', 'IDs contain only letters, numbers and dashes.');
       return;
     }
     this.appliedSearch.set(v);
@@ -273,6 +321,10 @@ export class MerchantTransactions {
   }
 
   protected clearFilters() {
+    this.type.set('');
+    this.range.set('24h');
+    this.country.set('');
+    this.subMerchant.set('');
     this.method.set('');
     this.status.set('');
     this.search.set('');
@@ -280,9 +332,18 @@ export class MerchantTransactions {
     this.reload();
   }
 
-  protected go(n: number) {
-    this.pageNo.set(n);
+  protected go(i: number) {
+    this.pageIndex.set(i);
     void this.load();
+  }
+
+  protected setPageSize(n: number) {
+    this.pageSize.set(n);
+    this.reload();
+  }
+
+  protected amounts(list: CurrencyAmount[]) {
+    return list.map((a) => fmtMoney(a.amount, a.currency));
   }
 
   /** Exports every record matching the current filters (not just this page). */
@@ -290,7 +351,7 @@ export class MerchantTransactions {
     if (this.exporting() || this.dateError()) return;
     this.exporting.set(true);
     try {
-      const res = await this.api.exportCsv(this.query());
+      const res = await this.api.exportCsv(this.flow(), this.query());
       if (!res.rows) {
         this.flash('info', 'There are no transactions to export for these filters.');
         return;

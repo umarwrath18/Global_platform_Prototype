@@ -1,7 +1,9 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { DatePreset, MerchantPortalOverview, MerchantSettingsView, TransactionExport, TransactionPage, TransactionQuery, TransactionSummary } from './merchant-portal';
+import { TxnFlow } from '../transactions/transactions';
+import { toParams, TxnQuery } from '../transactions/transactions-api.service';
+import { DatePreset, MerchantPortalOverview, MerchantSettingsView, TransactionDetail, TransactionExport, TransactionPage, TransactionSummary } from './merchant-portal';
 
 /** Merchant-facing portal API. The merchant is identified by the session, never by a parameter. */
 @Injectable({ providedIn: 'root' })
@@ -21,20 +23,17 @@ export class MerchantPortalApi {
     return firstValueFrom(this.http.get<TransactionSummary>('/api/merchant-portal/summary', { params: { range } }));
   }
 
-  transactions(query: TransactionQuery) {
-    return firstValueFrom(this.http.get<TransactionPage>('/api/merchant-portal/transactions', { params: toParams(query) }));
+  /** My Transactions: one flow at a time (`flow` = payin or payout). */
+  transactions(flow: TxnFlow, query: TxnQuery) {
+    return firstValueFrom(this.http.get<TransactionPage>('/api/merchant-portal/transactions', { params: toParams({ ...query, flow }) }));
   }
 
-  exportCsv(query: TransactionQuery) {
+  transaction(flow: TxnFlow, id: string) {
+    return firstValueFrom(this.http.get<TransactionDetail>(`/api/merchant-portal/transactions/${flow}/${encodeURIComponent(id)}`));
+  }
+
+  exportCsv(flow: TxnFlow, query: TxnQuery) {
     const { page: _p, pageSize: _s, ...filters } = query;
-    return firstValueFrom(this.http.get<TransactionExport>('/api/merchant-portal/transactions/export', { params: toParams(filters) }));
+    return firstValueFrom(this.http.get<TransactionExport>('/api/merchant-portal/transactions/export', { params: toParams({ ...filters, flow }) }));
   }
-}
-
-function toParams(query: Partial<TransactionQuery>): HttpParams {
-  let p = new HttpParams();
-  for (const [k, v] of Object.entries(query)) {
-    if (v !== undefined && v !== null && v !== '') p = p.set(k, String(v));
-  }
-  return p;
 }

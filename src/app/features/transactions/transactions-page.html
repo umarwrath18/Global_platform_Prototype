@@ -1,0 +1,239 @@
+<main class="page">
+  <div class="portal-head">
+    <div>
+      <h1>Transactions</h1>
+      <p class="sub">Pay-ins and payouts in the countries you can access.</p>
+    </div>
+    <div class="actions">
+      <span class="sample-tag" title="No live transaction service is connected yet. Records are generated sample data.">Sample data · not live</span>
+      @if (data()?.can?.export) {
+        <button type="button" class="btn" (click)="export()" [disabled]="exporting() || loading() || !!error()">
+          @if (exporting()) {<span class="spinner" aria-hidden="true"></span>} @else {<app-icon name="download" [size]="16" />}
+          Export CSV
+        </button>
+      }
+    </div>
+  </div>
+
+  <div class="txn-tabs" role="tablist" aria-label="Flow">
+    @for (f of flows; track f) {
+      <button type="button" role="tab" [attr.aria-selected]="flow() === f" [class.on]="flow() === f" (click)="setFlow(f)">{{ flowLabel[f] }}</button>
+    }
+  </div>
+
+  @let opts = data()?.options;
+  <div class="txn-chips" role="group" aria-label="Payment type">
+    <span class="txn-chips-label">Payment type</span>
+    <button type="button" [class.on]="!filters().type" [attr.aria-pressed]="!filters().type" (click)="setType('')">All</button>
+    @for (t of opts?.paymentTypes ?? []; track t) {
+      <button type="button" [class.on]="filters().type === t" [attr.aria-pressed]="filters().type === t" (click)="setType(t)">{{ typeLabel[flow()][t] }}</button>
+    }
+  </div>
+
+  <section class="panel-card">
+    <form class="txn-filters" role="search" aria-label="Filter transactions" (submit)="$event.preventDefault(); search()">
+      <label class="fld search">
+        Search
+        <span class="search-row">
+          <input class="f-input" type="search" placeholder="Transaction ID or Invoice ID" [value]="searchText()" (input)="searchText.set($any($event.target).value)" maxlength="64" />
+          <button type="submit" class="btn" aria-label="Search"><app-icon name="search" [size]="16" /></button>
+        </span>
+      </label>
+      <label class="fld">
+        Date range
+        <select class="f-input" (change)="set('range', $any($event.target).value)">
+          @for (r of ranges; track r[0]) {<option [value]="r[0]" [selected]="filters().range === r[0]">{{ r[1] }}</option>}
+          <option value="custom" [selected]="filters().range === 'custom'">Custom range</option>
+        </select>
+      </label>
+      @if (filters().range === 'custom') {
+        <label class="fld">From<input class="f-input" type="datetime-local" [value]="filters().from" (change)="set('from', $any($event.target).value)" /></label>
+        <label class="fld">To<input class="f-input" type="datetime-local" [value]="filters().to" (change)="set('to', $any($event.target).value)" /></label>
+      }
+      <label class="fld">
+        Country
+        <select class="f-input" (change)="set('country', $any($event.target).value)">
+          <option value="" [selected]="!filters().country">All countries</option>
+          @for (c of opts?.countries ?? []; track c.code) {<option [value]="c.code" [selected]="filters().country === c.code">{{ c.name }}</option>}
+        </select>
+      </label>
+      <label class="fld">
+        Merchant
+        <select class="f-input" (change)="set('merchant', $any($event.target).value)">
+          <option value="" [selected]="!filters().merchant">All merchants</option>
+          @for (m of opts?.merchants ?? []; track m.gmid) {<option [value]="m.gmid" [selected]="filters().merchant === m.gmid">{{ m.name }}</option>}
+        </select>
+      </label>
+      @if (flow() === 'payin' && opts?.subMerchants?.length) {
+        <label class="fld">
+          Sub-merchant
+          <select class="f-input" (change)="set('subMerchant', $any($event.target).value)">
+            <option value="" [selected]="!filters().subMerchant">All</option>
+            <option value="master" [selected]="filters().subMerchant === 'master'">Master Merchant</option>
+            @for (s of subMerchants(); track s.id) {<option [value]="s.id" [selected]="filters().subMerchant === s.id">{{ s.name }}</option>}
+          </select>
+        </label>
+      }
+      <label class="fld">
+        Payment method
+        <select class="f-input" (change)="set('method', $any($event.target).value)">
+          <option value="" [selected]="!filters().method">All methods</option>
+          @for (m of methods(); track m.code) {<option [value]="m.code" [selected]="filters().method === m.code">{{ m.name }}</option>}
+        </select>
+      </label>
+      <label class="fld">
+        Provider
+        <select class="f-input" (change)="set('provider', $any($event.target).value)">
+          <option value="" [selected]="!filters().provider">All providers</option>
+          @for (p of opts?.providers ?? []; track p.id) {<option [value]="p.id" [selected]="filters().provider === p.id">{{ p.name }}</option>}
+        </select>
+      </label>
+      <label class="fld">
+        Status
+        <select class="f-input" (change)="set('status', $any($event.target).value)">
+          <option value="" [selected]="!filters().status">All statuses</option>
+          @for (s of statuses; track s) {<option [value]="s" [selected]="filters().status === s">{{ statusLabel[s] }}</option>}
+        </select>
+      </label>
+      <button type="button" class="btn" (click)="moreOpen.set(!moreOpen())" [attr.aria-expanded]="moreOpen()">More filters@if (moreCount()) { ({{ moreCount() }})}</button>
+      @if (hasFilters()) {<button type="button" class="btn ghost" (click)="clearFilters()">Clear filters</button>}
+
+      @if (moreOpen()) {
+        <div class="txn-more">
+          <label class="fld">
+            Currency
+            <select class="f-input" (change)="set('currency', $any($event.target).value)">
+              <option value="" [selected]="!filters().currency">All currencies</option>
+              @for (c of currencies(); track c) {<option [value]="c" [selected]="filters().currency === c">{{ c }}</option>}
+            </select>
+          </label>
+          <label class="fld">
+            Amount from
+            <input class="f-input" type="number" min="0" [value]="filters().amountMin" [disabled]="!filters().country && !filters().currency" [title]="!filters().country && !filters().currency ? 'Choose one country or currency first' : ''" (change)="set('amountMin', $any($event.target).value)" />
+          </label>
+          <label class="fld">
+            Amount to
+            <input class="f-input" type="number" min="0" [value]="filters().amountMax" [disabled]="!filters().country && !filters().currency" (change)="set('amountMax', $any($event.target).value)" />
+          </label>
+          <label class="fld">
+            Flags
+            <select class="f-input" (change)="set('flag', $any($event.target).value)">
+              <option value="" [selected]="!filters().flag">Any</option>
+              @for (f of flags; track f) {<option [value]="f" [selected]="filters().flag === f">{{ flagLabel[f] }}</option>}
+            </select>
+          </label>
+        </div>
+      }
+    </form>
+
+    @if (data(); as d) {
+      @if (filters().q) {
+        <div class="alert info compact" role="note" style="margin: 16px 20px 0"><app-icon name="info" /><div>Searching for <strong>{{ filters().q }}</strong>: other filters and the date range don't apply to an ID search.</div></div>
+      }
+      <div class="txn-strip" aria-label="Summary for these filters">
+        <div class="txn-kpi">
+          <div class="txn-kl">Transactions</div>
+          <div class="txn-kv">{{ d.summary.total.toLocaleString('en-US') }}</div>
+          @for (a of amounts(d.summary.totalAmounts); track a) {<div class="txn-ka">{{ a }}</div>}
+        </div>
+        <div class="txn-kpi">
+          <div class="txn-kl">Successful</div>
+          <div class="txn-kv success">{{ d.summary.byStatus.successful.count.toLocaleString('en-US') }}</div>
+          @for (a of amounts(d.summary.byStatus.successful.amounts); track a) {<div class="txn-ka">{{ a }}</div>}
+        </div>
+        <div class="txn-kpi">
+          <div class="txn-kl">Pending · Processing</div>
+          <div class="txn-kv">{{ pendingSummary()?.count?.toLocaleString('en-US') }}</div>
+          @for (a of amounts(pendingSummary()?.amounts ?? []); track a) {<div class="txn-ka">{{ a }}</div>}
+        </div>
+        <div class="txn-kpi">
+          <div class="txn-kl">Failed</div>
+          <div class="txn-kv danger">{{ d.summary.byStatus.failed.count.toLocaleString('en-US') }}</div>
+          @for (a of amounts(d.summary.byStatus.failed.amounts); track a) {<div class="txn-ka">{{ a }}</div>}
+        </div>
+        @if (flow() === 'payin') {
+          <div class="txn-kpi">
+            <div class="txn-kl">Expired</div>
+            <div class="txn-kv warning">{{ d.summary.byStatus.expired.count.toLocaleString('en-US') }}</div>
+            @for (a of amounts(d.summary.byStatus.expired.amounts); track a) {<div class="txn-ka">{{ a }}</div>}
+          </div>
+        }
+      </div>
+
+      @if (d.items.length) {
+        <div class="table-wrap" [attr.aria-busy]="loading()">
+          <table class="data-table txn-table">
+            <thead>
+              <tr>
+                <th scope="col" [attr.aria-sort]="ariaSort('created')"><button type="button" class="sort" (click)="sortBy('created')">Created <app-icon [name]="ariaSort('created') === 'ascending' ? 'chevron-up' : 'chevron-down'" [size]="12" /></button></th>
+                <th scope="col">Transaction ID</th>
+                <th scope="col">Invoice ID</th>
+                <th scope="col">Merchant</th>
+                <th scope="col">Country</th>
+                <th scope="col">Payment method</th>
+                <th scope="col">Provider</th>
+                @for (c of d.typeColumns; track c.key) {<th scope="col" class="type-col">{{ c.label }}</th>}
+                <th scope="col" class="num" [attr.aria-sort]="ariaSort('amount')"><button type="button" class="sort" (click)="sortBy('amount')">Amount <app-icon [name]="ariaSort('amount') === 'ascending' ? 'chevron-up' : 'chevron-down'" [size]="12" /></button></th>
+                <th scope="col">Currency</th>
+                <th scope="col">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (t of d.items; track t.transactionId) {
+                <tr class="clickable" [class.selected]="openId() === t.transactionId" (click)="open(t)">
+                  <td class="muted">{{ dateTime(t.createdAt) }}</td>
+                  <td><a class="txn-id" href="" (click)="$event.preventDefault(); $event.stopPropagation(); open(t)">{{ t.transactionId }}</a></td>
+                  <td class="mono">{{ t.invoiceId }}</td>
+                  <td class="merchant" [title]="t.merchantName">{{ t.merchantName }}@if (t.subMerchantName) {<div class="sub-line">{{ t.subMerchantName }}</div>}</td>
+                  <td>{{ t.countryName }}</td>
+                  <td>{{ t.methodName }}</td>
+                  <td>{{ t.providerName }}</td>
+                  @for (c of d.typeColumns; track c.key) {<td class="mono">{{ t.typeValues?.[c.key] ?? '—' }}</td>}
+                  <td class="num mono">{{ amount(t.amount, t.currency) }}</td>
+                  <td>{{ t.currency }}</td>
+                  <td>
+                    <app-txn-status [status]="t.status" />
+                    @if (t.flags.length) {
+                      <div class="txn-flags">@for (f of t.flags; track f) {<span class="txn-flag" [class.investigation]="f === 'investigation'">{{ flagLabel[f] }}</span>}</div>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <app-pager [total]="d.total" [page]="pageIndex()" (pageChange)="setPage($event)" [pageSize]="pageSize()" (pageSizeChange)="setPageSize($event)" />
+      } @else {
+        <div class="empty-state">
+          <div class="icon-tile"><app-icon name="search" /></div>
+          @if (d.otherFlowMatch; as other) {
+            <h3>This is a {{ flowLabel[other] }} transaction</h3>
+            <p>{{ filters().q }} isn't in {{ flowLabel[flow()] }}.</p>
+            <button type="button" class="btn primary" (click)="showOtherFlow(other)">Show in {{ flowLabel[other] }}</button>
+          } @else {
+            <h3>No transactions match these filters.</h3>
+            <p>Try a longer date range or another payment type.</p>
+            @if (hasFilters()) {<button type="button" class="btn" (click)="clearFilters()">Clear filters</button>}
+          }
+        </div>
+      }
+    } @else if (error(); as e) {
+      <div class="empty-state" role="alert">
+        <div class="icon-tile"><app-icon name="alert-circle" /></div>
+        <h3>We couldn't load transactions</h3>
+        <p>{{ e }}</p>
+        <button type="button" class="btn" (click)="load()">Try again</button>
+      </div>
+    } @else {
+      <div class="skeleton-rows" aria-busy="true" aria-label="Loading transactions"><span></span><span></span><span></span></div>
+    }
+  </section>
+
+  @if (openId(); as id) {
+    <app-transaction-sheet [flow]="flow()" [id]="id" (closed)="closeSheet()" (changed)="onChanged($event)" />
+  }
+
+  @if (toast(); as t) {
+    <div class="p-toast" role="status"><app-icon [name]="t.tone === 'danger' ? 'alert-circle' : 'check-circle'" [size]="18" />{{ t.text }}</div>
+  }
+</main>

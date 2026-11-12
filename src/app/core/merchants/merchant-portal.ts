@@ -1,15 +1,11 @@
+import { MerchantTxnDetail, MerchantTxnListResponse, TXN_STATUS_LABEL, TxnExport, TxnStatus } from '../transactions/transactions';
+
 // API contract for the merchant-facing portal (Dashboard, My Transactions).
 // PROPOSED CONTRACT: Mobi has no transaction or balance API in this codebase yet. The simulated
 // backend serves clearly labelled sample data in this shape until the real services exist.
 
-export type TransactionStatus = 'successful' | 'failed' | 'pending' | 'refunded';
-
-export const TRANSACTION_STATUS_LABEL: Record<TransactionStatus, string> = {
-  successful: 'Successful',
-  failed: 'Failed',
-  pending: 'Pending',
-  refunded: 'Refunded',
-};
+export type TransactionStatus = TxnStatus;
+export const TRANSACTION_STATUS_LABEL = TXN_STATUS_LABEL;
 
 export type DatePreset = 'today' | '7d' | '30d';
 
@@ -44,42 +40,10 @@ export interface TransactionSummary {
   sampleData: boolean;
 }
 
-export interface MerchantTransaction {
-  invoiceId: string;
-  transactionId: string;
-  paymentMethod: { code: string; name: string };
-  createdAt: number;
-  amount: number;
-  currency: string;
-  status: TransactionStatus;
-}
-
-export interface TransactionQuery {
-  /** A preset, or `custom` with `from` / `to` as local dates (YYYY-MM-DD, inclusive). */
-  range: DatePreset | 'custom';
-  from?: string;
-  to?: string;
-  method?: string;
-  status?: TransactionStatus;
-  /** Transaction ID (or part of it). */
-  q?: string;
-  page?: number;
-  pageSize?: number;
-}
-
-export interface TransactionPage {
-  items: MerchantTransaction[];
-  total: number;
-  page: number;
-  pageSize: number;
-  sampleData: boolean;
-}
-
-export interface TransactionExport {
-  filename: string;
-  csv: string;
-  rows: number;
-}
+/** My Transactions (both flows) share the internal transaction records; see core/transactions. */
+export type TransactionPage = MerchantTxnListResponse;
+export type TransactionDetail = MerchantTxnDetail;
+export type TransactionExport = TxnExport;
 
 /** Decimal places shown for each currency (IDR and VND have no minor unit in practice). */
 export const CURRENCY_DECIMALS: Record<string, number> = { MYR: 2, IDR: 0, VND: 0, THB: 2, PHP: 2, USD: 2, SGD: 2 };
