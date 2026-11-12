@@ -1,4 +1,5 @@
-import { Routes } from '@angular/router';
+import { inject } from '@angular/core';
+import { Router, Routes } from '@angular/router';
 import { authGuard, guestGuard, portalGuard, twoFactorGuard } from './core/auth/auth.guards';
 import { unsavedChangesGuard } from './features/applications/unsaved-changes.guard';
 
@@ -101,16 +102,9 @@ export const routes: Routes = [
         title: 'Merchant Pricing · Mobi Global Platform',
         loadComponent: () => import('./features/pricing/merchant-pricing-detail').then((m) => m.MerchantPricingDetail),
       },
-      {
-        path: 'pricing-approvals',
-        title: 'Pricing Approvals · Mobi Global Platform',
-        loadComponent: () => import('./features/pricing/pricing-approvals').then((m) => m.PricingApprovals),
-      },
-      {
-        path: 'pricing-audit',
-        title: 'MDR audit log · Mobi Global Platform',
-        loadComponent: () => import('./features/pricing/pricing-audit').then((m) => m.PricingAudit),
-      },
+      // Pricing approvals live in the one Approvals inbox; the audit log is a view of Merchant Pricing → History.
+      { path: 'pricing-approvals', redirectTo: () => inject(Router).parseUrl('/approvals?type=pricing') },
+      { path: 'pricing-audit', redirectTo: () => inject(Router).parseUrl('/merchant-pricing/history?view=audit') },
       {
         path: 'configuration/mcc',
         title: 'MCC catalogue · Mobi Global Platform',

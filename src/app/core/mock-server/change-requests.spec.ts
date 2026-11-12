@@ -205,7 +205,8 @@ describe('Changes after Risk approval', () => {
       const finops = await view('finops');
       // The seed also has a pending Cards change for APP-2026-0001.
       expect(finops.pending.map((i) => `${i.kind}:${i.id}`).sort()).toEqual([`pricing:${pricing.id}`, 'pricing:PV-SEED-0001-cards-v2'].sort());
-      expect(finops.pending[0].link).toEqual(['/pricing-approvals']);
+      // Pricing is decided in the Approvals inbox itself.
+      expect([finops.pending[0].link, finops.pending[0].query]).toEqual([['/approvals'], { pricing: finops.pending[0].id }]);
       expect((await view('sales')).pending).toHaveLength(4);
       expect((await view('sales')).canDecide).toBe(false);
       expect((await view('cs')).pending).toHaveLength(4);

@@ -65,6 +65,17 @@ export class PricingPanel {
       .map((p) => ({ ...this.method(p.methodCode)!, pending: v.versions.some((x) => x.methodCode === p.methodCode && x.status === 'pending_approval') }));
   });
   protected readonly anyEnabled = computed(() => this.enabledSaved().length > 0);
+  protected readonly flows: ProductFlow[] = ['payin', 'payout'];
+  protected unpricedOf(f: ProductFlow) {
+    return this.unpriced().filter((u) => u.flow === f);
+  }
+  protected rowsOf(f: ProductFlow) {
+    return this.rows().filter((x) => x.flow === f);
+  }
+  /** Second line under the method: VA banks and sub-merchant; the version only when history is shown. */
+  protected rowNote(x: PricingVersion) {
+    return [this.history() ? `v${x.version}` : '', this.vaText(x), this.subLabel(x)].filter(Boolean).join(' · ');
+  }
   protected readonly open = computed(() => this.editor() !== null);
   protected readonly maker = computed(() => this.view().can.editPricing);
 

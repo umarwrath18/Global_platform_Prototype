@@ -25,7 +25,7 @@ same way real staff will. To see another team's view, sign in with that team's l
 | `123`            | Sales / Operations         | Register merchants, submit applications, request changes and pricing changes |
 | `MOBI-RISK`      | Risk                       | Approve, return or reject applications, change requests and sub-merchants |
 | `MOBI-CS`        | Customer Success           | Readiness: products, onboarding pricing, IPN, Confirm onboarding, Go live |
-| `TANJUNG-ADMIN`  | FinOps                     | Approve or reject pricing changes on **Pricing Approvals**              |
+| `TANJUNG-ADMIN`  | FinOps                     | Approve or reject pricing changes in **Approvals**                        |
 | `MOBI-SUPPORT`   | Mobi Support               | **User security**: open MFA reset requests for users who lost their device |
 | `MOBI-SECURITY`  | Security Admin (Tech)      | **User security**: verify and reset MFA, waive blocks, see Tech alerts  |
 | `MOBI-ADMIN`     | Prototype admin            | Switch teams with **View as** to review any screen                      |
@@ -65,7 +65,7 @@ data.
    - finish the go-live checks and choose **Go live**.
 4. **Sales requests a pricing change.** Sign in as `123`. Open **Merchant Pricing**, pick the
    merchant and submit a new rate with a start date. It goes to FinOps as *Pending approval*.
-5. **FinOps approves it.** Sign in as `TANJUNG-ADMIN`. Open **Pricing Approvals**, review the change
+5. **FinOps approves it.** Sign in as `TANJUNG-ADMIN`. Open **Approvals** (Waiting for FinOps), click the change
    and approve or reject it. You'll be asked for a current authenticator code. The person who
    submitted a change can never approve it.
 6. **The merchant sees it.** Sign in to the Merchant Portal as the merchant's portal user (for the
@@ -79,7 +79,7 @@ Shortcut: the seeded Nusantara Home Retail (Malaysia) is already live, so you ca
 - **Deactivate a payment method:** as `123`, open Merchant Pricing → a live merchant → **View** on an
   active rule → **Deactivate**. Choose the whole MID or one sub-merchant, Immediately or On a date,
   add a reason, then enter your authenticator code. Sign in as `TANJUNG-ADMIN` to see the FinOps alert
-  under Notifications. In **Sub-Merchant View** you can deactivate or reactivate one sub-merchant's method.
+  under Notifications. In Merchant Pricing → **Sub-merchants** you can deactivate or reactivate one sub-merchant's method.
 - **Settlement or USD fee change:** saving a settlement cycle, or submitting a Fixed Fee in USD, asks for
   your authenticator code once; for the next 5 minutes it isn't asked again.
 - **Unusual-change alert:** as `123`, submit a pricing change that drops a rate by 30% or more (e.g.

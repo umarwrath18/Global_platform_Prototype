@@ -1104,3 +1104,21 @@ textarea.f-input {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+
+// PayIn / PayOut group header inside a rule table.
+.data-table tr.flow-head th {
+  height: 32px;
+  padding: 0 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.data-table tbody + tbody tr.flow-head th {
+  border-top: 1px solid var(--border);
+}
+

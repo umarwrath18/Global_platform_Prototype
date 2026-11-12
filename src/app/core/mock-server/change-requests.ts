@@ -260,8 +260,10 @@ export function approvalsFor(db: MerchantDb, role: StaffRole): ApprovalsView {
     const method = ONBOARDING_COUNTRIES[app.country]?.paymentMethods.find((p) => p.code === v.methodCode)?.name ?? v.methodCode;
     items.push({
       kind: 'pricing', id: v.id, title: `Pricing change · ${countryName(app.country)}`, merchantId: app.merchantId, merchantName: name(app.merchantId), applicationId: app.id, country: app.country,
-      summary: `${method} v${v.version}: ${pricingSummary(v)} from ${fmtDay(v.startDate)}`, requestedBy: v.createdBy, requestedRole: v.createdRole, requestedAt: v.createdAt,
-      status: v.status === 'pending_approval' ? 'pending' : v.status === 'cancelled' ? 'withdrawn' : v.status === 'rejected' ? 'rejected' : 'approved', approverTeam: 'finops', decidedAt: v.approvedAt ?? v.rejectedAt ?? v.cancelledAt, link: ['/pricing-approvals'],
+      summary: `${method}: ${pricingSummary(v)} from ${fmtDay(v.startDate)}`, requestedBy: v.createdBy, requestedRole: v.createdRole, requestedAt: v.createdAt,
+      status: v.status === 'pending_approval' ? 'pending' : v.status === 'cancelled' ? 'withdrawn' : v.status === 'rejected' ? 'rejected' : 'approved', approverTeam: 'finops', decidedAt: v.approvedAt ?? v.rejectedAt ?? v.cancelledAt,
+      // Decided in the Approvals inbox itself (side sheet).
+      link: ['/approvals'], query: { pricing: v.id },
     });
   }
   for (const e of db.entities ?? []) {
@@ -275,13 +277,14 @@ export function approvalsFor(db: MerchantDb, role: StaffRole): ApprovalsView {
   }
   const pendingOf = (keep: (i: ApprovalItem) => boolean) => items.filter((i) => i.status === 'pending' && keep(i)).sort((a, b) => a.requestedAt - b.requestedAt);
   const recentOf = (keep: (i: ApprovalItem) => boolean) => items.filter((i) => i.status !== 'pending' && keep(i)).sort((a, b) => (b.decidedAt ?? 0) - (a.decidedAt ?? 0)).slice(0, 20);
+  const all = [...items].sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1) || (a.status === 'pending' ? a.requestedAt - b.requestedAt : (b.decidedAt ?? 0) - (a.decidedAt ?? 0)));
   if (role === 'risk' || role === 'finops') {
     const mine = (i: ApprovalItem) => i.approverTeam === role;
-    return { pending: pendingOf(mine), recent: recentOf(mine), heading: role === 'risk' ? 'Waiting for Risk' : 'Waiting for FinOps', canDecide: true };
+    return { pending: pendingOf(mine), recent: recentOf(mine), heading: role === 'risk' ? 'Waiting for Risk' : 'Waiting for FinOps', canDecide: true, all };
   }
   if (role === 'sales') {
     const ours = (i: ApprovalItem) => i.requestedRole === 'sales';
-    return { pending: pendingOf(ours), recent: recentOf(ours), heading: 'Requests from Sales / Operations', canDecide: false };
+    return { pending: pendingOf(ours), recent: recentOf(ours), heading: 'Requests from Sales / Operations', canDecide: false, all };
   }
-  return { pending: pendingOf(() => true), recent: recentOf(() => true), heading: 'All pending approvals', canDecide: false };
+  return { pending: pendingOf(() => true), recent: recentOf(() => true), heading: 'All pending approvals', canDecide: false, all };
 }

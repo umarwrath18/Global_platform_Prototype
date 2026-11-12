@@ -2,62 +2,92 @@
   <div class="portal-head">
     <div>
       <h1>Approvals</h1>
-      <p class="sub">Decisions waiting after onboarding: profile, country and MCC changes and new sub-merchants (Risk), and pricing changes (FinOps).</p>
+      <p class="sub">
+        @switch (roles.role()) {
+          @case ('risk') { Profile, bank, MCC and sub-merchant decisions waiting for Risk. }
+          @case ('finops') { Pricing changes waiting for FinOps. Approve or reject them here. }
+          @case ('sales') { Your requests and where they stand. }
+          @default { Everything waiting for a decision, view only. }
+        }
+      </p>
     </div>
   </div>
 
   @if (view(); as v) {
-    <section class="panel-card" aria-labelledby="pending-title">
-      <div class="panel-head">
-        <div>
-          <h2 id="pending-title">{{ v.heading }} <span class="count">{{ v.pending.length }}</span></h2>
-          <p>{{ v.canDecide ? 'Oldest first. Open an item to review and decide.' : roles.role() === 'sales' ? 'Requests made by Sales / Operations that are still waiting.' : 'View only.' }}</p>
+    <section class="panel-card">
+      <div class="ap-toolbar">
+        <div class="ap-views" role="tablist" aria-label="Show">
+          <button type="button" role="tab" [attr.aria-selected]="tab() === 'mine'" [class.on]="tab() === 'mine'" (click)="setTab('mine')">{{ mineLabel() }} <span class="count">{{ counts().mine }}</span></button>
+          <button type="button" role="tab" [attr.aria-selected]="tab() === 'open'" [class.on]="tab() === 'open'" (click)="setTab('open')">All open <span class="count">{{ counts().open }}</span></button>
+          <button type="button" role="tab" [attr.aria-selected]="tab() === 'decided'" [class.on]="tab() === 'decided'" (click)="setTab('decided')">Decided</button>
+        </div>
+        <div class="ap-filters">
+          <select class="f-input sm" aria-label="Type" (change)="setKind($any($event.target).value)">
+            <option value="" [selected]="!kind()">All types</option>
+            @for (k of kinds; track k) {<option [value]="k" [selected]="k === kind()">{{ kindLabel[k] }}</option>}
+          </select>
+          <select class="f-input sm" aria-label="Country" (change)="setCountry($any($event.target).value)">
+            <option value="" [selected]="!country()">All countries</option>
+            @for (c of countries; track c.code) {<option [value]="c.code" [selected]="c.code === country()">{{ c.name }}</option>}
+          </select>
         </div>
       </div>
-      @if (v.pending.length) {
-        <ul class="ap-list">
-          @for (i of v.pending; track i.kind + i.id) {
-            <li>
-              <div class="ap-main">
-                <span class="tag">{{ kindLabel[i.kind] }}</span>
-                <a class="row-link" [routerLink]="i.link" [queryParams]="i.query ?? null">{{ i.title }}</a>
-                <span class="muted">{{ i.merchantName }}@if (i.kind !== 'sub_merchant') { · {{ i.id }}}</span>
-              </div>
-              <p class="ap-summary">{{ i.summary }}</p>
-              <p class="ap-meta">Requested {{ dateTime(i.requestedAt) }} by {{ i.requestedBy }} ({{ teamLabel[i.requestedRole] }}) · decided by {{ teamLabel[i.approverTeam] }}</p>
-              <a class="btn sm" [routerLink]="i.link" [queryParams]="i.query ?? null">{{ v.canDecide ? 'Review' : 'Open' }}</a>
-            </li>
-          }
-        </ul>
-      } @else {
-        <div class="empty-state"><div class="icon-tile"><app-icon name="check-circle" /></div><h3>Nothing waiting</h3><p>New requests appear here and in Notifications.</p></div>
-      }
-    </section>
 
-    <section class="panel-card" aria-labelledby="recent-title">
-      <div class="panel-head"><div><h2 id="recent-title">Recent decisions</h2><p>Latest first</p></div></div>
-      @if (v.recent.length) {
-        <ul class="ap-list">
-          @for (i of v.recent; track i.kind + i.id) {
-            <li>
-              <div class="ap-main">
-                <span class="status" [class]="'status ' + status[i.status].tone">{{ status[i.status].label }}</span>
-                <span class="tag">{{ kindLabel[i.kind] }}</span>
-                <a class="row-link" [routerLink]="i.link" [queryParams]="i.query ?? null">{{ i.title }}</a>
-                <span class="muted">{{ i.merchantName }}@if (i.kind !== 'sub_merchant') { · {{ i.id }}}</span>
-              </div>
-              <p class="ap-summary">{{ i.summary }}</p>
-              @if (i.decidedAt) {<p class="ap-meta">Decided {{ dateTime(i.decidedAt) }}</p>}
-            </li>
-          }
-        </ul>
+      @if (rows().length) {
+        <div class="table-wrap">
+          <table class="data-table ap-table">
+            <thead>
+              <tr>
+                <th scope="col">Type</th>
+                <th scope="col">Request</th>
+                <th scope="col">Details</th>
+                <th scope="col">Country</th>
+                <th scope="col">Requested</th>
+                <th scope="col">Status</th>
+                <th scope="col"><span class="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (i of visible(); track i.kind + i.id) {
+                <tr class="clickable" tabindex="0" (click)="review(i)" (keydown.enter)="review(i)">
+                  <td><span class="tag" [class]="'tag k-' + i.kind">{{ kindLabel[i.kind] }}</span></td>
+                  <td><strong>{{ i.merchantName }}</strong><div class="sub-line">{{ i.title }}</div></td>
+                  <td class="wrap">{{ i.summary }}</td>
+                  <td>{{ countryName(i.country) }}</td>
+                  <td>{{ i.requestedBy }}<div class="sub-line">{{ dateTime(i.requestedAt) }}</div></td>
+                  <td>
+                    <span class="status" [class]="'status ' + status[i.status].tone">{{ status[i.status].label }}</span>
+                    @if (i.status === 'pending') {<div class="sub-line">{{ teamLabel[i.approverTeam] }}</div>}
+                    @else if (i.decidedAt) {<div class="sub-line">{{ dateTime(i.decidedAt) }}</div>}
+                  </td>
+                  <td class="row-actions">
+                    <button type="button" class="btn sm" [class.primary]="v.canDecide && i.status === 'pending'" (click)="$event.stopPropagation(); review(i)">{{ v.canDecide && i.status === 'pending' ? 'Review' : 'Open' }}</button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <app-pager [total]="rows().length" [(page)]="page" [(pageSize)]="pageSize" />
       } @else {
-        <div class="panel-body"><p class="muted">No decisions yet.</p></div>
+        <div class="empty-state">
+          <div class="icon-tile"><app-icon name="check-circle" /></div>
+          <h3>{{ tab() === 'decided' ? 'No decisions yet' : 'Nothing waiting' }}</h3>
+          <p>{{ kind() || country() ? 'Try another type or country.' : 'New requests appear here and in Notifications.' }}</p>
+        </div>
       }
     </section>
   } @else if (error(); as e) {
     <section class="panel-card"><div class="empty-state" role="alert"><div class="icon-tile"><app-icon name="alert-circle" /></div><h3>We couldn't load approvals</h3><p>{{ e.message }}</p><button type="button" class="btn" (click)="load()">Try again</button></div></section>
   } @else {
     <section class="panel-card"><div class="skeleton-rows" aria-busy="true" aria-label="Loading approvals"><span></span><span></span><span></span></div></section>
+  }
+
+  @if (open(); as o) {
+    <app-pricing-decision-sheet [item]="o.item" [canDecide]="roles.role() === 'finops'" [startWith]="o.start" (decided)="onDecided($event.text)" (failed)="onFailed($event)" (closed)="open.set(null)" />
+  }
+
+  @if (toast(); as t) {
+    <div class="p-toast" [class.danger]="t.tone === 'danger'" role="status"><app-icon [name]="t.tone === 'success' ? 'check-circle' : 'alert-circle'" [size]="18" />{{ t.text }}</div>
   }
 </main>

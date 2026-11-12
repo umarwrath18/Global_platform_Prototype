@@ -16,7 +16,6 @@
         </div>
       }
     </div>
-    <app-merchant-pricing-tabs />
 
     <div class="ppc-notice" [class.warn]="v.suspended" role="note"><app-icon name="info" [size]="16" /><div>{{ v.notice }}</div></div>
 
@@ -52,22 +51,29 @@
         @for (lvl of g.levels; track lvl.key) {
           <h3 class="mp-level">{{ lvl.label }}</h3>
           <div class="table-wrap">
-            <table class="data-table mp-table">
+            <table class="data-table mp-table mp-rules">
               <thead><tr><th scope="col">Payment Method</th><th scope="col">Technique</th><th scope="col">Rate</th><th scope="col">Effective</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+              @for (f of flows; track f) {
+                @if (ofFlow(lvl.rows, f); as fr) {
+                  @if (fr.length) {
               <tbody>
-                @for (x of lvl.rows; track x.id) {
-                  <tr>
-                    <td>{{ methodName(x) }}<div class="sub-line">{{ flowLabel[x.flow] }} · v{{ x.version }}@if (vaText(x); as va) { · {{ va }}}</div></td>
+                <tr class="flow-head"><th scope="colgroup" colspan="6">{{ flowLabel[f] }}</th></tr>
+                @for (x of fr; track x.id) {
+                  <tr class="clickable" tabindex="0" (click)="open(x)" (keydown.enter)="open(x)">
+                    <td>{{ methodName(x) }}@if (vaText(x); as va) {<div class="sub-line">{{ va }}</div>}</td>
                     <td>{{ technique(x.technique) }}</td>
-                    <td class="cfg">{{ details(x) }}@if (secondary(x); as s) {<div class="sub-line">{{ s }}</div>}</td>
+                    <td class="cfg">{{ details(x) }}@if (secondary(x); as s) {<div class="sub-line">{{ s }}</div>}@if (x.status === 'pending_approval' && previousOf(x); as p) {<div class="sub-line">Replaces {{ details(p) }}</div>}</td>
                     <td class="nowrap">{{ period(x) }}</td>
                     <td><span class="status" [class]="'status ' + tone[x.status]">{{ statusLabel[x.status] }}</span></td>
                     <td class="row-actions">
-                      <button type="button" class="btn sm ghost" (click)="open(x)" [attr.aria-label]="'View ' + methodName(x) + ' v' + x.version">View</button>
+                      <button type="button" class="btn sm" (click)="$event.stopPropagation(); open(x)" [attr.aria-label]="'View ' + methodName(x)">View</button>
                     </td>
                   </tr>
                 }
               </tbody>
+                  }
+                }
+              }
             </table>
           </div>
         }
@@ -75,27 +81,7 @@
     }
 
     @if (anyRules()) {
-      <section class="panel-card mp-section">
-        <div class="panel-head"><div><h2>Version history</h2><p>{{ history().length }} versions</p></div></div>
-        <div class="table-wrap">
-          <table class="data-table mp-table">
-            <thead><tr><th scope="col">Version</th><th scope="col">Payment Method</th><th scope="col">Technique</th><th scope="col">Rate</th><th scope="col">Effective</th><th scope="col">Status</th><th scope="col">Changed By</th></tr></thead>
-            <tbody>
-              @for (x of history(); track x.id) {
-                <tr class="clickable" tabindex="0" (click)="selected.set(x)" (keydown.enter)="selected.set(x)">
-                  <td>v{{ x.version }}</td>
-                  <td>{{ methodName(x) }}<div class="sub-line">{{ subName(x) }}</div></td>
-                  <td>{{ technique(x.technique) }}</td>
-                  <td class="cfg">{{ details(x) }}</td>
-                  <td class="nowrap">{{ period(x) }}</td>
-                  <td><span class="status" [class]="'status ' + tone[x.status]">{{ statusLabel[x.status] }}</span></td>
-                  <td>{{ x.approvedBy ? x.createdBy + ' → ' + x.approvedBy : x.createdBy }}</td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <p class="mp-history-link"><a [routerLink]="['/merchant-pricing/history']" [queryParams]="{ merchant: v.merchantId }">Version history and audit log for this merchant<app-icon name="arrow-right" [size]="14" /></a></p>
     }
 
     @if (deactivations().length) {

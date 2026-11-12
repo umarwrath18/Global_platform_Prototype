@@ -24,7 +24,6 @@ import {
 import { StaffRoleService } from '../../core/merchants/staff-role.service';
 import { Icon } from '../../shared/icon';
 import { PricingEditor, PricingPreset } from '../products/pricing-editor';
-import { MerchantPricingTabs } from './merchant-pricing-tabs';
 
 interface Group {
   status: PricingStatus;
@@ -47,7 +46,7 @@ const SECTIONS: { status: PricingStatus; title: string }[] = [
 @Component({
   selector: 'app-merchant-pricing-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, RouterLink, PricingEditor, MerchantPricingTabs, SideSheet, CodePrompt, DeactivateSheet],
+  imports: [Icon, RouterLink, PricingEditor, SideSheet, CodePrompt, DeactivateSheet],
   templateUrl: './merchant-pricing-detail.html',
   styleUrl: './pricing.scss',
 })
@@ -105,10 +104,11 @@ export class MerchantPricingDetail {
     const live = (this.view()?.versions ?? []).filter((x) => ['active', 'scheduled', 'pending_approval'].includes(x.status));
     return live.some((x) => x.subMerchantId) && !live.some((x) => !x.subMerchantId);
   });
+  protected readonly flows: ProductFlow[] = ['payin', 'payout'];
+  protected readonly ofFlow = (rows: PricingVersion[], f: ProductFlow) => rows.filter((x) => x.flow === f);
   protected readonly canDeactivate = computed(() => !!this.view()?.can.deactivate);
   /** Newest first. */
   protected readonly deactivations = computed(() => [...(this.view()?.config.deactivations ?? [])].reverse());
-  protected readonly history = computed(() => [...(this.view()?.versions ?? [])].sort((a, b) => b.createdAt - a.createdAt));
 
   constructor() {
     effect(() => {

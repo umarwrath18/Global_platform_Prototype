@@ -1,77 +1,39 @@
-<main class="page">
-  <div class="portal-head">
-    <div>
-      <h1>Pricing Approvals</h1>
-      <p class="sub">{{ view()?.canDecide ? 'Review and approve pricing configurations submitted by Operations' : 'View pricing configurations pending approval (read-only)' }}</p>
-    </div>
-    <div class="head-tools">
-      <app-corridor-select />
-    </div>
-  </div>
-  <app-merchant-pricing-tabs />
+import { ChangeDetectionStrategy, Component, inject, input, OnDestroy, OnInit, output, signal } from '@angular/core';
+import { MerchantApi, MerchantClientError, toMerchantError } from '../../core/merchants/merchant-api.service';
+import {
+  FLOW_LABEL,
+  fmtDay,
+  METRIC_SHORT,
+  money,
+  PRICING_STATUS_LABEL,
+  PRICING_STATUS_TONE,
+  PricingApprovalItem,
+  PricingStatus,
+  PROMO_TYPE_LABEL,
+  REFERENCE_PERIOD_LABEL,
+  secondarySummary,
+  techniqueLabel,
+  VA_BANKS,
+  pricingShort,
+} from '../../core/merchants/products';
+import { Icon } from '../../shared/icon';
+import { SideSheet } from '../../shared/side-sheet';
+import { fmtDateTime } from '../../shared/merchant-ui';
+import { codeProblem } from '../../shared/code-prompt';
+import { DemoAuthenticatorService } from '../../shared/demo-authenticator';
 
-  @if (view(); as v) {
-    @if (!v.canDecide) {
-      <div class="alert compact" role="note"><app-icon name="lock" /><div>Read-only – Switch to FinOps to approve</div></div>
-    }
-    <section class="panel-card">
-      <div class="chips-bar" role="group" aria-label="Filter by status">
-        @for (c of chips; track c.key) {
-          <button type="button" class="chip" [class.on]="chip() === c.key" [attr.aria-pressed]="chip() === c.key" (click)="chip.set(c.key)">{{ c.label }}@if (c.key === 'pending_approval') {<span class="n">{{ counts()['pending_approval'] || 0 }}</span>}</button>
-        }
-      </div>
-      @if (rows().length) {
-        <div class="table-wrap">
-          <table class="data-table pa-table">
-            <thead>
-              <tr>
-                <th scope="col">Merchant</th>
-                <th scope="col">Corridor</th>
-                <th scope="col">Payment Method</th>
-                <th scope="col">Technique</th>
-                <th scope="col">New Rate</th>
-                <th scope="col">Effective From</th>
-                <th scope="col">Status</th>
-                <th scope="col">Changed By</th>
-                <th scope="col"><span class="sr-only">Actions</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (i of rows(); track i.version.id) {
-                <tr class="clickable" tabindex="0" (click)="openDetail(i)" (keydown.enter)="openDetail(i)" [class.selected]="detail()?.version?.id === i.version.id">
-                  <td>{{ i.merchantName }}<div class="sub-line">{{ i.subMerchantName ?? 'Master Merchant' }}</div></td>
-                  <td>{{ i.country }}</td>
-                  <td>{{ i.methodName }}<div class="sub-line">{{ flowLabel[i.version.flow] }} · v{{ i.version.version }}@if (vaText(i); as va) { · {{ va }}}</div></td>
-                  <td>{{ technique(i.version.technique) }}</td>
-                  <td class="cfg">{{ newRate(i) }}</td>
-                  <td class="nowrap">{{ day(i.version.startDate) }}</td>
-                  <td><span class="status" [class]="'status ' + tone[i.version.status]">{{ statusLabel[i.version.status] }}</span></td>
-                  <td>{{ i.version.createdBy }}</td>
-                  <td class="row-actions">
-                    @if (i.version.status === 'pending_approval' && v.canDecide) {
-                      @if (i.ownSubmission) {
-                        <span class="muted small" title="You submitted this change, so someone else must approve it.">Your change</span>
-                      } @else {
-                        <button type="button" class="btn sm icon-only" (click)="open(i, 'approve', $event)" [attr.aria-label]="'Approve ' + i.methodName + ' for ' + i.merchantName" title="Approve"><app-icon name="check" [size]="15" /></button>
-                        <button type="button" class="btn sm icon-only" (click)="open(i, 'reject', $event)" [attr.aria-label]="'Reject ' + i.methodName + ' for ' + i.merchantName" title="Reject"><app-icon name="x" [size]="15" /></button>
-                      }
-                    }
-                  </td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-      } @else {
-        <div class="empty-state">
-          <div class="icon-tile"><app-icon name="check-circle" /></div>
-          <h3>{{ chip() === 'pending_approval' ? 'Nothing is waiting for approval in ' + corridor.name() + '.' : 'No pricing configurations match.' }}</h3>
-        </div>
-      }
-    </section>
-
-    @if (detail(); as i) {
-      @let x = i.version;
+/**
+ * Pricing Detail with the FinOps decision (§7.8, §8.7), in a side sheet: what changes, the full
+ * configuration, then Approve or Reject inside the sheet with a current authenticator code. The
+ * server enforces FinOps only and maker ≠ checker. Used by the Approvals inbox.
+ */
+@Component({
+  selector: 'app-pricing-decision-sheet',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [Icon, SideSheet],
+  template: `
+@let i = item();
+@let x = i.version;
       <app-side-sheet label="Pricing Detail" (dismiss)="dismissDetail()">
         <header class="sheet-head">
           <div class="sheet-titles">
@@ -139,7 +101,7 @@
             @if (x.rejectionReason) {<div class="wide"><dt>Rejection reason</dt><dd>{{ x.rejectionReason }}</dd></div>}
           </dl>
           </section>
-          @if (x.status === 'pending_approval' && v.canDecide && i.ownSubmission) {
+          @if (x.status === 'pending_approval' && canDecide() && i.ownSubmission) {
             <p class="pa-own">You submitted this change, so someone else must approve it.</p>
           }
         </div>
@@ -165,7 +127,7 @@
         } @else {
           <footer class="sheet-foot">
             <span class="sheet-foot-note">{{ x.createdBy }} · {{ dateTime(x.createdAt) }}</span>
-            @if (x.status === 'pending_approval' && v.canDecide && !i.ownSubmission) {
+            @if (x.status === 'pending_approval' && canDecide() && !i.ownSubmission) {
               <button type="button" class="btn danger-outline" (click)="open(i, 'reject')">Reject</button>
               <button type="button" class="btn primary" (click)="open(i, 'approve')">Approve</button>
             } @else {
@@ -174,14 +136,112 @@
           </footer>
         }
       </app-side-sheet>
-    }
-  } @else if (loadError(); as e) {
-    <div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e.message ?? "We couldn't load pricing approvals." }} <button type="button" class="btn sm" (click)="load()">Try again</button></div></div>
-  } @else {
-    <section class="panel-card"><div class="skeleton-rows" aria-busy="true" aria-label="Loading"><span></span><span></span></div></section>
+  `,
+  styleUrl: './pricing.scss',
+})
+export class PricingDecisionSheet implements OnInit, OnDestroy {
+  private readonly api = inject(MerchantApi);
+  readonly item = input.required<PricingApprovalItem>();
+  readonly canDecide = input(false);
+  /** Open straight at Approve or Reject (row action). */
+  readonly startWith = input<'approve' | 'reject' | null>(null);
+  readonly decided = output<{ decision: 'approve' | 'reject'; text: string }>();
+  readonly failed = output<string>();
+  readonly closed = output<void>();
+
+  protected readonly dialog = signal<{ item: PricingApprovalItem; decision: 'approve' | 'reject' } | null>(null);
+  protected readonly reason = signal('');
+  protected readonly code = signal('');
+  protected readonly busy = signal(false);
+  protected readonly dialogError = signal<string | null>(null);
+
+  protected readonly flowLabel = FLOW_LABEL;
+  protected readonly technique = techniqueLabel;
+  protected readonly statusLabel = { ...PRICING_STATUS_LABEL, pending_approval: 'Pending Approval' } as Record<PricingStatus, string>;
+  protected readonly tone = PRICING_STATUS_TONE;
+  protected readonly day = fmtDay;
+  protected readonly dateTime = fmtDateTime;
+  protected readonly money = money;
+  protected readonly refLabel = REFERENCE_PERIOD_LABEL;
+  protected readonly metricLabel = METRIC_SHORT;
+  protected readonly promoLabel = PROMO_TYPE_LABEL;
+
+  private readonly restore: () => void;
+
+  constructor() {
+    // The demo authenticator shows the signed-in user's code, for the re-authentication step.
+    const demo = inject(DemoAuthenticatorService);
+    const before = demo.sessionWanted();
+    demo.sessionWanted.set(true);
+    this.restore = () => demo.sessionWanted.set(before);
   }
 
-  @if (toast(); as t) {
-    <div class="p-toast" [class.danger]="t.tone === 'danger'" role="status"><app-icon [name]="t.tone === 'success' ? 'check-circle' : 'alert-circle'" [size]="18" />{{ t.text }}</div>
+  ngOnInit() {
+    const s = this.startWith();
+    if (s) this.open(this.item(), s);
   }
-</main>
+
+  ngOnDestroy() {
+    this.restore();
+  }
+
+  protected vaText(i: PricingApprovalItem) {
+    if (!(i.country === 'ID' && i.version.methodCode === 'va')) return '';
+    return i.version.vaBanks.length ? i.version.vaBanks.map((b) => VA_BANKS.find((v) => v.code === b)?.name ?? b).join(', ') : 'All VA Banks';
+  }
+
+  /** "New Rate" (§7.8): including USD and secondary charges. */
+  protected newRate(i: PricingApprovalItem) {
+    const sec = secondarySummary(i.version);
+    return `${pricingShort(i.version)}${sec ? ` · ${sec}` : ''}`;
+  }
+
+  protected open(item: PricingApprovalItem, decision: 'approve' | 'reject') {
+    this.dialog.set({ item, decision });
+    this.reason.set('');
+    this.code.set('');
+    this.dialogError.set(null);
+    setTimeout(() => document.querySelector<HTMLElement>('.sheet-confirm textarea, .sheet-confirm input')?.focus());
+  }
+
+  protected close() {
+    if (!this.busy()) this.dialog.set(null);
+  }
+
+  /** Esc / backdrop / close: leave the decision first, then the sheet. */
+  protected dismissDetail() {
+    if (this.busy()) return;
+    if (this.dialog()) this.dialog.set(null);
+    else this.closed.emit();
+  }
+
+  protected setCode(value: string, el: HTMLInputElement) {
+    const digits = value.replace(/\D/g, '').slice(0, 6);
+    if (digits !== value) el.value = digits;
+    this.code.set(digits);
+    this.dialogError.set(null);
+  }
+
+  protected async confirm() {
+    const d = this.dialog();
+    if (!d || this.busy()) return;
+    if (d.decision === 'reject' && !this.reason().trim()) return;
+    if (!/^\d{6}$/.test(this.code())) {
+      this.dialogError.set('Enter the 6-digit code.');
+      return;
+    }
+    this.busy.set(true);
+    this.dialogError.set(null);
+    try {
+      await this.api.decidePricing(d.item.applicationId, d.item.version.id, { decision: d.decision, reason: this.reason().trim(), code: this.code() });
+      this.decided.emit({ decision: d.decision, text: d.decision === 'approve' ? `Approved – ${d.item.methodName} for ${d.item.merchantName}.` : `Rejected – ${d.item.methodName} for ${d.item.merchantName}.` });
+    } catch (e) {
+      const err = toMerchantError(e) as MerchantClientError & { attemptsRemaining?: number };
+      const mfa = codeProblem(String(err.code), err.attemptsRemaining);
+      if (mfa) this.dialogError.set(mfa);
+      else this.failed.emit(`Could not ${d.decision} – ${err.message ?? 'please try again.'}`);
+    } finally {
+      this.busy.set(false);
+    }
+  }
+}

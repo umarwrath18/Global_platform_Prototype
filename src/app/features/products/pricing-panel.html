@@ -38,10 +38,13 @@
           <th scope="col"><span class="sr-only">Actions</span></th>
         </tr>
       </thead>
+      @for (f of flows; track f) {
+        @if (unpricedOf(f).length || rowsOf(f).length) {
       <tbody>
-        @for (u of unpriced(); track u.code) {
+        <tr class="flow-head"><th scope="colgroup" colspan="6">{{ flowLabel[f] }}</th></tr>
+        @for (u of unpricedOf(f); track u.code) {
           <tr class="unpriced" [class.active-row]="editor()?.methodCode === u.code && !editor()?.editOf">
-            <td>{{ u.name }}<div class="sub-line">{{ flowLabel[u.flow] }}</div></td>
+            <td>{{ u.name }}</td>
             <td class="muted">–</td>
             <td class="muted">No pricing yet</td>
             <td class="muted">–</td>
@@ -55,11 +58,11 @@
             </td>
           </tr>
         }
-        @for (x of rows(); track x.id) {
+        @for (x of rowsOf(f); track x.id) {
           <tr [class.active-row]="editor()?.editOf === x.id" [class.faded]="x.status === 'expired' || x.status === 'cancelled' || x.status === 'rejected'">
             <td>
               {{ x.method?.name ?? x.methodCode }}
-              <div class="sub-line">{{ flowLabel[x.flow] }} · v{{ x.version }}@if (vaText(x); as va) { · {{ va }}}@if (subLabel(x); as sl) { · {{ sl }}}</div>
+              @if (rowNote(x); as n) {<div class="sub-line">{{ n }}</div>}
             </td>
             <td>{{ technique(x.technique) }}</td>
             <td>
@@ -81,12 +84,15 @@
               }
             </td>
           </tr>
-        } @empty {
-          @if (!unpriced().length) {
-            <tr><td colspan="6" class="muted empty-row">{{ anyEnabled() ? 'No pricing to show.' : 'No pricing set for this MID yet. Switch on its products above, then add pricing for each one.' }}</td></tr>
-          }
         }
       </tbody>
+        }
+      }
+      @if (!unpriced().length && !rows().length) {
+      <tbody>
+        <tr><td colspan="6" class="muted empty-row">{{ anyEnabled() ? 'No pricing to show.' : 'No pricing set for this MID yet. Switch on its products above, then add pricing for each one.' }}</td></tr>
+      </tbody>
+      }
     </table>
   </div>
 
@@ -102,7 +108,7 @@
   }
 
   @if (v.can.decidePricing && v.versions.some(x => x.status === 'pending_approval')) {
-    <p class="step-note"><app-icon name="info" [size]="14" />Approve or reject pending pricing on <a routerLink="/pricing-approvals">Pricing Approvals</a>.</p>
+    <p class="step-note"><app-icon name="info" [size]="14" />Approve or reject pending pricing on <a routerLink="/approvals" [queryParams]="{ type: 'pricing' }">Approvals</a>.</p>
   }
 
   @if (error(); as e) {<div class="alert danger compact panel-alert" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}

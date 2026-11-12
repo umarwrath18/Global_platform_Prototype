@@ -13,7 +13,7 @@ Prompt are kept; anything new is listed here with its exact wording.
 | Settlement per sub-merchant | Not built: settlement stays at MID level (sub-merchants settle into the parent's account). |
 | MFA re-authentication | Settlement saves, USD Fixed Fee submissions and deactivations (and cancelling / reactivating) ask for a current code. One code is valid for 5 minutes in that session. |
 | Unusual-change alerts (§9) | Warn FinOps in-app and by (simulated) email; never block. 5+ pricing submissions for one merchant within an hour; 20+ by one person in a day; pricing that charges nothing (MDR and fees 0); a drop of 30% or more against the pricing in effect for the same scope (same technique only). "High-volume" needs transaction data, so the drop rule applies to every merchant for now. |
-| Side sheets | Pricing editor, pricing details, Select Pricing to Edit, Pricing Approvals, deactivation, change requests (country and legal identity) and User security actions open in side sheets. Registration and readiness stay full pages. Confirmations (discard draft, reject reason, MFA code, cancel rule, switch product off) appear inside the sheet or card, not as browser dialogs. |
+| Side sheets | Pricing editor, pricing details, Select Pricing to Edit, pricing decisions in the Approvals inbox, deactivation, change requests (country and legal identity) and User security actions open in side sheets. Registration and readiness stay full pages. Confirmations (discard draft, reject reason, MFA code, cancel rule, switch product off) appear inside the sheet or card, not as browser dialogs. |
 
 ## Deactivation rules
 - **Immediately:** pricing in scope that is active ends today and is expired; scheduled or pending pricing in scope is cancelled. Whole MID: the product switches off and its settlement cycle is removed.
@@ -27,7 +27,7 @@ Prompt are kept; anything new is listed here with its exact wording.
 
 ## Where to find it
 - Merchant Pricing → merchant → **View** on an active rule → **Deactivate**; the **Deactivated payment methods** list has Cancel / Reactivate.
-- Merchant Pricing → **Sub-Merchant View** → **Deactivate** / **Reactivate** per row (Ops).
+- Merchant Pricing → **Sub-merchants** → **Deactivate** / **Reactivate** per row (Ops).
 - Product & Payment Config → Products: e-wallet groups; settlement save asks for the code.
 - Notifications (FinOps): "Payment method deactivated" and "Unusual pricing change".
 
@@ -42,3 +42,13 @@ while a sheet is open.
 `pricing-deactivation.spec.ts` (deactivation, re-authentication window, alerts), catalog and
 grouping tests in `product-pricing.spec.ts` / `products.spec.ts`, and component tests for the inline
 confirmations.
+
+## Navigation and lists (UX review, 12 Nov 2026)
+| Topic | Decision |
+|---|---|
+| Approvals | One **Approvals** inbox for every team: *Waiting for {team}* / *All open* / *Decided*, filters for type and country, 25 rows per page. Pricing is approved or rejected in a side sheet there (MFA code). The sidebar's *Pricing Approvals* and the Approvals tab in Merchant Pricing are gone; old links redirect (`/pricing-approvals` → `/approvals?type=pricing`). |
+| Merchant Pricing | One header for its screens (title, corridor, tabs, "N waiting for FinOps"). Tabs: **Merchants · Sub-merchants · History**. The duplicate Sub-Merchant View button is gone. A merchant row opens the merchant; Edit Pricing and Configure are on that page. |
+| History | *Versions* and *Audit log* in one tab (`/pricing-audit` → History → Audit log). The audit log has merchant, period (7 / 30 / 90 days / all) and person filters, CSV export of every matching entry, and shows each change as *old → new* with the effective period. |
+| Versions | Kept (the spec requires them) but shown only where they matter: pricing details, History and the audit log. Rule tables group methods under **PayIn** and **PayOut** instead of repeating "PayIn · v1" on every row; a pending change says what it replaces. The merchant page links to its history instead of repeating a version table. |
+| Long lists | Paginated with one shared pager (10 / 25 / 50, default 25), not endless scroll: audit entries are searched and cited, and the page keeps its place. |
+| Text | Names, IDs, dates, amounts and statuses never wrap in tables; descriptions may take two lines; emails in detail grids are cut with "…" (full value on hover). |

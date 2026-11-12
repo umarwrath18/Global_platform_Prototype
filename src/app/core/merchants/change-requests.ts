@@ -197,4 +197,6 @@ export interface ApprovalsView {
   recent: ApprovalItem[];
   heading: string;
   canDecide: boolean;
+  /** Every item the acting team can see, any status (the inbox's "All" and "Decided" views). */
+  all?: ApprovalItem[];
 }

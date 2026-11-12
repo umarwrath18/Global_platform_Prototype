@@ -17,7 +17,7 @@ const request: ChangeRequest = {
 };
 
 function setup(role: StaffRole) {
-  const api = { decideChange: vi.fn(async () => request), withdrawChange: vi.fn(async () => request), requestCountryChange: vi.fn(async () => request), getApprovals: vi.fn() };
+  const api = { decideChange: vi.fn(async () => request), withdrawChange: vi.fn(async () => request), requestCountryChange: vi.fn(async () => request), getApprovals: vi.fn(), pricingApprovals: vi.fn() };
   TestBed.configureTestingModule({ providers: [provideRouter([]), { provide: MerchantApi, useValue: api }, { provide: StaffRoleService, useValue: { role: () => role } }] });
   return api;
 }
@@ -133,12 +133,14 @@ describe('Approvals page', () => {
       pending: [{ kind: 'pricing', id: 'PV-000009', title: 'Pricing change · Indonesia', merchantId: 'GM-1', merchantName: 'PT Rasa Bali Kuliner', applicationId: 'APP-9', country: 'ID', summary: 'Visa / Mastercard: 2.4% MDR from 2026-10-28', requestedBy: 'Sarah Lim', requestedRole: 'sales', requestedAt: 0, status: 'pending', approverTeam: 'finops', decidedAt: null, link: ['/applications', 'APP-9', 'products'] }],
     };
     api.getApprovals.mockResolvedValue(view);
+    api.pricingApprovals.mockResolvedValue({ items: [], canDecide: true });
     const f = TestBed.createComponent(Approvals);
     await settle(f);
     await settle(f);
     const el = f.nativeElement as HTMLElement;
-    expect(el.querySelector('#pending-title')?.textContent).toContain('Waiting for FinOps');
+    // One inbox: the team's queue first, with a count, then All open and Decided.
+    expect(el.querySelector('[role="tab"][aria-selected="true"]')?.textContent?.replace(/\s+/g, ' ').trim()).toBe('Waiting for FinOps 1');
     expect(el.textContent).toContain('Visa / Mastercard: 2.4% MDR from 2026-10-28');
-    expect(el.querySelector('a.btn')?.getAttribute('href')).toBe('/applications/APP-9/products');
+    expect(el.querySelector('tbody button')?.textContent?.trim()).toBe('Review');
   });
 });

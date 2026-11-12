@@ -256,14 +256,14 @@ document §8 (Part B). Two steps on one screen:
    method's usual maximum. Fees round half up to the currency's smallest unit; no tax.
 
 **Modes** are derived from the MID's state: *onboarding* (CS; pricing applies when saved), *change*
-after "Confirm onboarding" (Sales / Ops submit, FinOps approves on **Pricing Approvals**), and
+after "Confirm onboarding" (Sales / Ops submit, FinOps approves in the **Approvals** inbox), and
 *read only* before CS review or while the merchant is suspended. Editing keeps the scope and the
 pricing method and creates v+1. **Maker ≠ checker:** the person who submitted a change can't decide
 it, so test approvals with two logins (e.g. submit as `123`, approve as `TANJUNG-ADMIN`, the FinOps
 login). Each decision asks for a current code from the approver's authenticator. **"Confirm
 onboarding"** replaces "Issue production keys" (it also issues them) and is blocked until a product
 is on, every product has pricing in effect and every PayIn product has a settlement cycle. Every
-pricing create, approval, rejection and cancellation is in the **MDR audit log** and the application
+pricing create, approval, rejection and cancellation is in the audit log (Merchant Pricing → History → Audit log) and the application
 history.
 
 **Merchant Pricing (Pricing Engine Part A).** Sidebar → **Merchant Pricing**, scoped to a corridor
@@ -275,11 +275,13 @@ Payment Config, for MIDs whose onboarding is confirmed:
   per sub-merchant, version history and deactivated payment methods. Each row has one **View**: the
   details open in a side sheet with *What changes*, an activity timeline, and Edit Pricing, Cancel
   Rule or Deactivate. The editor opens in a side sheet with an optional **sub-merchant** scope.
-- **Sub-Merchant View** (§7.3): the pricing that applies to each sub-merchant and payment method – its
+- **Sub-merchants** (§7.3): the pricing that applies to each sub-merchant and payment method – its
   own rule, otherwise *Inherited from Master Merchant* (§7.9). Ops can deactivate or reactivate a
   method for one sub-merchant here.
-- **MDR History** (§7.11), **Approvals** (§7.8: status chips, Pricing Detail in a side sheet, maker ≠
-  checker and an MFA code per decision) and the **MDR audit log** (§7.10).
+- **History**: *Versions* (§7.11, every rule with its version) and *Audit log* (§7.10: who did what;
+  filters for merchant, period and person; CSV export). Long lists are paginated (25 rows by default).
+- Pricing changes are approved in the one **Approvals** inbox (sidebar), in a side sheet with an MFA code
+  (§7.8, maker ≠ checker). Merchant Pricing shows "N waiting for FinOps" linking there.
 Demo: Nusantara Home Retail (Malaysia) has two sub-merchants; the Online Store has its own Cards
 rule and the Penang Outlet inherits the Master Merchant's. See
 [`docs/pricing-engine-part-c.md`](docs/pricing-engine-part-c.md) for this batch.

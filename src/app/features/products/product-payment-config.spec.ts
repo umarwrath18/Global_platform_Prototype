@@ -119,12 +119,15 @@ describe('Pricing table (§8.4)', () => {
 
   it('lists unpriced products as amber rows with "Set pricing", and versions with technique, pricing and period', async () => {
     const { el } = await render(PricingPanel, { view: makeView() });
-    const rows = [...el.querySelectorAll('tbody tr')].map((r) => r.textContent?.replace(/\s+/g, ' ').trim());
+    const rows = [...el.querySelectorAll('tbody tr:not(.flow-head)')].map((r) => r.textContent?.replace(/\s+/g, ' ').trim());
+    // Rows sit under a PayIn / PayOut header; versions aren't repeated on every row.
+    expect(el.querySelector('tr.flow-head')?.textContent?.trim()).toBe('PayIn');
     expect(rows[0]).toContain('FPX');
     expect(rows[0]).toContain('No pricing yet');
     expect(rows[0]).toContain('Not priced');
     expect(rows[0]).toContain('Set pricing');
-    expect(rows[1]).toContain('Cards PayIn · v1');
+    expect(rows[1]).toContain('Cards');
+    expect(rows[1]).not.toContain('v1');
     expect(rows[1]).toContain('Percentage');
     expect(rows[1]).toContain('MDR: 2.2%');
     expect(rows[1]).toContain('01 Nov 2026 – Ongoing');
@@ -133,9 +136,9 @@ describe('Pricing table (§8.4)', () => {
   it('disables Edit while a version is pending, and never offers Cancel on active pricing in change mode', async () => {
     const v = makeView('change', { versions: [version('cards'), version('cards', { id: 'PV-2', version: 2, status: 'pending_approval', startDate: '2026-11-12' })] });
     const { el } = await render(PricingPanel, { view: v });
-    const active = [...el.querySelectorAll('tbody tr')].find((r) => r.textContent?.includes('v1'))!;
+    const active = [...el.querySelectorAll('tbody tr')].find((r) => r.textContent?.includes('Active'))!;
     expect([...active.querySelectorAll('button')].map((b) => b.textContent?.trim())).toEqual([]);
-    const pending = [...el.querySelectorAll('tbody tr')].find((r) => r.textContent?.includes('v2'))!;
+    const pending = [...el.querySelectorAll('tbody tr')].find((r) => r.textContent?.includes('Pending FinOps approval'))!;
     expect(pending.textContent).toContain('Pending FinOps approval');
     expect([...pending.querySelectorAll('button')].map((b) => b.textContent?.trim())).toEqual(['Cancel']);
   });

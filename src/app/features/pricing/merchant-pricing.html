@@ -1,21 +1,7 @@
 <main class="page">
-  <div class="portal-head">
-    <div>
-      <h1>Merchant Pricing</h1>
-      <p class="sub">Configure and manage merchant pricing rules for {{ corridor.name() }}</p>
-    </div>
-    <div class="head-tools">
-      <app-corridor-select />
-      <a class="btn sm" routerLink="/merchant-pricing/sub-merchants"><app-icon name="users" [size]="15" />Sub-Merchant View</a>
-    </div>
-  </div>
   <app-merchant-pricing-tabs />
 
   @if (list(); as l) {
-    <div class="mp-counters" role="status">
-      <span><strong>{{ l.activeRules }}</strong> active rules</span>
-      <span><strong>{{ l.pendingApprovals }}</strong> pending approvals</span>
-    </div>
     <section class="panel-card">
       <div class="toolbar">
         <input class="f-input grow" type="search" [placeholder]="'Search ' + corridor.name() + ' merchants by name or MID...'" aria-label="Search merchants" [value]="q()" (input)="q.set($any($event.target).value); page.set(0)" />
@@ -52,7 +38,7 @@
             </thead>
             <tbody>
               @for (r of rows(); track r.applicationId) {
-                <tr>
+                <tr class="clickable" tabindex="0" (click)="open(r)" (keydown.enter)="open(r)">
                   <td><a class="row-link" [routerLink]="['/merchant-pricing', r.applicationId]">{{ r.merchantName }}</a><div class="sub-line">{{ r.merchantId }}</div></td>
                   <td class="mono">{{ r.mid ?? 'Not issued yet' }}</td>
                   <td>{{ r.subMerchantCount }}</td>
@@ -60,29 +46,13 @@
                   <td class="nowrap">{{ date(r.updatedAt) }}</td>
                   <td>{{ r.activeRules }} / {{ r.totalRules }}@if (r.pendingCount) {<div class="sub-line">{{ r.pendingCount }} pending</div>}</td>
                   <td>{{ r.mdr ?? '—' }}</td>
-                  <td class="row-actions">
-                    @if (maker()) {
-                      <a class="btn sm ghost" [routerLink]="['/merchant-pricing', r.applicationId]">Edit Pricing</a>
-                      <button type="button" class="btn sm" (click)="configure(r)">Configure</button>
-                    } @else {
-                      <a class="btn sm ghost" [routerLink]="['/merchant-pricing', r.applicationId]">View Pricing</a>
-                    }
-                  </td>
+                  <td class="row-actions"><a class="btn sm" [routerLink]="['/merchant-pricing', r.applicationId]" (click)="$event.stopPropagation()">Open</a></td>
                 </tr>
               }
             </tbody>
           </table>
         </div>
-        <div class="pager">
-          <label>Rows per page
-            <select class="f-input sm" (change)="setPageSize(+$any($event.target).value)">
-              @for (n of [10, 20, 50]; track n) {<option [value]="n" [selected]="n === pageSize()">{{ n }}</option>}
-            </select>
-          </label>
-          <span class="muted small">{{ page() * pageSize() + 1 }}–{{ page() * pageSize() + rows().length }} of {{ filtered().length }}</span>
-          <button type="button" class="btn sm ghost" [disabled]="page() === 0" (click)="page.set(page() - 1)" aria-label="Previous page"><app-icon name="arrow-left" [size]="14" /></button>
-          <button type="button" class="btn sm ghost" [disabled]="page() >= pages() - 1" (click)="page.set(page() + 1)" aria-label="Next page"><app-icon name="arrow-right" [size]="14" /></button>
-        </div>
+        <app-pager [total]="filtered().length" [(page)]="page" [(pageSize)]="pageSize" />
       } @else {
         <div class="empty-state">
           <div class="icon-tile"><app-icon name="store" /></div>
