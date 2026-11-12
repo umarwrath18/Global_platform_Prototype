@@ -110,7 +110,7 @@
                   <td>{{ methodOf(d.methodCode, d.flow) }}<div class="sub-line">{{ flowLabel[d.flow] }}{{ d.immediate ? ' · Immediately' : '' }}</div></td>
                   <td>{{ d.subMerchantId ? subNameOf(d.subMerchantId) : 'Master Merchant and all sub-merchants' }}</td>
                   <td class="nowrap">{{ day(d.effectiveDate) }}</td>
-                  <td class="cfg">{{ d.reason }}<div class="sub-line">{{ d.createdBy }}</div></td>
+                  <td class="cfg wrap">{{ d.reason }}<div class="sub-line">{{ d.createdBy }}</div></td>
                   <td><span class="status" [class]="'status ' + deactivationTone[d.status]">{{ deactivationLabel[d.status] }}</span></td>
                   <td class="row-actions">
                     @if (canDeactivate() && d.status === 'scheduled') {<button type="button" class="btn sm ghost" (click)="deactivationAsk.set({ d, action: 'cancel' })">Cancel</button>}

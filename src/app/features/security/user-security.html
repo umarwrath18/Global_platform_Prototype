@@ -110,7 +110,7 @@
                         <td class="mono">{{ r.id }}<span class="muted" style="display: block; font-weight: 400">Ref {{ r.reference }}</span></td>
                         <td><span class="who"><strong>{{ r.userName }}</strong><span>{{ r.loginId }}</span></span></td>
                         <td><span class="status" [class]="r.status === 'open' ? 'warning' : 'success'">{{ r.status === 'open' ? 'Waiting for Security Admin' : 'Completed' }}</span></td>
-                        <td class="reason">{{ r.reason }}</td>
+                        <td class="reason wrap">{{ r.reason }}</td>
                         <td class="muted">{{ dateTime(r.requestedAt) }}<br />{{ r.requestedBy }}</td>
                         <td class="muted">@if (r.completedAt) {{{ dateTime(r.completedAt) }}<br />{{ r.completedBy }}<br />Verified by: {{ r.verificationMethod }}} @else {—}</td>
                         <td>
@@ -146,7 +146,7 @@
                         <td><span class="who"><strong>{{ a.userName }}</strong><span>{{ a.loginId }} · {{ a.accountId }}</span></span></td>
                         <td class="muted">{{ dateTime(a.at) }}</td>
                         <td><span class="status" [class]="a.status === 'open' ? 'danger' : 'success'">{{ a.status === 'open' ? 'Open · sign-in blocked' : 'Resolved' }}</span></td>
-                        <td class="muted">@if (a.resolvedAt) {{{ a.resolution }} · {{ dateTime(a.resolvedAt) }}<br />{{ a.resolvedBy }}} @else {—}</td>
+                        <td class="muted wrap">@if (a.resolvedAt) {{{ a.resolution }} · {{ dateTime(a.resolvedAt) }}<br />{{ a.resolvedBy }}} @else {—}</td>
                         <td>
                           @if (a.status === 'open' && role() === 'security' && userById(a.userId); as u) {
                             @if (!isSelf(u) && u.blockedAt) {
@@ -180,8 +180,8 @@
                         <td class="audit-type">{{ eventLabel(e.type) }}</td>
                         <td>@if (e.userName) {<span class="who"><strong>{{ e.userName }}</strong><span>{{ e.loginId }}</span></span>} @else {<span class="muted">—</span>}</td>
                         <td class="muted">{{ e.actor ?? (e.userName ? 'User' : 'System') }}</td>
-                        <td class="reason">{{ e.reason ?? '—' }}</td>
-                        <td class="muted reason">{{ e.detail ?? '' }}</td>
+                        <td class="reason wrap">{{ e.reason ?? '—' }}</td>
+                        <td class="muted reason wrap">{{ e.detail ?? '' }}</td>
                       </tr>
                     }
                   </tbody>

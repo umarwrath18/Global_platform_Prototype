@@ -43,8 +43,8 @@ import { MerchantPricingTabs } from './merchant-pricing-tabs';
                     <td>{{ e.subMerchantName ?? 'Master Merchant' }}</td>
                     <td>{{ e.country }}</td>
                     <td>{{ e.methodName }}<div class="sub-line">v{{ e.version }}</div></td>
-                    <td class="cfg">{{ e.previous }}</td>
-                    <td class="cfg">{{ e.next }}@if (e.reason) {<div class="sub-line">Reason: {{ e.reason }}</div>}</td>
+                    <td class="cfg wrap">{{ e.previous }}</td>
+                    <td class="cfg wrap">{{ e.next }}@if (e.reason) {<div class="sub-line">Reason: {{ e.reason }}</div>}</td>
                     <td class="nowrap">{{ e.effective }}</td>
                     <td><span class="status" [class]="'status ' + tone[e.status]">{{ statusLabel[e.status] }}</span></td>
                   </tr>

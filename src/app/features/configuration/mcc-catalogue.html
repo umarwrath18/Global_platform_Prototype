@@ -55,7 +55,7 @@
             @for (e of entries(); track e.code) {
               <tr>
                 <td class="mono">{{ e.code }}</td>
-                <td>{{ e.description }}</td>
+                <td class="wrap">{{ e.description }}</td>
                 @for (c of countries; track c.code) {
                   <td>
                     @switch (e.countries[c.code]) {

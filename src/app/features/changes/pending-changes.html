@@ -14,7 +14,7 @@
               <thead><tr><th scope="col">Field</th><th scope="col">Current</th><th scope="col">Proposed</th></tr></thead>
               <tbody>
                 @for (c of r.changes; track c.field) {
-                  <tr><td>{{ c.label }}</td><td class="muted">{{ c.from }}</td><td>{{ c.to }}</td></tr>
+                  <tr><td>{{ c.label }}</td><td class="muted wrap">{{ c.from }}</td><td class="wrap">{{ c.to }}</td></tr>
                 }
               </tbody>
             </table>

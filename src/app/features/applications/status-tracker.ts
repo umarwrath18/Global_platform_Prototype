@@ -97,6 +97,14 @@ const READINESS: { status: ApplicationStatus; label: string }[] = [
     .lbl {
       padding-right: 8px;
       line-height: 1.3;
+      white-space: nowrap;
+    }
+    /* Step names stay on one line: below this width the two lanes stack instead of squeezing. */
+    @media (max-width: 1440px) {
+      .lanes {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 16px;
+      }
     }
     .done {
       color: var(--text-muted);

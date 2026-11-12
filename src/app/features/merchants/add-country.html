@@ -46,7 +46,7 @@
       <div class="panel-body">
         <dl class="kv">
           <div><dt>Main contact</dt><dd>{{ d.merchant.primaryContact.name }}</dd></div>
-          <div><dt>Email</dt><dd>{{ d.merchant.primaryContact.email }}</dd></div>
+          <div><dt>Email</dt><dd class="truncate" [title]="d.merchant.primaryContact.email">{{ d.merchant.primaryContact.email }}</dd></div>
           <div><dt>Phone</dt><dd>{{ d.merchant.primaryContact.phone }}</dd></div>
           <div><dt>Created</dt><dd>{{ date(d.merchant.createdAt) }}</dd></div>
         </dl>

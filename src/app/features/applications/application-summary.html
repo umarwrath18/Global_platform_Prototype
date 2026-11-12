@@ -42,7 +42,7 @@
   </header>
   <dl class="kv">
     <div><dt>Phone number</dt><dd [class.missing]="miss('contact.phone')">{{ miss('contact.phone') ?? data.contact.phone }}</dd></div>
-    <div><dt>Email address</dt><dd [class.missing]="miss('contact.email')">{{ miss('contact.email') ?? data.contact.email }}</dd></div>
+    <div><dt>Email address</dt><dd class="truncate" [title]="data.contact.email" [class.missing]="miss('contact.email')">{{ miss('contact.email') ?? data.contact.email }}</dd></div>
     <div class="wide"><dt>Current address</dt><dd [class.missing]="miss('contact.currentAddress')">{{ miss('contact.currentAddress') ?? (data.contact.sameAsRegistered ? 'Same as registered address' : data.contact.currentAddress) }}</dd></div>
     <div class="wide">
       <dt>Settlement email(s)</dt>

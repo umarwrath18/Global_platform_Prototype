@@ -125,7 +125,7 @@
                 <div><dt>Registration country</dt><dd>{{ countryName(d.merchant.registrationCountry) }}</dd></div>
                 <div><dt>Registration number</dt><dd>{{ d.merchant.registrationNumber }}</dd></div>
                 <div><dt>Main contact</dt><dd>{{ d.merchant.primaryContact.name || '—' }}</dd></div>
-                <div><dt>Email</dt><dd>{{ d.merchant.primaryContact.email }}</dd></div>
+                <div><dt>Email</dt><dd class="truncate" [title]="d.merchant.primaryContact.email">{{ d.merchant.primaryContact.email }}</dd></div>
                 <div><dt>Phone</dt><dd>{{ d.merchant.primaryContact.phone }}</dd></div>
                 <div><dt>Created</dt><dd>{{ date(d.merchant.createdAt) }} · {{ d.merchant.createdBy }}</dd></div>
                 <div>

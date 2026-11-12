@@ -327,6 +327,12 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
+    white-space: nowrap;
+  }
+
+  select.f-input {
+    width: auto;
+    min-width: 72px;
   }
 }
 

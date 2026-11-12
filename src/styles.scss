@@ -935,6 +935,17 @@ textarea.f-input {
     padding: 14px 16px;
     border-bottom: 1px solid var(--border-soft);
     vertical-align: middle;
+    /* Names, IDs, dates, amounts and statuses stay on one line; the table scrolls sideways if it must.
+       Free text (reasons, before / after values, descriptions) opts in to wrapping with .wrap. */
+    white-space: nowrap;
+  }
+
+  td.wrap,
+  td .wrap {
+    white-space: normal;
+    min-width: 220px;
+    max-width: 420px;
+    overflow-wrap: anywhere;
   }
 
   tbody tr {
@@ -1084,4 +1095,12 @@ textarea.f-input {
   .f-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* One line, cut with "…"; put the full value in a title attribute. For emails and URLs in key–value grids. */
+.truncate {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }

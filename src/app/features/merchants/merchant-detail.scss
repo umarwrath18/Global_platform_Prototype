@@ -32,6 +32,7 @@
 .mid-note {
   display: block;
   font-size: 12px;
+  white-space: nowrap;
   color: var(--text-muted);
 
   &.warn {
