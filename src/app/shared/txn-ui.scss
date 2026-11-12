@@ -625,3 +625,9 @@
   font-weight: 700;
   color: var(--text);
 }
+
+/* No divider above the first section when nothing comes before it (Merchant Portal sheet). */
+.sheet-body > app-txn-sections:first-child .txn-sec:first-child {
+  border-top: 0;
+  padding-top: 0;
+}

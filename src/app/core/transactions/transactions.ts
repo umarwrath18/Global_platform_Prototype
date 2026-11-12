@@ -350,7 +350,6 @@ export interface MerchantTxnDetail {
   countryName: string;
   createdAt: number;
   completedAt: number | null;
-  path: PathStep[];
   sections: DetailSection[];
   timeline: TimelineEntry[];
   ipn: { status: string; attempts: IpnAttempt[] };

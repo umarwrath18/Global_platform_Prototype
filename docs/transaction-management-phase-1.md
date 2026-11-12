@@ -64,9 +64,9 @@ as time passes. Notes, flags and the audit log are stored (`mobi.gp.txnops`).
 - Same tabs, chips and filters (Search, Date range, Country when more than one, Sub-merchant when it
   has live ones, Payment method, Status). Summary: Transactions, Successful, Gross volume, Fees, Net
   amount. Columns add **Fee** and **Net amount** (— until Successful).
-- Details side sheet: path Customer → Mobi → Bank (payout: Mobi → Bank → Beneficiary); Payment,
-  Amount and fees, Customer, Bank (Payment reference), Settlement, IPN, Timeline (Created → Paid →
-  Settled). No provider, provider codes, pricing version or Mobi request ID.
+- Details side sheet: Payment, Amount and fees, Customer (payout: Beneficiary), Bank (Payment
+  reference), Settlement, IPN, Timeline (Created → Paid → Settled). No payment path, provider,
+  provider codes, pricing version or Mobi request ID.
 
 ## New labels and messages (please review)
 - Payment path: **Beneficiary** (payout step, in place of Customer).

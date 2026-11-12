@@ -98,7 +98,7 @@ Open the **Merchant Portal app** (http://localhost:4201 locally) and sign in as 
   **Net amount** (payouts: Total debited), currency and status (Pending, Processing, Successful,
   Failed, Expired). Filters: search (Transaction ID or Invoice ID), date range, country, sub-merchant,
   payment method, status; a summary of gross volume, fees and net per currency. A row opens the
-  details in a side sheet (payment path, fees, customer, bank reference, settlement, IPN, timeline).
+  details in a side sheet (fees, customer, bank reference, settlement, IPN, timeline).
   **Export CSV** downloads every record matching the filters, as
   `<merchant-name>-<flow>-transactions-YYYY-MM-DD.csv`.
 - **Pricing & settings** (read only): for each live country, the pricing in effect per product, any

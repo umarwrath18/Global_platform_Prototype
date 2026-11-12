@@ -5,17 +5,17 @@ import { MerchantPortalApi } from '@gp/core/merchants/merchant-portal-api.servic
 import { fmtDateTime, fmtMoney, TXN_FLOW_LABEL, TxnFlow } from '@gp/core/transactions/transactions';
 import { Icon } from '@gp/shared/icon';
 import { SideSheet } from '@gp/shared/side-sheet';
-import { PaymentPath, TxnIpn, TxnSections, TxnStatusBadge, TxnTimeline } from '@gp/shared/txn-ui';
+import { TxnIpn, TxnSections, TxnStatusBadge, TxnTimeline } from '@gp/shared/txn-ui';
 
 /**
- * Transaction details for the merchant, in a side sheet: a short payment path (Customer → Mobi →
- * Bank), payment, amount and fees, customer, bank reference, settlement, IPN attempts and a simple
- * timeline. No provider details, internal references or pricing versions.
+ * Transaction details for the merchant, in a side sheet: payment, amount and fees, customer, bank
+ * reference, settlement, IPN attempts and a simple timeline. No payment path, provider details,
+ * internal references or pricing versions.
  */
 @Component({
   selector: 'app-merchant-transaction-sheet',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, SideSheet, PaymentPath, TxnSections, TxnStatusBadge, TxnTimeline, TxnIpn],
+  imports: [Icon, SideSheet, TxnSections, TxnStatusBadge, TxnTimeline, TxnIpn],
   template: `
     <app-side-sheet label="Transaction details" (dismiss)="closed.emit()">
       <header class="sheet-head">
@@ -37,7 +37,6 @@ import { PaymentPath, TxnIpn, TxnSections, TxnStatusBadge, TxnTimeline } from '@
       </header>
       <div class="sheet-body">
         @if (d(); as t) {
-          <app-payment-path [steps]="t.path" [flow]="t.flow" />
           <app-txn-sections [sections]="t.sections" [flow]="t.flow" />
           <section class="txn-sec"><h3>IPN</h3><app-txn-ipn [status]="t.ipn.status" [attempts]="t.ipn.attempts" /></section>
           <section class="txn-sec"><h3>Timeline</h3><app-txn-timeline [entries]="t.timeline" /></section>

@@ -843,7 +843,6 @@ export class TransactionServer {
       countryName: t.countryName,
       createdAt: t.createdAt,
       completedAt: final ? t.finalAt : null,
-      path: merchantPath(t, now),
       sections,
       timeline: merchantTimeline(t, now),
       ipn: { status: ipnState(t, now).text, attempts: ipnAttempts(t, now) },
@@ -1130,36 +1129,6 @@ function internalPath(t: TxnRecord, d: TxnDetailRecord | undefined, now: number)
       if (t.failStage === 'customer') return [s('customer', 'failed', 'Cancelled'), merchant, s('mobi', 'done', 'Created'), s('provider', 'done', 'Forwarded'), s('bank', 'off', '—')];
       if (t.failStage === 'provider') return [s('customer', 'done', 'Paid'), merchant, s('mobi', 'done', `Sent ${hm(t.sentAt!)}`), s('provider', 'failed', reason), s('bank', 'off', '—')];
       return [s('customer', 'done', d?.type === 'cards' ? 'Card entered' : 'Paid'), merchant, s('mobi', 'done', `Sent ${hm(t.sentAt!)}`), s('provider', 'done', 'Forwarded'), s('bank', 'failed', reason)];
-  }
-}
-
-/** Merchant view: Customer → Mobi → Bank (pay-in) or Mobi → Bank → Beneficiary (payout). No provider. */
-function merchantPath(t: TxnRecord, now: number): PathStep[] {
-  const status = statusAt(t, now);
-  const s = (key: PathStepKey, state: PathStep['state'], caption: string): PathStep => ({ key, state, caption });
-  const why = t.merchantReason ?? '';
-  if (t.flow === 'payout') {
-    const done = status === 'successful';
-    const failed = status === 'failed';
-    return [
-      s('mobi', status === 'pending' || status === 'processing' ? 'current' : failed && t.failStage === 'provider' ? 'failed' : 'done', status === 'pending' || status === 'processing' ? 'Processing' : failed && t.failStage === 'provider' ? why : `Sent ${hm(t.sentAt ?? t.createdAt)}`),
-      s('bank', done ? 'done' : failed && t.failStage === 'bank' ? 'failed' : 'off', done ? 'Credited' : failed && t.failStage === 'bank' ? why : '—'),
-      s('customer', done ? 'done' : 'off', done ? `Paid ${hm(t.finalAt)}` : '—'),
-    ];
-  }
-  switch (status) {
-    case 'pending':
-      return [s('customer', 'current', 'Waiting for payment'), s('mobi', 'done', 'Created'), s('bank', 'off', '—')];
-    case 'processing':
-      return [s('customer', 'done', 'Paid'), s('mobi', 'current', 'Confirming'), s('bank', 'off', '—')];
-    case 'successful':
-      return [s('customer', 'done', `Paid ${hm(t.sentAt!)}`), s('mobi', 'done', `Confirmed ${hm(t.finalAt)}`), s('bank', 'done', 'Confirmed')];
-    case 'expired':
-      return [s('customer', 'expired', `Not paid by ${hm(t.finalAt)}`), s('mobi', 'done', `Expired ${hm(t.finalAt)}`), s('bank', 'off', '—')];
-    case 'failed':
-      if (t.failStage === 'mobi' || t.failStage === 'provider') return [s('customer', 'done', 'Checkout'), s('mobi', 'failed', why), s('bank', 'off', '—')];
-      if (t.failStage === 'customer') return [s('customer', 'failed', 'Cancelled'), s('mobi', 'done', 'Created'), s('bank', 'off', '—')];
-      return [s('customer', 'done', 'Paid'), s('mobi', 'done', 'Sent'), s('bank', 'failed', why)];
   }
 }
 

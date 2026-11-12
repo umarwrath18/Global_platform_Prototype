@@ -253,7 +253,7 @@ describe('Transactions', () => {
       const ok = r.items.find((t) => t.status === 'successful')!;
       expect(ok.fee).not.toBeUndefined();
       const d = (await mget<MerchantTxnDetail>('NUSANTARA-MERCHANT', `/api/merchant-portal/transactions/payin/${ok.transactionId}`)).body;
-      expect(d.path.map((s) => s.key)).toEqual(['customer', 'mobi', 'bank']);
+      expect(d).not.toHaveProperty('path');
       const labels = d.sections.flatMap((s) => s.fields.map((f) => f.label));
       expect(labels).not.toContain('Provider');
       expect(labels).not.toContain('Mobi request ID');
