@@ -193,6 +193,7 @@
                   <td>{{ t.currency }}</td>
                   <td>
                     <app-txn-status [status]="t.status" />
+                    @if (t.settlementHeld) {<div class="sub-line">Settlement on hold</div>}
                     @if (t.flags.length) {
                       <div class="txn-flags">@for (f of t.flags; track f) {<span class="txn-flag" [class.investigation]="f === 'investigation'">{{ flagLabel[f] }}</span>}</div>
                     }

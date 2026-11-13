@@ -1,3 +1,5 @@
+import { AuthService } from '../../core/auth/auth.service';
+import { SUSPENSION_TYPE_LABEL, SuspensionEffect, SuspensionView, VIA_LABEL } from '../../core/merchants/suspensions';
 import { afterNextRender, ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, Injector, input, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { MerchantApi, toMerchantError } from '../../core/merchants/merchant-api.service';
@@ -29,7 +31,22 @@ export class SubMerchantsPanel {
   readonly subMerchants = input.required<SubMerchantView[]>();
   /** Opens this sub-merchant's details (e.g. from the Approvals page). */
   readonly openId = input<string | null | undefined>(null);
+  /** What each sub-merchant is under (suspensions); and the merchant's suspensions. */
+  readonly effects = input<Record<string, SuspensionEffect>>({});
+  readonly suspensions = input<SuspensionView[]>([]);
   readonly changed = output<string>();
+  /** Opens the Suspend sheet with this sub-merchant pre-selected. */
+  readonly suspendSub = output<string>();
+  /** Opens a suspension step (view, review, reactivate, approve). */
+  readonly openSuspension = output<{ id: string; mode: 'view' | 'review' | 'reactivate' | 'approve' }>();
+  protected readonly viaLabel = VIA_LABEL;
+  protected readonly typeLabel = SUSPENSION_TYPE_LABEL;
+  private readonly authService = inject(AuthService);
+  protected readonly me = computed(() => this.authService.session()?.user.id);
+  /** The sub-merchant's own active suspension, if any. */
+  protected ownSuspension(id: string) {
+    return this.suspensions().find((x) => x.scope === 'sub_merchant' && x.subMerchantId === id && x.status === 'active') ?? null;
+  }
 
   protected readonly statusLabel = SUB_MERCHANT_STATUS_LABEL;
   protected readonly tone = TONE;
@@ -42,7 +59,6 @@ export class SubMerchantsPanel {
   protected readonly issues = signal<FieldIssue[]>([]);
   protected readonly selected = signal<string | null>(null);
   protected readonly comment = signal('');
-  protected readonly lifecycleReason = signal('');
   protected readonly busy = signal<string | null>(null);
   protected readonly error = signal<string | null>(null);
 
@@ -137,7 +153,6 @@ export class SubMerchantsPanel {
   protected toggle(id: string) {
     this.selected.set(this.selected() === id ? null : id);
     this.comment.set('');
-    this.lifecycleReason.set('');
     this.error.set(null);
   }
 
@@ -147,7 +162,6 @@ export class SubMerchantsPanel {
     try {
       await this.api.subMerchantAction(s.id, action, body);
       this.comment.set('');
-      this.lifecycleReason.set('');
       this.changed.emit(message);
     } catch (e) {
       this.error.set(toMerchantError(e).message ?? "We couldn't update the sub-merchant.");
@@ -164,11 +178,4 @@ export class SubMerchantsPanel {
     void this.act(s, 'review', { decision, comment: this.comment().trim() }, decision === 'approve' ? `${s.displayName} approved` : `${s.displayName} rejected`);
   }
 
-  protected lifecycle(s: SubMerchantView, action: 'suspend' | 'reactivate') {
-    if (this.lifecycleReason().trim().length < 5) {
-      this.error.set('Enter a reason with at least 5 characters.');
-      return;
-    }
-    void this.act(s, 'lifecycle', { action, reason: this.lifecycleReason().trim() }, action === 'suspend' ? `${s.displayName} suspended` : `${s.displayName} reactivated`);
-  }
 }

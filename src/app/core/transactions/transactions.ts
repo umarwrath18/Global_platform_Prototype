@@ -90,8 +90,8 @@ export const TXN_RANGE_LABEL: Record<Exclude<TxnRange, 'custom'>, string> = {
 };
 export const TXN_PAGE_SIZES = [10, 25, 50];
 
-export type TxnFlag = 'investigation' | 'status_conflict';
-export const TXN_FLAG_LABEL: Record<TxnFlag, string> = { investigation: 'Under investigation', status_conflict: 'Status conflict' };
+export type TxnFlag = 'investigation' | 'status_conflict' | 'merchant_suspended';
+export const TXN_FLAG_LABEL: Record<TxnFlag, string> = { investigation: 'Under investigation', status_conflict: 'Status conflict', merchant_suspended: 'Merchant suspended' };
 
 export type TxnSort = 'created' | 'amount' | 'updated';
 
@@ -159,6 +159,8 @@ export interface TxnListRow {
   fee?: number | null;
   net?: number | null;
   flags: TxnFlag[];
+  /** Successful pay-in whose settlement is on hold (merchant suspended). */
+  settlementHeld?: boolean;
   /** Values of the selected payment type's extra columns. */
   typeValues?: Record<string, string>;
 }
@@ -312,6 +314,8 @@ export interface MerchantTxnRow {
   net: number | null;
   currency: string;
   status: TxnStatus;
+  /** Neutral note under the status, e.g. "Payments are paused" or "Settlement paused". */
+  note: string | null;
 }
 
 export interface MerchantTxnSummary {
@@ -335,6 +339,8 @@ export interface MerchantTxnListResponse {
     methods: { code: string; name: string; type: PaymentType; country: string }[];
     paymentTypes: PaymentType[];
   };
+  /** The merchant's account is under review: read only, no exports (set by the Merchant Portal API). */
+  underReview?: boolean;
   sampleData: true;
 }
 

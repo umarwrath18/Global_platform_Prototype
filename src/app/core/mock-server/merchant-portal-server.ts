@@ -74,8 +74,10 @@ export class MerchantPortalServer {
         case 'summary':
           return { status: 200, body: this.summary(profile!, q) };
         case 'transactions':
-          return { status: 200, body: this.opts.transactions.merchantList(profile!.id, flowOf(q.get('flow')), q) };
+          return { status: 200, body: { ...this.opts.transactions.merchantList(profile!.id, flowOf(q.get('flow')), q), underReview: profile!.underReview } };
         case 'transactions/export':
+          // Under review (fraud or compliance suspension): read only, no exports.
+          if (profile!.underReview) fail(403, 'ACCOUNT_UNDER_REVIEW', 'Not available while your account is under review.');
           return { status: 200, body: this.opts.transactions.merchantExport(profile!.id, profile!.legalName, flowOf(q.get('flow')), q) };
       }
       // GET /api/merchant-portal/transactions/{flow}/{id}
@@ -100,7 +102,7 @@ export class MerchantPortalServer {
       const sum = rows.filter((t) => t.currency === c.currency).reduce((s, t) => s + (t.net ?? t.amount), 0);
       return { currency: c.currency, available: round(Math.max(0, sum), c.currency) };
     });
-    return { merchant: { id: profile.id, name: profile.legalName }, balances, asOf: this.now(), paymentMethods: methodsOf(profile), sampleData: true };
+    return { merchant: { id: profile.id, name: profile.legalName }, balances, asOf: this.now(), paymentMethods: methodsOf(profile), underReview: profile.underReview, sampleData: true };
   }
 
   /** Dashboard figures: pay-ins in the period. */

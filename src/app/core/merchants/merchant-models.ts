@@ -1,3 +1,4 @@
+import type { SuspensionEffect, SuspensionView } from './suspensions';
 // API contract for Merchant Management & Onboarding (Batch 2).
 // The UI depends only on these shapes; the simulated backend can be replaced by Mobi's
 // real merchant services without changing the screens.
@@ -25,7 +26,7 @@ export const STAFF_ROLE_LABEL: Record<StaffRole, string> = {
 export type GlobalMerchantStatus = 'onboarding' | 'active' | 'no_active_applications';
 
 export type MerchantLifecycleStatus = 'active' | 'suspended';
-export interface MerchantLifecycleEvent { at: number; action: 'suspended' | 'reactivated'; by: string; role: StaffRole; reason: string; fromStatus: MerchantLifecycleStatus; toStatus: MerchantLifecycleStatus; merchantId?: string; }
+export interface MerchantLifecycleEvent { at: number; action: 'suspended' | 'reactivated'; by: string; role: StaffRole; reason: string; fromStatus: MerchantLifecycleStatus; toStatus: MerchantLifecycleStatus; merchantId?: string; /** What was suspended or reactivated, its type, case and controls (suspensions). */ detail?: string; }
 
 export interface PrimaryContact {
   name: string;
@@ -360,6 +361,10 @@ export interface MerchantDetail {
   profileEvents: ProfileEvent[];
   /** Sub-merchants under this (parent) merchant. */
   subMerchants: SubMerchantView[];
+  /** Suspensions of the merchant, its countries and sub-merchants, newest first. */
+  suspensions: SuspensionView[];
+  /** What each live country MID and each sub-merchant is under right now. */
+  effects: { countries: Record<string, SuspensionEffect>; subMerchants: Record<string, SuspensionEffect> };
 }
 
 export interface ApplicationDetail {
@@ -416,7 +421,13 @@ export type NotificationEvent =
   | 'change_decided'
   | 'sub_merchant_submitted'
   | 'sub_merchant_decided'
-  | 'sub_merchant_live';
+  | 'sub_merchant_live'
+  | 'merchant_suspended'
+  | 'suspension_reviewed'
+  | 'merchant_reactivated'
+  | 'reactivation_requested'
+  | 'settlement_release_requested'
+  | 'settlement_released';
 
 export interface PortalNotification {
   id: string;

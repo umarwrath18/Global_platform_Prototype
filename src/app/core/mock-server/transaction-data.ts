@@ -98,6 +98,8 @@ export interface TxnRecord {
   settlementCycle: string | null;
   /** A provider success that arrived after the transaction expired (not applied; flagged). */
   lateSuccessAt: number | null;
+  /** The MID or sub-merchant has settlement on hold (suspension) right now. */
+  settlementHeld: boolean;
 }
 
 /** Detail tables, one per payment type (fields only that type has). */
@@ -246,6 +248,16 @@ function makeTxn(src: TxnSource, flow: TxnFlow, at: number, seq: number, ymd: st
     sentAt = at + Math.floor(paidDelay / 2);
   }
   if (outcome !== 'expired' && failStage !== 'mobi' && flow === 'payin' && expiresAt && finalAt > expiresAt) expiresAt = finalAt + MIN;
+  // A suspension that blocks this flow at this time stops the transaction at Mobi.
+  const block = (src.suspensionBlocks ?? []).find((b) => at >= b.from && (b.to === null || at < b.to) && (flow === 'payin' ? b.payins : b.payouts) && (b.subMerchantId === '*' || b.subMerchantId === sub?.id));
+  if (block) {
+    outcome = 'failed';
+    failStage = 'mobi';
+    sentAt = null;
+    finalAt = at + 1000;
+    expiresAt = null;
+    reason = ['MOBI-SUSPENDED', 'Merchant suspended', 'Payments are paused.'];
+  }
   if (!reason && outcome === 'failed') reason = pick(rand, failureReasons(type, flow, failStage!));
   if (!reason && outcome === 'expired') reason = ['EXPIRED', 'No payment within the validity window', "The customer didn't pay in time."];
 
@@ -354,6 +366,7 @@ function makeTxn(src: TxnSource, flow: TxnFlow, at: number, seq: number, ymd: st
     bankResponse,
     settlementCycle: flow === 'payin' ? (src.settlement[method.methodCode] ?? null) : null,
     lateSuccessAt,
+    settlementHeld: flow === 'payin' && (src.suspensionBlocks ?? []).some((b) => b.settlementHeld && (b.subMerchantId === '*' || b.subMerchantId === sub?.id)),
   };
   return { row, detail };
 }

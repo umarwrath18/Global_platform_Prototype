@@ -250,3 +250,23 @@
 .nowrap {
   white-space: nowrap;
 }
+
+/* Account under review (fraud or compliance suspension): neutral wording, never "suspended". */
+.review-banner {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--warning-border);
+  border-radius: var(--r-card);
+  background: var(--warning-bg);
+  font-size: 14px;
+
+  strong {
+    display: block;
+    color: var(--warning);
+  }
+}
+
+.sub-line {
+  font-size: 12px;
+  color: var(--text-muted);
+}

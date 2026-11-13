@@ -40,10 +40,12 @@ import { randomToken } from './crypto';
 import { entityOfApplication, GoLiveIntent, goLiveBlocker, isRuleError, issueMid, MerchantEntity, parentEntityOf, RegionalMid, toMidView } from './merchant-identity';
 import { MigrationFlag, migrationFlags, MigrationLogEntry, normaliseMerchantDb, SCHEMA_REVISION } from './merchant-migrations';
 import { addDemoSubMerchants, buildMerchantSeed, buildSeedAdditions, SEED_ADDITION_MERCHANT_IDS } from './merchant-seed';
-import { createSubMerchant, goLiveSubMerchant, reviewSubMerchant, setSubMerchantCheck, SubMerchantContext, subMerchantLifecycle, subMerchantsOf, submitSubMerchant } from './sub-merchants';
+import { createSubMerchant, goLiveSubMerchant, reviewSubMerchant, setSubMerchantCheck, SubMerchantContext, subMerchantsOf, subMerchantView, submitSubMerchant } from './sub-merchants';
 import { approvalsFor, ChangeContext, decideChange, merchantRiskApproved, profileEvent, requestCountryChange, requestProfileChange, toChangeView, withdrawChange } from './change-requests';
 import { cancelDeactivation, cancelPricing, checkDeactivation, checkDeactivationAction, checkDecision, deactivateMethod, reactivateMethod, decidePricing, DERIVED_CHECKLIST, mdrHistory, merchantPricingList, onboardingGaps, pricingApprovals, pricingAuditLog, subMerchantPricing, ProductContext, productState, productView, runPricingJob, saveProducts, setPricing, syncDerivedChecklist } from './product-pricing';
 import { ApiError, fail } from './server-errors';
+import { checkReactivation, checkReactivationDecision, checkReview, checkSettlementDecision, checkSuspend, decideReactivation, decideSettlement, effectFor, legacyReactivate, legacySuspend, merchantUnderReview, requestReactivation, requestSettlementRelease, review as reviewSuspension, suspend, SuspensionContext, suspensionsOf, transactionBlocks } from './suspensions';
+import type { Suspension } from '../merchants/suspensions';
 import { simulateVerification } from './verification';
 
 // Simulated Merchant Management & Onboarding backend (Batch 2). Like the auth server it
@@ -76,7 +78,7 @@ export interface MerchantDb {
   version: number;
   /** Highest data upgrade applied (absent = before entities and MIDs). See merchant-migrations.ts. */
   schemaRevision?: number;
-  seq: { merchant: number; application: number; notification: number; entity?: number; mid?: number; mccRequest?: number; pricing?: number; pricingAudit?: number; changeRequest?: number; deactivation?: number };
+  seq: { merchant: number; application: number; notification: number; entity?: number; mid?: number; mccRequest?: number; pricing?: number; pricingAudit?: number; changeRequest?: number; deactivation?: number; suspension?: number };
   merchants: MerchantRecord[];
   applications: CountryApplication[];
   notifications: PortalNotification[];
@@ -95,6 +97,8 @@ export interface MerchantDb {
   /** Change requests after Risk approval (profile identity and country details). */
   changeRequests?: ChangeRequestRecord[];
   profileEvents?: ProfileEvent[];
+  /** Suspensions (fraud, compliance, commercial) of merchants, countries and sub-merchants. */
+  suspensions?: Suspension[];
   /** Demo merchants added to this data after its original seed (each is added at most once). */
   seedAdditions?: string[];
 }
@@ -105,6 +109,8 @@ export interface MerchantPortalProfile {
   countries: { code: string; currency: string; methods: { code: string; name: string }[] }[];
   /** Read-only "Pricing & settings" for the Merchant Portal. */
   settings: MerchantSettingsView;
+  /** Under a fraud or compliance suspension: the portal is read only (no exports) and shows a neutral banner. */
+  underReview: boolean;
 }
 
 /** A live MID, as the transaction service sees it (see transactionSources()). */
@@ -127,6 +133,8 @@ export interface TxnSource {
   versions: PricingVersion[];
   deactivations: NonNullable<ProductConfig['deactivations']>;
   subMerchants: { id: string; name: string; mid: string; issuedAt: number; demo: boolean }[];
+  /** Suspension windows: new pay-ins / payouts in [from, to) fail at Mobi; settlementHeld while held now. */
+  suspensionBlocks: { from: number; to: number | null; payins: boolean; payouts: boolean; subMerchantId: string; settlementHeld: boolean }[];
 }
 
 export interface MerchantDataReport {
@@ -231,7 +239,7 @@ export class MerchantServer {
   }
 
   static handles(path: string) {
-    return /^\/api\/(merchants|applications|notifications|changes|approvals|sub-merchants|pricing)(\/|\?|$)/.test(path);
+    return /^\/api\/(merchants|applications|notifications|changes|approvals|sub-merchants|pricing|suspensions)(\/|\?|$)/.test(path);
   }
 
   async handle(method: string, path: string, body: any, token: string | null, roleHeader: string | null): Promise<ServerReply> {
@@ -263,6 +271,13 @@ export class MerchantServer {
         if (id && sub === 'changes' && m === 'POST') return ok(this.changeAction(caller, role, (ctx) => requestProfileChange(ctx, id, body)), 201);
         if (id && sub === 'sub-merchants' && m === 'POST') return ok(this.subMerchantAction(caller, role, (ctx) => createSubMerchant(ctx, id, body)), 201);
         if (id && sub === 'lifecycle' && m === 'POST') return ok(this.updateMerchantLifecycle(id, body, caller, role));
+        if (id && sub === 'suspensions' && !subId && m === 'POST') {
+          // All checks first, then the MFA code, then the change.
+          const input = this.suspensionAction(caller, role, (ctx) => checkSuspend(ctx, id, body), false);
+          const denied = await this.stepUp(token, body?.code);
+          if (denied) return denied;
+          return ok(this.suspensionAction(caller, role, (ctx) => suspend(ctx, id, input)), 201);
+        }
         if (id && sub === 'applications' && m === 'POST') return ok(this.createApplication(id, body, caller, role), 201);
         if (id && sub === 'mcc' && !subId && m === 'PUT') return ok(this.setMcc(id, body, caller, role));
         if (id && sub === 'mcc-requests' && !subId && m === 'POST') return ok(this.requestMccChange(id, body, caller, role), 201);
@@ -334,9 +349,29 @@ export class MerchantServer {
           review: (ctx) => reviewSubMerchant(ctx, id, body),
           checks: (ctx) => setSubMerchantCheck(ctx, id, body),
           'go-live': (ctx) => goLiveSubMerchant(ctx, id),
-          lifecycle: (ctx) => subMerchantLifecycle(ctx, id, body),
         };
         if (sub && actions[sub]) return ok(this.subMerchantAction(caller, role, actions[sub]));
+        // The earlier one-step Suspend / Reactivate of a sub-merchant (now a commercial suspension).
+        if (sub === 'lifecycle') return ok(this.legacySubLifecycle(id, body, caller, role));
+      }
+      if (resource === 'suspensions' && id && m === 'POST') {
+        // Checks first, then the MFA code, then the change.
+        const steps: Record<string, [(ctx: SuspensionContext) => unknown, (ctx: SuspensionContext) => unknown]> = {
+          review: [(ctx) => checkReview(ctx, id, body), (ctx) => reviewSuspension(ctx, id, body)],
+          reactivation: [(ctx) => checkReactivation(ctx, id, body), (ctx) => requestReactivation(ctx, id, body)],
+          'reactivation/decision': [(ctx) => checkReactivationDecision(ctx, id, body), (ctx) => decideReactivation(ctx, id, body)],
+          settlement: [(ctx) => checkSettlementDecision(ctx, id, body), (ctx) => decideSettlement(ctx, id, body)],
+          'settlement/request': [() => null, (ctx) => requestSettlementRelease(ctx, id)],
+        };
+        const step = steps[[sub, subId].filter(Boolean).join('/')];
+        if (step) {
+          this.suspensionAction(caller, role, step[0], false);
+          if (sub !== 'settlement' || subId !== 'request') {
+            const denied = await this.stepUp(token, body?.code);
+            if (denied) return denied;
+          }
+          return ok(this.suspensionAction(caller, role, step[1]));
+        }
       }
       if (resource === 'approvals' && !id && m === 'GET') return ok(approvalsFor(this.load(), role));
       if (resource === 'pricing' && !sub && m === 'GET') {
@@ -388,7 +423,56 @@ export class MerchantServer {
       pendingChanges: (db.changeRequests ?? []).filter((r) => r.merchantId === m.id && r.status === 'pending').map(toChangeView),
       profileEvents: (db.profileEvents ?? []).filter((e) => e.merchantId === m.id),
       subMerchants: subMerchantsOf(db, m.id, this.now()),
+      suspensions: suspensionsOf(db, m.id),
+      effects: {
+        countries: Object.fromEntries(db.applications.filter((a) => a.merchantId === m.id && a.status === 'operational').map((a) => [a.country, effectFor(db, m.id, a.country, null)])),
+        subMerchants: Object.fromEntries((db.entities ?? []).filter((e) => e.gmid === m.id && e.kind === 'sub' && e.country).map((e) => [e.id, effectFor(db, m.id, e.country!, e.id)])),
+      },
     };
+  }
+
+  /** Runs a suspension step with a context; `save` false for checks that must not write. */
+  private suspensionAction<T>(caller: Caller, role: StaffRole, run: (ctx: SuspensionContext) => T, save = true): T {
+    if (save && this.upgradePending) fail(503, 'MIGRATION_PENDING', { message: 'Merchant data could not be upgraded yet. Nothing has changed; try again shortly.' });
+    const db = this.load();
+    const result = run({
+      db,
+      caller,
+      role,
+      now: this.now(),
+      notify: (event, merchant, audience, title, body, extraTo = []) => {
+        db.notifications.unshift({
+          id: `NT-${db.seq.notification++}`, at: this.now(), event, title, body, applicationId: '', merchantId: merchant.id, audience,
+          email: { to: [...audience.filter((a): a is Exclude<StaffRole, 'finops'> => a !== 'finops').map((a) => TEAM_MAILBOX[a]), ...(audience.includes('finops') ? ['finops@mobi.xyz'] : []), ...extraTo], subject: `[Mobi Global Platform] ${title}`, status: 'simulated' },
+          readBy: [],
+        });
+        db.notifications = db.notifications.slice(0, 300);
+      },
+    });
+    if (save) this.save(db);
+    return result;
+  }
+
+  /** The earlier one-step Suspend / Reactivate of a sub-merchant, kept for older screens and tests. */
+  private legacySubLifecycle(id: string, body: any, caller: Caller, role: StaffRole) {
+    const action = body?.action;
+    const reason = str(body?.reason, 500).trim();
+    if (action !== 'suspend' && action !== 'reactivate') fail(400, 'VALIDATION_FAILED', { message: 'Choose a valid lifecycle action.' });
+    if (reason.length < 5) fail(400, 'VALIDATION_FAILED', { message: 'Enter a reason with at least 5 characters.' });
+    if (action === 'suspend' && role !== 'sales' && role !== 'risk') fail(403, 'ROLE_NOT_PERMITTED', { message: 'Only Sales / Operations or Risk can suspend a sub-merchant.' });
+    if (action === 'reactivate' && role !== 'risk') fail(403, 'ROLE_NOT_PERMITTED', { message: 'Only Risk can reactivate a suspended sub-merchant.' });
+    return this.suspensionAction(caller, role, (ctx) => {
+      const subEntity = (ctx.db.entities ?? []).find((e) => e.id === id && e.kind === 'sub');
+      if (!subEntity) fail(404, 'NOT_FOUND', { message: 'Sub-merchant not found.' });
+      if (subEntity!.status === 'rejected') fail(409, 'INVALID_TRANSITION', { message: 'A rejected sub-merchant cannot be suspended or reactivated.' });
+      if (action === 'suspend') legacySuspend(ctx, subEntity!.gmid, reason, id);
+      else if (!legacyReactivate(ctx, subEntity!.gmid, reason, id)) {
+        if (subEntity!.lifecycleStatus !== 'suspended') fail(409, 'INVALID_TRANSITION', { message: 'Only a suspended sub-merchant can be reactivated.' });
+        subEntity!.lifecycleStatus = 'active';
+        subEntity!.lifecycleReason = null;
+      }
+      return subMerchantView(ctx.db, subEntity!, ctx.now);
+    });
   }
 
   private createMerchant(body: any, caller: Caller, role: StaffRole): GlobalMerchant {
@@ -425,6 +509,11 @@ export class MerchantServer {
     return this.withStatus(db, merchant);
   }
 
+  /**
+   * The earlier one-step Suspend / Reactivate (reason only), kept for older screens and tests. It now
+   * records a commercial suspension of the whole merchant with no payment controls; the Suspend sheet
+   * uses /suspensions with type, scope and controls.
+   */
   private updateMerchantLifecycle(id: string, body: any, caller: Caller, role: StaffRole): GlobalMerchant {
     const action = body?.action;
     const reason = str(body?.reason, 500).trim();
@@ -432,25 +521,22 @@ export class MerchantServer {
     if (reason.length < 5) fail(400, 'VALIDATION_FAILED', { message: 'Enter a reason with at least 5 characters.' });
     if (action === 'suspend' && role !== 'sales' && role !== 'risk') fail(403, 'ROLE_NOT_PERMITTED', { message: 'Only Sales / Operations or Risk can suspend a merchant.' });
     if (action === 'reactivate' && role !== 'risk') fail(403, 'ROLE_NOT_PERMITTED', { message: 'Only Risk can reactivate a suspended merchant.' });
-    const db = this.load();
-    const merchant = this.findMerchant(db, id);
-    const current = merchant.lifecycleStatus ?? 'active';
-    const globalStatus = deriveGlobalStatus(db.applications.filter((a) => a.merchantId === merchant.id));
-    if (action === 'suspend') {
-      if (current === 'suspended') fail(409, 'INVALID_TRANSITION', { message: 'This merchant is already suspended.' });
-      if (globalStatus !== 'active') fail(409, 'INVALID_TRANSITION', { message: 'Only a merchant with at least one operational country can be suspended.' });
-    } else if (current !== 'suspended') fail(409, 'INVALID_TRANSITION', { message: 'Only a suspended merchant can be reactivated.' });
-    const next: MerchantLifecycleStatus = action === 'suspend' ? 'suspended' : 'active';
-    const at = this.now();
-    merchant.lifecycleStatus = next;
-    merchant.lifecycleReason = next === 'suspended' ? reason : null;
-    merchant.lifecycleUpdatedAt = at;
-    merchant.lifecycleUpdatedBy = caller.name;
-    db.lifecycleEvents ??= [];
-    db.lifecycleEvents.unshift({ at, action: action === 'suspend' ? 'suspended' : 'reactivated', by: caller.name, role, reason, fromStatus: current, toStatus: next, merchantId: merchant.id });
-    db.lifecycleEvents = db.lifecycleEvents.slice(0, 500);
-    this.save(db);
-    return this.withStatus(db, merchant);
+    return this.suspensionAction(caller, role, (ctx) => {
+      const merchant = this.findMerchant(ctx.db, id);
+      if (action === 'suspend') {
+        if ((merchant.lifecycleStatus ?? 'active') === 'suspended') fail(409, 'INVALID_TRANSITION', { message: 'This merchant is already suspended.' });
+        legacySuspend(ctx, id, reason);
+      } else if (!legacyReactivate(ctx, id, reason)) {
+        // Suspended before suspension records existed: reactivate the lifecycle fields directly.
+        if ((merchant.lifecycleStatus ?? 'active') !== 'suspended') fail(409, 'INVALID_TRANSITION', { message: 'Only a suspended merchant can be reactivated.' });
+        merchant.lifecycleStatus = 'active';
+        merchant.lifecycleReason = null;
+        merchant.lifecycleUpdatedAt = ctx.now;
+        merchant.lifecycleUpdatedBy = caller.name;
+        (ctx.db.lifecycleEvents ??= []).unshift({ at: ctx.now, action: 'reactivated', by: caller.name, role, reason, fromStatus: 'suspended', toStatus: 'active', merchantId: id });
+      }
+      return this.withStatus(ctx.db, merchant);
+    });
   }
 
   /**
@@ -1389,7 +1475,7 @@ export class MerchantServer {
           };
         }),
     };
-    return { id: merchant.id, legalName: merchant.legalName, countries, settings };
+    return { id: merchant.id, legalName: merchant.legalName, countries, settings, underReview: merchantUnderReview(db, merchant.id) };
   }
 
   // ------------------------------------------------ transactions (read only)
@@ -1434,6 +1520,7 @@ export class MerchantServer {
         versions: state.versions,
         deactivations: state.config.deactivations ?? [],
         subMerchants,
+        suspensionBlocks: transactionBlocks(db, merchant.id, app.country),
       });
     }
     return out;
