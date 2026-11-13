@@ -18,7 +18,7 @@ only paused onboarding. Design reviewed on 13 Nov 2026; all recommendations agre
 | MFA | Suspend, review, reactivate, approve and release each need a current authenticator code (the same 5-minute window as other sensitive actions). |
 | Case | **Case reference** (required for fraud and compliance), **Detected by** (Transaction monitoring, Chargeback ratio, Scheme / bank alert, Law enforcement request, Internal review, Merchant request), **Reason** (internal only), and **Linked transactions** picked from Transactions flagged *Under investigation*. |
 | Notifications | In-app and (simulated) email to Risk, Sales / Ops, CS and FinOps, and email to Mobi Support. The merchant gets a neutral message whenever a payment control is on: "**Your account is under review** – Some services are paused while we complete a routine review. Contact support@mobi.xyz if you have questions." It never mentions fraud or suspension. |
-| Merchant Portal | Fraud and compliance: read only (no exports) with the same neutral banner; blocked transactions show "Payments are paused", held ones "Settlement paused". Ships when the Merchant Portal is released (its production deploy is on hold). |
+| Merchant Portal | **Parked** (Merchant Portal work comes later): agreed design is a read-only portal (no exports) for fraud and compliance with the same neutral banner, and "Payments are paused" / "Settlement paused" notes. Nothing in the Merchant Portal app or API changes in this build; blocked transactions simply show as Failed there. |
 | Transactions | New pay-ins / payouts in scope fail at Mobi with reason **Merchant suspended** (path: Mobi ✕). Successful pay-ins under a hold show **Settlement on hold**. New flag and filter **Merchant suspended**. |
 | Not in scope | Terminate / offboarding (later topic). "Under review" watch state (the Transactions investigation flag covers it). |
 
@@ -47,4 +47,4 @@ only paused onboarding. Design reviewed on 13 Nov 2026; all recommendations agre
 
 ## Tests
 `suspensions.spec.ts` (roles, MFA, case, scope, cascade, second review, maker ≠ checker, reactivation,
-settlement release, transactions blocked, Merchant Portal read only, the earlier one-step calls).
+settlement release, transactions blocked, the earlier one-step calls).

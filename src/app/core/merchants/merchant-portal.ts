@@ -27,8 +27,6 @@ export interface MerchantPortalOverview {
   balances: { currency: string; available: number }[];
   asOf: number;
   paymentMethods: PortalPaymentMethod[];
-  /** Under review (fraud or compliance suspension): neutral banner, read only, no exports. */
-  underReview?: boolean;
   /** True while the data is generated sample data, not a live ledger. */
   sampleData: boolean;
 }

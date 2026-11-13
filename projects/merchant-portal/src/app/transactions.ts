@@ -8,7 +8,6 @@ import { Icon } from '@gp/shared/icon';
 import { Pager } from '@gp/shared/pager';
 import { TxnStatusBadge } from '@gp/shared/txn-ui';
 import { MerchantTransactionSheet } from './transaction-sheet';
-import { MERCHANT_REVIEW_MESSAGE, MERCHANT_REVIEW_TITLE } from '@gp/core/merchants/suspensions';
 
 /**
  * My Transactions: PayIn | Payout tabs, payment type chips, filters, a summary per currency, the
@@ -31,16 +30,12 @@ import { MERCHANT_REVIEW_MESSAGE, MERCHANT_REVIEW_TITLE } from '@gp/core/merchan
           @if (page()?.sampleData) {
             <span class="sample-tag" title="No live transaction service is connected yet. Records are generated sample data.">Sample data · not live</span>
           }
-          <button type="button" class="btn primary" (click)="export()" [disabled]="exporting() || loading() || !!error() || !!page()?.underReview" [title]="page()?.underReview ? 'Not available while your account is under review' : ''">
+          <button type="button" class="btn primary" (click)="export()" [disabled]="exporting() || loading() || !!error()">
             @if (exporting()) {<span class="spinner" aria-hidden="true"></span>} @else {<app-icon name="download" [size]="16" />}
             Export CSV
           </button>
         </div>
       </div>
-
-      @if (page()?.underReview) {
-        <div class="review-banner" role="status"><strong>{{ reviewTitle }}</strong>{{ reviewMessage }}</div>
-      }
 
       @if (notice(); as n) {
         <div class="alert compact" [class]="n.tone" role="status"><app-icon [name]="n.tone === 'danger' ? 'alert-circle' : 'info'" /><div>{{ n.text }}</div></div>
@@ -174,7 +169,7 @@ import { MERCHANT_REVIEW_MESSAGE, MERCHANT_REVIEW_TITLE } from '@gp/core/merchan
                       <td class="num mono" [class.muted]="t.fee === null">{{ t.fee === null ? '—' : amount(t.fee, t.currency) }}</td>
                       <td class="num mono" [class.muted]="t.net === null">{{ t.net === null ? '—' : amount(t.net, t.currency) }}</td>
                       <td>{{ t.currency }}</td>
-                      <td><app-txn-status [status]="t.status" />@if (t.note) {<div class="sub-line">{{ t.note }}</div>}</td>
+                      <td><app-txn-status [status]="t.status" /></td>
                     </tr>
                   }
                 </tbody>
@@ -194,8 +189,6 @@ import { MERCHANT_REVIEW_MESSAGE, MERCHANT_REVIEW_TITLE } from '@gp/core/merchan
 export class MerchantTransactions {
   private readonly api = inject(MerchantPortalApi);
 
-  protected readonly reviewTitle = MERCHANT_REVIEW_TITLE;
-  protected readonly reviewMessage = MERCHANT_REVIEW_MESSAGE;
   protected readonly flows: TxnFlow[] = ['payin', 'payout'];
   protected readonly flowLabel = TXN_FLOW_LABEL;
   protected readonly typeLabel = PAYMENT_TYPE_LABEL;

@@ -187,7 +187,7 @@ Who can do what:
 
 While suspended:
 - New pay-ins and payouts fail at Mobi with "Merchant suspended", and successful pay-ins show "Settlement on hold".
-- The merchant gets a neutral "Your account is under review" message. Under fraud or compliance, its Merchant Portal is read only.
+- The merchant gets a neutral "Your account is under review" email. The Merchant Portal changes are not built yet: that work comes later.
 - For a whole-merchant suspension, new country applications, go-live and new sub-merchants are refused (`MERCHANT_SUSPENDED`). Existing applications continue their review.
 
 **Country applications (registration).** Registration is open for the launched countries

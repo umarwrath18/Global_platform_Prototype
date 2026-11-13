@@ -4,7 +4,6 @@ import { DATE_PRESET_LABEL, DatePreset, formatAmount, MerchantPortalOverview, Tr
 import { MerchantPortalApi } from '@gp/core/merchants/merchant-portal-api.service';
 import { Icon } from '@gp/shared/icon';
 import { fmtDateTime } from '@gp/shared/merchant-ui';
-import { MERCHANT_REVIEW_MESSAGE, MERCHANT_REVIEW_TITLE } from '@gp/core/merchants/suspensions';
 
 /** Merchant Dashboard: available balance and a minimal transaction summary. Nothing else. */
 @Component({
@@ -23,10 +22,6 @@ import { MERCHANT_REVIEW_MESSAGE, MERCHANT_REVIEW_TITLE } from '@gp/core/merchan
           <span class="sample-tag" title="No live transaction or balance service is connected yet. Figures are generated sample data.">Sample data · not live</span>
         }
       </div>
-
-      @if (overview()?.underReview) {
-        <div class="review-banner" role="status"><strong>{{ reviewTitle }}</strong>{{ reviewMessage }}</div>
-      }
 
       <!-- ---------------------------------------- Available balance -->
       <section class="panel-card" aria-labelledby="balance-h">
@@ -97,8 +92,6 @@ import { MERCHANT_REVIEW_MESSAGE, MERCHANT_REVIEW_TITLE } from '@gp/core/merchan
   `,
 })
 export class MerchantDashboard {
-  protected readonly reviewTitle = MERCHANT_REVIEW_TITLE;
-  protected readonly reviewMessage = MERCHANT_REVIEW_MESSAGE;
   private readonly api = inject(MerchantPortalApi);
 
   protected readonly presets: DatePreset[] = ['today', '7d', '30d'];

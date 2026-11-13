@@ -314,8 +314,6 @@ export interface MerchantTxnRow {
   net: number | null;
   currency: string;
   status: TxnStatus;
-  /** Neutral note under the status, e.g. "Payments are paused" or "Settlement paused". */
-  note: string | null;
 }
 
 export interface MerchantTxnSummary {
@@ -339,8 +337,6 @@ export interface MerchantTxnListResponse {
     methods: { code: string; name: string; type: PaymentType; country: string }[];
     paymentTypes: PaymentType[];
   };
-  /** The merchant's account is under review: read only, no exports (set by the Merchant Portal API). */
-  underReview?: boolean;
   sampleData: true;
 }
 

@@ -94,7 +94,7 @@ describe('Merchant portal', () => {
       const p = (await list('range=30d')).body;
       expect(p.items.length).toBe(25);
       const t = p.items[0];
-      expect(Object.keys(t).sort()).toEqual(['amount', 'createdAt', 'currency', 'fee', 'flow', 'invoiceId', 'methodCode', 'methodName', 'net', 'note', 'paymentType', 'status', 'subMerchantName', 'transactionId']);
+      expect(Object.keys(t).sort()).toEqual(['amount', 'createdAt', 'currency', 'fee', 'flow', 'invoiceId', 'methodCode', 'methodName', 'net', 'paymentType', 'status', 'subMerchantName', 'transactionId']);
       for (let i = 1; i < p.items.length; i++) expect(p.items[i - 1].createdAt).toBeGreaterThanOrEqual(p.items[i].createdAt);
       expect(JSON.stringify(p.items)).not.toMatch(/host|provider|acquirer|route/i);
     });

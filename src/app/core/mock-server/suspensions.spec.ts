@@ -4,7 +4,6 @@ import { MerchantDetail, StaffRole } from '../merchants/merchant-models';
 import { SuspensionView } from '../merchants/suspensions';
 import { TxnListResponse } from '../transactions/transactions';
 import { AuthServer } from './auth-server';
-import { MerchantPortalServer } from './merchant-portal-server';
 import { MerchantDb, MerchantServer } from './merchant-server';
 import { FlakyStorage } from './testing/merchant-test-data';
 import { currentCode, signIn } from './testing/sign-in';
@@ -146,14 +145,6 @@ describe('Suspension', () => {
       expect(blocked.total).toBeGreaterThan(0);
       expect(blocked.items.every((t) => t.status === 'failed' && t.flags.includes('merchant_suspended'))).toBe(true);
       expect(list.items.every((t) => t.status === 'failed')).toBe(true);
-    });
-
-    it('makes the Merchant Portal read only for fraud, with no exports', async () => {
-      await suspendAs('MOBI-RISK', 'risk', fraud());
-      const portal = new MerchantPortalServer({ storage, auth, profile: (id) => server.portalProfile(id), transactions: txns, now: () => now });
-      const t = await as('TANJUNG-MERCHANT');
-      expect((await portal.handle('GET', '/api/merchant-portal/overview', t)).body).toMatchObject({ underReview: true });
-      expect((await portal.handle('GET', '/api/merchant-portal/transactions/export?flow=payin', t)).body).toMatchObject({ code: 'ACCOUNT_UNDER_REVIEW' });
     });
   });
 

@@ -917,7 +917,6 @@ function merchantRow(t: TxnRecord, now: number): MerchantTxnRow {
     net: fee === null ? null : netOf(t),
     currency: t.currency,
     status,
-    note: t.reasonCode === 'MOBI-SUSPENDED' && status === 'failed' ? 'Payments are paused' : status === 'successful' && t.settlementHeld ? 'Settlement paused' : null,
   };
 }
 
@@ -1075,7 +1074,7 @@ function methodDetailFields(d: TxnDetailRecord | undefined): DetailField[] {
 }
 
 function settlementOf(t: TxnRecord, status: TxnStatus, merchant = false): { expected: string; status: string } {
-  if (status === 'successful' && t.settlementHeld) return { expected: '—', status: merchant ? 'Settlement paused' : 'On hold (merchant suspended)' };
+  if (status === 'successful' && t.settlementHeld && !merchant) return { expected: '—', status: 'On hold (merchant suspended)' };
   if (status !== 'successful' || !t.settlementCycle) return { expected: '—', status: status === 'successful' ? 'Not settled yet' : 'Not applicable' };
   const days = Number(t.settlementCycle.replace('T+', '')) || 0;
   const d = new Date(t.finalAt);
@@ -1163,7 +1162,7 @@ function merchantTimeline(t: TxnRecord, now: number): TimelineEntry[] {
     out.push({ at: t.finalAt, title: t.flow === 'payin' ? 'Paid' : 'Paid out', source: '' });
     if (t.flow === 'payin') {
       const s = settlementOf(t, status, true);
-      out.push({ at: Number.MAX_SAFE_INTEGER, title: 'Settled', source: '', detail: t.settlementHeld ? 'Settlement paused' : s.expected === '—' ? 'Not settled yet' : `Expected ${s.expected}` });
+      out.push({ at: Number.MAX_SAFE_INTEGER, title: 'Settled', source: '', detail: s.expected === '—' ? 'Not settled yet' : `Expected ${s.expected}` });
     }
   } else if (status === 'failed') out.push({ at: t.finalAt, title: 'Failed', source: '', detail: t.merchantReason ?? '' });
   else if (status === 'expired') out.push({ at: t.finalAt, title: 'Expired', source: '', detail: t.merchantReason ?? '' });
