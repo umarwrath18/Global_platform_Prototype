@@ -29,23 +29,34 @@
           <a class="btn primary" routerLink="/merchants/expand" [queryParams]="{ merchant: d.merchant.id }"><app-icon name="plus" [size]="16" />Add country</a>
           <button type="button" class="btn" (click)="addSubMerchant()"><app-icon name="plus" [size]="16" />Add sub-merchant</button>
         }
-        @if (d.merchant.lifecycleStatus === 'suspended') {
-          @if (canReactivate()) { <button type="button" class="btn" (click)="openLifecycleAction('reactivate')">Reactivate</button> }
-        } @else if (canSuspend()) {
-          <button type="button" class="btn danger-outline" (click)="openLifecycleAction('suspend')">Suspend merchant</button>
+        @if (canSuspend()) {
+          <button type="button" class="btn danger-outline" (click)="openSuspend(null)">Suspend</button>
         }
       </div>
     </div>
 
-    @if (d.merchant.lifecycleStatus === 'suspended') {
-      <div class="alert danger" role="status">
-        <app-icon name="alert-circle" />
-        <div>
-          <strong>Merchant suspended</strong>
-          <div>Reason: {{ d.merchant.lifecycleReason }}</div>
-          <div>New country applications and go-live are on hold until Risk reactivates this merchant. Existing applications continue their review: Risk can approve, return or reject, and Customer Success can continue readiness checks.</div>
+    @for (s of openSuspensions(); track s.id) {
+      <section class="sus-banner" [class.lifted]="s.status !== 'active'" role="status" [attr.aria-label]="bannerTitle(s)">
+        <div class="sus-banner-head">
+          <h2>{{ bannerTitle(s) }}</h2>
+          <div class="actions">
+            <button type="button" class="btn sm" (click)="openSuspension(s, 'view')">View case</button>
+            @for (a of actionsFor(s); track a.mode) {
+              <button type="button" class="btn sm" [class.primary]="a.primary" (click)="openSuspension(s, a.mode)">{{ a.label }}</button>
+            }
+            @if (roles.role() === 'risk' && s.status === 'lifted' && s.settlement.status === 'held') {
+              <button type="button" class="btn sm" (click)="requestRelease(s)">Ask FinOps to release settlement</button>
+            }
+          </div>
         </div>
-      </div>
+        <div class="sus-banner-meta">
+          @if (s.status === 'active') {Since {{ dateTime(s.createdAt) }} by {{ s.createdBy }}} @else {Reactivated {{ dateTime(s.liftedAt ?? 0) }} by {{ s.liftedBy }}}
+          @if (s.caseRef) { · Case {{ s.caseRef }}} · Scope: {{ scopeText(s) }} · Detected by: {{ s.detectedBy }}
+        </div>
+        @if (chipsOf(s).length) {<div class="sus-chips">@for (c of chipsOf(s); track c) {<span class="sus-chip">{{ c }}</span>}</div>}
+        @if (s.status === 'active' && s.scope === 'merchant') {<div class="sus-banner-meta">New country applications, go-live and sub-merchants are on hold. Existing applications continue their review.</div>}
+        @if (pendingText(s); as p) {<div class="sus-pending">{{ p }}</div>}
+      </section>
     }
 
     <div class="layout">
@@ -244,7 +255,13 @@
                         {{ a.id }}
                         @if (handedOff(a.status)) {<a class="mini-link" [routerLink]="['/applications', a.id, 'products']">Products &amp; pricing</a>}
                       </td>
-                      <td><app-status [status]="a.status" /></td>
+                      <td>
+                        <app-status [status]="a.status" />
+                        @if (d.effects.countries[a.country]; as ef) {
+                          @if (ef.suspended) {<div><span class="status danger">Suspended</span> <span class="mid-note">{{ viaLabel[ef.via!] }}</span></div>}
+                          @else if (ef.controls.settlement) {<div><span class="status warning">Settlement on hold</span></div>}
+                        }
+                      </td>
                       <td>
                         @if (midFor(a.id); as mid) {
                           <span class="mono">{{ mid.mid }}</span>
@@ -281,7 +298,7 @@
           }
         </section>
 
-        <app-sub-merchants-panel id="sub-merchants" [merchant]="d.merchant" [applications]="d.applications" [subMerchants]="d.subMerchants" [openId]="sub()" (changed)="onChangeAction($event)" />
+        <app-sub-merchants-panel id="sub-merchants" [merchant]="d.merchant" [applications]="d.applications" [subMerchants]="d.subMerchants" [effects]="d.effects.subMerchants" [suspensions]="d.suspensions" [openId]="sub()" (changed)="onChangeAction($event)" (suspendSub)="openSuspend({ scope: 'sub_merchant', subMerchantId: $event })" (openSuspension)="openSuspensionById($event)" />
       </div>
 
       <aside class="col-side panel-card" aria-label="Merchant activity">
@@ -290,7 +307,7 @@
           <ol class="timeline">
             @for (event of d.lifecycleEvents; track $index) {
               <li>
-                <span class="t-action">{{ event.action === 'suspended' ? 'Merchant suspended' : 'Merchant reactivated' }}</span>
+                <span class="t-action">{{ event.detail ?? (event.action === 'suspended' ? 'Merchant suspended' : 'Merchant reactivated') }}</span>
                 <span class="t-meta">{{ dateTime(event.at) }} · {{ event.by }} · {{ event.role === 'risk' ? 'Risk' : event.role === 'sales' ? 'Sales / Operations' : 'Customer Success' }}</span>
                 <span class="t-comment">{{ event.reason }}</span>
               </li>
@@ -355,17 +372,11 @@
   }
 
   @if (detail(); as d) {
-    @if (lifecycleAction(); as action) {
-      <div class="modal-backdrop" (click)="closeLifecycleAction()">
-        <section class="lifecycle-modal panel-card" role="dialog" aria-modal="true" aria-labelledby="lifecycle-title" (click)="$event.stopPropagation()">
-          <div class="panel-head"><div><h2 id="lifecycle-title">{{ action === 'suspend' ? 'Suspend merchant' : 'Reactivate merchant' }}</h2><p>{{ d.merchant.legalName }}</p></div><button type="button" class="btn sm" (click)="closeLifecycleAction()" [disabled]="lifecycleSaving()">Cancel</button></div>
-          @if (action === 'suspend') { <div class="alert warning compact">Suspending blocks new country applications and go-live. Existing applications continue their review. Pending transactions and financial obligations are not automatically cancelled.</div> }
-          @else { <div class="alert info compact">Confirm required operational and risk checks before allowing processing to resume.</div> }
-          @if (lifecycleError(); as msg) { <div class="alert danger compact" role="alert">{{ msg }}</div> }
-          <div class="f-field lifecycle-reason"><label for="lifecycle-reason">Reason <span class="req">*</span></label><textarea id="lifecycle-reason" class="f-input" rows="4" maxlength="500" [value]="lifecycleReason()" (input)="lifecycleReason.set($any($event.target).value)" placeholder="Record the reason for this action"></textarea><p class="f-hint">At least 5 characters. This reason is saved to the activity history.</p></div>
-          <div class="actions edit-actions"><button type="button" class="btn" (click)="closeLifecycleAction()" [disabled]="lifecycleSaving()">Cancel</button><button type="button" class="btn" [class.danger]="action === 'suspend'" [class.primary]="action === 'reactivate'" [disabled]="lifecycleSaving() || lifecycleReason().trim().length < 5" (click)="confirmLifecycleAction()">@if (lifecycleSaving()) {<span class="spinner" aria-hidden="true"></span>}{{ action === 'suspend' ? 'Confirm suspension' : 'Confirm reactivation' }}</button></div>
-        </section>
-      </div>
+    @if (suspendPreset(); as p) {
+      <app-suspend-sheet [detail]="d" [preset]="p" (done)="onSuspensionDone($event)" (closed)="suspendPreset.set(null)" />
+    }
+    @if (openSus(); as o) {
+      <app-suspension-sheet [suspension]="o.s" [detail]="d" [mode]="o.mode" (done)="onSuspensionDone($event)" (closed)="closeSuspension()" />
     }
   }
   @if (identityForm() && detail(); as d) {

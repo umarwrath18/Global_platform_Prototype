@@ -171,12 +171,24 @@ production rules. Run `mobiDemo.strictValidation(false)` to go back to guided mo
 Use guided mode for demos and walkthroughs. Use strict mode for formal acceptance testing
 against the original brief (acceptance criterion 7).
 
-**Merchant suspension.** Sales / Ops or Risk can suspend a merchant that has at least one
-operational country; only Risk can reactivate it. While a merchant is suspended, the simulated
-backend refuses new country applications and go-live (`MERCHANT_SUSPENDED`). Existing applications
-continue their controlled review: Sales / Ops can edit and submit them, Risk can approve, return or
-reject, and CS can work through readiness up to the go-live step. Suspension does not change the
-linked Global Account or its portal logins.
+**Merchant and sub-merchant suspension** ([`docs/merchant-suspension.md`](docs/merchant-suspension.md)).
+Merchant page → **Suspend** opens a side sheet:
+- **Type:** Suspected fraud, Confirmed fraud, Compliance / KYC, Commercial or Merchant request.
+- **Scope:** the whole merchant (all countries and sub-merchants), one country, or one sub-merchant.
+- **Payment controls:** block new pay-ins, block payouts, hold settlement, block refunds.
+- **Case:** case reference, how it was detected, reason, and linked transactions flagged *Under investigation*.
+- An authenticator code confirms it.
+
+Who can do what:
+- Fraud is Risk only, takes effect at once, and a second Risk person reviews it in **Approvals** within 24 hours.
+- Reactivating a fraud suspension also needs a second Risk person.
+- Held settlement is released only by FinOps (Approvals → Settlement release).
+- Sales / Ops can suspend for commercial reasons or at the merchant's request.
+
+While suspended:
+- New pay-ins and payouts fail at Mobi with "Merchant suspended", and successful pay-ins show "Settlement on hold".
+- The merchant gets a neutral "Your account is under review" email. The Merchant Portal changes are not built yet: that work comes later.
+- For a whole-merchant suspension, new country applications, go-live and new sub-merchants are refused (`MERCHANT_SUSPENDED`). Existing applications continue their review.
 
 **Country applications (registration).** Registration is open for the launched countries
 **Malaysia, Indonesia and Vietnam**. India, the Philippines and the UAE are shown as **Planned**
@@ -420,6 +432,7 @@ adding `PORTAL`, add it and choose **Redeploy**.
 
 - [`docs/testing-guide.md`](docs/testing-guide.md): demo logins, teams and a step-by-step test walkthrough.
 - [`docs/pricing-engine-part-c.md`](docs/pricing-engine-part-c.md): Master Merchant, §3.1 methods, deactivation, MFA re-authentication, unusual-change alerts and side sheets.
+- [`docs/merchant-suspension.md`](docs/merchant-suspension.md): merchant, country and sub-merchant suspension – types, scope, payment controls, second review, reactivation, settlement release.
 - [`docs/transaction-management-phase-1.md`](docs/transaction-management-phase-1.md): Transactions phase 1 – decisions, data model (Option A), screens, labels and API.
 - [`docs/transaction-management-requirements.md`](docs/transaction-management-requirements.md): Transaction Management requirements (draft for review).
 - [`docs/authentication-batch-1.md`](docs/authentication-batch-1.md): login workflows, rules, security controls, QA cases and open decisions.

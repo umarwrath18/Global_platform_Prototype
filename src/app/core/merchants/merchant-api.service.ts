@@ -1,3 +1,4 @@
+import type { SuspensionView } from './suspensions';
 import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom, Observable } from 'rxjs';
@@ -73,6 +74,16 @@ export class MerchantApi {
 
   updateMerchant(id: string, req: UpdateMerchantRequest) {
     return this.run(this.http.patch<GlobalMerchant>(`/api/merchants/${encodeURIComponent(id)}`, req, { headers: this.headers }));
+  }
+
+  /** Suspend a merchant, one of its countries or one sub-merchant (MFA code after MFA_CODE_REQUIRED). */
+  suspend(gmid: string, body: Record<string, unknown>) {
+    return this.run(this.http.post<SuspensionView>(`/api/merchants/${encodeURIComponent(gmid)}/suspensions`, body, { headers: this.headers }), true);
+  }
+
+  /** review · reactivation · reactivation/decision · settlement · settlement/request */
+  suspensionAction(id: string, step: 'review' | 'reactivation' | 'reactivation/decision' | 'settlement' | 'settlement/request', body: Record<string, unknown> = {}) {
+    return this.run(this.http.post<SuspensionView>(`/api/suspensions/${encodeURIComponent(id)}/${step}`, body, { headers: this.headers }), true);
   }
 
   updateLifecycle(id: string, action: 'suspend' | 'reactivate', reason: string) {

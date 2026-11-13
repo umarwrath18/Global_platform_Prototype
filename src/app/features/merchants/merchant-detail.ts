@@ -15,6 +15,10 @@ import { StaffRoleService } from '../../core/merchants/staff-role.service';
 import { isStrictValidation } from '../../core/merchants/validation-mode';
 import { Icon } from '../../shared/icon';
 import { SideSheet } from '../../shared/side-sheet';
+import { AuthService } from '../../core/auth/auth.service';
+import { CONTROL_CHIP, CONTROL_KEYS, isFraudType, SUSPENSION_TYPE_LABEL, SuspensionScope, SuspensionView, VIA_LABEL } from '../../core/merchants/suspensions';
+import { SuspendSheet } from './suspend-sheet';
+import { SuspensionMode, SuspensionSheet } from './suspension-sheet';
 import { StatusBadge, fmtDate, fmtDateTime } from '../../shared/merchant-ui';
 
 interface ProfileDraft {
@@ -31,7 +35,7 @@ const STAGES = ['draft', 'pending_risk_review', ...READINESS_STATUSES];
 @Component({
   selector: 'app-merchant-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Icon, StatusBadge, PendingChanges, SubMerchantsPanel, SideSheet],
+  imports: [RouterLink, Icon, StatusBadge, PendingChanges, SubMerchantsPanel, SideSheet, SuspendSheet, SuspensionSheet],
   templateUrl: './merchant-detail.html',
   styleUrl: './merchant-detail.scss',
 })
@@ -44,6 +48,10 @@ export class MerchantDetailPage {
   readonly id = input.required<string>();
   /** `?sub=` opens that sub-merchant's details (links from the Approvals page). */
   readonly sub = input<string | undefined>();
+  /** `?suspension=…&action=review|reactivation|settlement` opens that step (links from Approvals). */
+  readonly suspension = input<string | undefined>();
+  readonly action = input<string | undefined>();
+  private readonly auth = inject(AuthService);
   private readonly subPanel = viewChild(SubMerchantsPanel);
 
   protected readonly detail = signal<MerchantDetail | null>(null);
@@ -54,10 +62,6 @@ export class MerchantDetailPage {
   protected readonly saving = signal(false);
   protected readonly saveError = signal<string | null>(null);
   protected readonly toast = signal<string | null>(null);
-  protected readonly lifecycleAction = signal<'suspend' | 'reactivate' | null>(null);
-  protected readonly lifecycleReason = signal('');
-  protected readonly lifecycleSaving = signal(false);
-  protected readonly lifecycleError = signal<string | null>(null);
   protected readonly regCountries = REGISTRATION_COUNTRIES;
   protected readonly countryName = countryName;
   protected readonly date = fmtDate;
@@ -102,8 +106,86 @@ export class MerchantDetailPage {
   );
   protected readonly canRequestMcc = computed(() => this.roles.role() === 'sales' && !!this.detail()?.mccChangeNeedsRisk && !this.detail()?.mccRequest && this.mccService.catalogue().entries.length > 0);
 
-  protected readonly canSuspend = computed(() => (this.roles.role() === 'sales' || this.roles.role() === 'risk') && this.detail()?.merchant.globalStatus === 'active' && this.detail()?.merchant.lifecycleStatus !== 'suspended');
-  protected readonly canReactivate = computed(() => this.roles.role() === 'risk' && this.detail()?.merchant.lifecycleStatus === 'suspended');
+  // ------------------------------------------------------------- suspension
+  protected readonly viaLabel = VIA_LABEL;
+  protected readonly canSuspend = computed(() => (this.roles.role() === 'sales' || this.roles.role() === 'risk') && this.detail()?.merchant.globalStatus === 'active');
+  /** Open = the Suspend sheet (preset scope, or {} for the whole merchant). */
+  protected readonly suspendPreset = signal<{ scope?: SuspensionScope; subMerchantId?: string | null } | null>(null);
+  protected readonly openSus = signal<{ s: SuspensionView; mode: SuspensionMode } | null>(null);
+  /** Active suspensions, and lifted ones still waiting on settlement. Sub-merchant ones show in their row. */
+  protected readonly openSuspensions = computed(() => (this.detail()?.suspensions ?? []).filter((s) => s.scope !== 'sub_merchant' && (s.status === 'active' || s.settlement.status === 'held' || s.settlement.status === 'release_pending')));
+
+  protected openSuspend(preset: { scope: SuspensionScope; subMerchantId?: string | null } | null) {
+    this.suspendPreset.set(preset ?? {});
+  }
+
+  protected openSuspension(s: SuspensionView, mode: SuspensionMode) {
+    this.openSus.set({ s, mode });
+  }
+
+  protected openSuspensionById(e: { id: string; mode: SuspensionMode }) {
+    const s = this.detail()?.suspensions.find((x) => x.id === e.id);
+    if (s) this.openSus.set({ s, mode: e.mode });
+  }
+
+  protected closeSuspension() {
+    this.openSus.set(null);
+  }
+
+  protected async onSuspensionDone(message: string) {
+    this.suspendPreset.set(null);
+    this.openSus.set(null);
+    await this.load();
+    this.flash(message);
+  }
+
+  protected async requestRelease(s: SuspensionView) {
+    try {
+      await this.api.suspensionAction(s.id, 'settlement/request');
+      await this.load();
+      this.flash('Settlement release sent to FinOps');
+    } catch (e) {
+      this.flash(toMerchantError(e).message ?? "We couldn't send it to FinOps.");
+    }
+  }
+
+  protected bannerTitle(s: SuspensionView) {
+    const what = s.scope === 'country' ? `${s.countryName} suspended` : 'Merchant suspended';
+    return s.status === 'active' ? `${what} · ${SUSPENSION_TYPE_LABEL[s.type]}` : `Reactivated · settlement ${s.settlement.status === 'release_pending' ? 'release waiting for FinOps' : 'still on hold'}`;
+  }
+
+  protected scopeText(s: SuspensionView) {
+    return s.scope === 'merchant' ? 'Whole merchant' : s.scope === 'country' ? `${s.countryName} (with its sub-merchants)` : `${s.subMerchantName}`;
+  }
+
+  protected chipsOf(s: SuspensionView) {
+    if (s.status !== 'active') return s.settlement.status === 'held' || s.settlement.status === 'release_pending' ? [CONTROL_CHIP.settlement] : [];
+    const chips = CONTROL_KEYS.filter((k) => s.controls[k]).map((k) => CONTROL_CHIP[k]);
+    if (isFraudType(s.type) || s.type === 'compliance') chips.push('Merchant Portal read only');
+    return chips;
+  }
+
+  protected pendingText(s: SuspensionView) {
+    if (s.status === 'active' && s.review.status === 'pending') return `Second Risk review: waiting · due ${s.review.dueAt ? this.dateTime(s.review.dueAt) : ''} · in Approvals`;
+    if (s.reactivation?.status === 'pending') return `Reactivation requested by ${s.reactivation.requestedBy}: waiting for a second Risk approval · in Approvals`;
+    if (s.settlement.status === 'release_pending') return 'Settlement release: waiting for FinOps · in Approvals';
+    return null;
+  }
+
+  /** The step this login can take on a suspension. */
+  protected actionsFor(s: SuspensionView): { mode: SuspensionMode; label: string; primary?: boolean }[] {
+    const role = this.roles.role();
+    const me = this.auth.session()?.user.id;
+    const out: { mode: SuspensionMode; label: string; primary?: boolean }[] = [];
+    if (role === 'risk' && s.status === 'active') {
+      if (s.review.status === 'pending' && s.createdById !== me) out.push({ mode: 'review', label: 'Review' });
+      if (s.reactivation?.status === 'pending') {
+        if (s.reactivation.requestedById !== me) out.push({ mode: 'approve', label: 'Approve reactivation', primary: true });
+      } else out.push({ mode: 'reactivate', label: 'Reactivate', primary: true });
+    }
+    if (role === 'finops' && s.settlement.status === 'release_pending') out.push({ mode: 'settlement', label: 'Release settlement', primary: true });
+    return out;
+  }
 
   protected readonly history = computed(() =>
     (this.detail()?.applications ?? [])
@@ -129,6 +211,15 @@ export class MerchantDetailPage {
 
   constructor() {
     effect(() => void this.load(this.id()));
+    // Links from Approvals: open the suspension step once the merchant has loaded.
+    effect(() => {
+      const d = this.detail();
+      const id = this.suspension();
+      if (!d || !id) return;
+      const s = d.suspensions.find((x) => x.id === id);
+      const mode: SuspensionMode = this.action() === 'review' ? 'review' : this.action() === 'reactivation' ? 'approve' : this.action() === 'settlement' ? 'settlement' : 'view';
+      if (s && !this.openSus()) this.openSus.set({ s, mode });
+    });
   }
 
   protected async load(id = this.id()) {
@@ -151,24 +242,6 @@ export class MerchantDetailPage {
   }
 
   protected readonly stageCount = STAGES.length - 1;
-
-  protected openLifecycleAction(action: 'suspend' | 'reactivate') { this.lifecycleAction.set(action); this.lifecycleReason.set(''); this.lifecycleError.set(null); }
-  protected closeLifecycleAction() { if (!this.lifecycleSaving()) this.lifecycleAction.set(null); }
-  protected async confirmLifecycleAction() {
-    const action = this.lifecycleAction();
-    const reason = this.lifecycleReason().trim();
-    if (!action || reason.length < 5) { this.lifecycleError.set('Enter a reason with at least 5 characters.'); return; }
-    this.lifecycleSaving.set(true); this.lifecycleError.set(null);
-    try {
-      await this.api.updateLifecycle(this.id(), action, reason);
-      this.lifecycleAction.set(null);
-      await this.load();
-      this.flash(action === 'suspend' ? 'Merchant suspended' : 'Merchant reactivated');
-    } catch (e) {
-      const err = toMerchantError(e);
-      this.lifecycleError.set(err.message || "We couldn't update the merchant status.");
-    } finally { this.lifecycleSaving.set(false); }
-  }
 
   protected openMccForm() {
     this.mccForm.set(true);

@@ -78,6 +78,16 @@ Shortcut: the seeded Nusantara Home Retail (Malaysia) is already live, so you ca
 
 ## Other things to try
 
+- **Suspend a merchant for fraud:** as `MOBI-RISK`, open Merchants → Tanjung Global Trading →
+  **Suspend**. Keep *Suspected fraud* and *Whole merchant*, enter a case reference and a reason, choose
+  **Suspend merchant** and enter your authenticator code. The banner shows the controls and the
+  second review due in 24 hours.
+- **Second review and reactivation:** sign in as `MOBI-ADMIN` with **View as** Risk (a second Risk
+  person), open **Approvals** → *Suspension review*, then confirm or lift it. To reactivate, one Risk
+  person chooses **Reactivate** on the banner and the other approves it. Then, as `TANJUNG-ADMIN`
+  (FinOps), open **Approvals** → *Settlement release* and release the held settlement.
+- **Suspend one sub-merchant:** open a merchant's sub-merchant → **Details** → **Suspend**. The same
+  sheet opens with that sub-merchant selected.
 - **Transactions:** as `TANJUNG-ADMIN` (FinOps) open **Transactions**. Switch PayIn / Payout, pick a
   payment type (e.g. E-Wallets adds *Wallet account*), filter by country, provider or status, and click a
   row: the side sheet shows the payment path and the details. Try the same row as `MOBI-RISK`: no fees,

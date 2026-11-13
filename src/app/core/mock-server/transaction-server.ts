@@ -251,6 +251,7 @@ export class TransactionServer {
     const out: TxnFlag[] = [];
     if (this.openFlag(db, t.id)) out.push('investigation');
     if (t.lateSuccessAt !== null && t.lateSuccessAt <= this.now()) out.push('status_conflict');
+    if (t.reasonCode === 'MOBI-SUSPENDED') out.push('merchant_suspended');
     return out;
   }
 
@@ -427,6 +428,7 @@ export class TransactionServer {
       currency: t.currency,
       status,
       flags: this.flagsOf(t, db),
+      ...(status === 'successful' && t.settlementHeld ? { settlementHeld: true } : {}),
     };
     if (seeFees) {
       row.fee = status === 'successful' ? t.fee : null;
@@ -828,7 +830,7 @@ export class TransactionServer {
     }
     sections.push({ key: 'bank', title: 'Bank', fields: bankFields(t, d, status, false) });
     if (flow === 'payin') {
-      const settle = settlementOf(t, status);
+      const settle = settlementOf(t, status, true);
       sections.push({ key: 'settlement', title: 'Settlement', fields: [{ label: 'Settlement cycle', value: t.settlementCycle ?? '—' }, { label: 'Expected settlement date', value: settle.expected }, { label: 'Settlement status', value: settle.status }, { label: 'Settlement reference', value: '—' }] });
     }
     return {
@@ -1071,7 +1073,8 @@ function methodDetailFields(d: TxnDetailRecord | undefined): DetailField[] {
   }
 }
 
-function settlementOf(t: TxnRecord, status: TxnStatus): { expected: string; status: string } {
+function settlementOf(t: TxnRecord, status: TxnStatus, merchant = false): { expected: string; status: string } {
+  if (status === 'successful' && t.settlementHeld && !merchant) return { expected: '—', status: 'On hold (merchant suspended)' };
   if (status !== 'successful' || !t.settlementCycle) return { expected: '—', status: status === 'successful' ? 'Not settled yet' : 'Not applicable' };
   const days = Number(t.settlementCycle.replace('T+', '')) || 0;
   const d = new Date(t.finalAt);
@@ -1158,7 +1161,7 @@ function merchantTimeline(t: TxnRecord, now: number): TimelineEntry[] {
   if (status === 'successful') {
     out.push({ at: t.finalAt, title: t.flow === 'payin' ? 'Paid' : 'Paid out', source: '' });
     if (t.flow === 'payin') {
-      const s = settlementOf(t, status);
+      const s = settlementOf(t, status, true);
       out.push({ at: Number.MAX_SAFE_INTEGER, title: 'Settled', source: '', detail: s.expected === '—' ? 'Not settled yet' : `Expected ${s.expected}` });
     }
   } else if (status === 'failed') out.push({ at: t.finalAt, title: 'Failed', source: '', detail: t.merchantReason ?? '' });

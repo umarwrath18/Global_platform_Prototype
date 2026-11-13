@@ -201,3 +201,70 @@
 .profile-history {
   margin-top: 16px;
 }
+
+/* Suspension banner (one per active suspension of the merchant or a country). */
+.sus-banner {
+  margin-bottom: 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--danger-border);
+  border-radius: var(--r-card);
+  background: var(--danger-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  &.lifted {
+    border-color: var(--warning-border);
+    background: var(--warning-bg);
+
+    h2 {
+      color: var(--warning);
+    }
+  }
+
+  h2 {
+    margin: 0;
+    font-size: 16px;
+    color: var(--danger);
+  }
+}
+
+.sus-banner-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sus-banner-meta {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.sus-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sus-chip {
+  padding: 3px 8px;
+  border: 1px solid var(--danger-border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sus-pending {
+  align-self: flex-start;
+  padding: 8px 12px;
+  border: 1px solid var(--warning-border);
+  border-radius: 8px;
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: 13px;
+}

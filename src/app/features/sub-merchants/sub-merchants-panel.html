@@ -44,7 +44,9 @@
               <td>{{ countryName(s.country) }}</td>
               <td>
                 <span class="status" [class]="'status ' + tone[s.status]">{{ statusLabel[s.status] }}</span>
-                @if (s.lifecycleStatus === 'suspended') {<span class="status danger">Suspended</span>}
+                @if (effects()[s.id]; as ef) {
+                  @if (ef.suspended) {<span class="status danger" [title]="viaLabel[ef.via!]">Suspended</span><span class="sm-sub">{{ viaLabel[ef.via!] }}</span>}
+                } @else if (s.lifecycleStatus === 'suspended') {<span class="status danger">Suspended</span>}
               </td>
               <td>@if (s.mid; as mid) {<span class="mono">{{ mid.mid }}</span>} @else {<span class="muted">{{ s.status === 'rejected' ? '–' : 'Issued at go-live' }}</span>}</td>
               <td class="row-actions"><button type="button" class="btn sm ghost" (click)="toggle(s.id)" [attr.aria-expanded]="selected() === s.id">{{ selected() === s.id ? 'Close' : 'Details' }}</button></td>
@@ -118,15 +120,23 @@
             <button type="button" class="btn sm primary" [disabled]="!!busy() || !!s.goLiveBlocker" (click)="act(s, 'go-live', {}, s.displayName + ' is live')">@if (busy() === 'go-live') {<span class="spinner" aria-hidden="true"></span>}Go live</button>
           }
         }
-        @if (s.status !== 'rejected' && (role === 'sales' || role === 'risk')) {
-          @if (s.lifecycleStatus !== 'suspended' || role === 'risk') {
+        @if (s.status !== 'rejected') {
+          @if (ownSuspension(s.id); as own) {
             <div class="sm-lifecycle">
-              <input class="f-input" [attr.aria-label]="'Reason to ' + (s.lifecycleStatus === 'suspended' ? 'reactivate ' : 'suspend ') + s.displayName" [placeholder]="'Reason to ' + (s.lifecycleStatus === 'suspended' ? 'reactivate' : 'suspend') + ' this sub-merchant'" [value]="lifecycleReason()" (input)="lifecycleReason.set($any($event.target).value)" />
-              @if (s.lifecycleStatus === 'suspended') {
-                <button type="button" class="btn sm" [disabled]="!!busy()" (click)="lifecycle(s, 'reactivate')">Reactivate</button>
-              } @else {
-                <button type="button" class="btn sm danger-outline" [disabled]="!!busy()" (click)="lifecycle(s, 'suspend')">Suspend</button>
+              <span class="muted">Suspended · {{ typeLabel[own.type] }}@if (own.caseRef) { · Case {{ own.caseRef }}}</span>
+              <button type="button" class="btn sm" (click)="openSuspension.emit({ id: own.id, mode: 'view' })">View case</button>
+              @if (role === 'risk' && own.review.status === 'pending' && own.createdById !== me()) {<button type="button" class="btn sm" (click)="openSuspension.emit({ id: own.id, mode: 'review' })">Review</button>}
+              @if (role === 'risk' && own.reactivation?.status === 'pending') {
+                @if (own.reactivation?.requestedById !== me()) {<button type="button" class="btn sm primary" (click)="openSuspension.emit({ id: own.id, mode: 'approve' })">Approve reactivation</button>}
+              } @else if (role === 'risk') {
+                <button type="button" class="btn sm primary" (click)="openSuspension.emit({ id: own.id, mode: 'reactivate' })">Reactivate</button>
               }
+            </div>
+          } @else if (effects()[s.id]?.suspended) {
+            <p class="muted">{{ viaLabel[effects()[s.id].via!] }}: reactivate it from the merchant's suspension.</p>
+          } @else if (role === 'sales' || role === 'risk') {
+            <div class="sm-lifecycle">
+              <button type="button" class="btn sm danger-outline" (click)="suspendSub.emit(s.id)">Suspend</button>
             </div>
           }
         }

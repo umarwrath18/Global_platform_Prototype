@@ -14,7 +14,7 @@ import { PricingDecisionSheet } from '../pricing/pricing-decision-sheet';
 type Kind = ApprovalItem['kind'];
 type View = 'mine' | 'open' | 'decided';
 
-const KIND_LABEL: Record<Kind, string> = { pricing: 'Pricing', change: 'Profile & bank', mcc: 'MCC', sub_merchant: 'Sub-merchant' };
+const KIND_LABEL: Record<Kind, string> = { pricing: 'Pricing', change: 'Profile & bank', mcc: 'MCC', sub_merchant: 'Sub-merchant', suspension_review: 'Suspension review', reactivation: 'Reactivation', settlement_release: 'Settlement release' };
 const STATUS: Record<ApprovalItem['status'], { label: string; tone: string }> = {
   pending: { label: 'Waiting', tone: 'warning' },
   approved: { label: 'Approved', tone: 'success' },
