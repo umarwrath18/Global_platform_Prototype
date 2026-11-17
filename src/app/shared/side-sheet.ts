@@ -139,15 +139,6 @@ import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, inject, 
       flex-direction: column;
       gap: 24px;
     }
-    .sheet-section {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .sheet-section > h3 {
-      margin: 0;
-      font-size: 15px;
-    }
     .sheet-foot {
       display: flex;
       flex-wrap: wrap;
@@ -164,34 +155,9 @@ import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, inject, 
       color: var(--text-muted);
     }
     .sheet-foot .btn { min-height: 44px; }
-    .sheet-confirm {
-      border-top: 1px solid var(--border);
-      box-shadow: 0 -16px 32px -16px rgba(16, 24, 40, 0.18);
-      padding: 20px 28px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-      background: var(--surface);
-    }
-    .sheet-confirm h3 { margin: 0; font-size: 16px; }
-    .sheet-confirm p { margin: 0; font-size: 14px; color: var(--text-muted); line-height: 1.5; }
-    .sheet-confirm .sheet-confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; }
     @media (max-width: 767px) {
-      .sheet-head, .sheet-body, .sheet-foot, .sheet-confirm { padding-left: 16px; padding-right: 16px; }
+      .sheet-head, .sheet-body, .sheet-foot { padding-left: 16px; padding-right: 16px; }
     }
-
-    /* Description list in two columns. */
-    .sheet-dl {
-      margin: 0;
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 14px 24px;
-      font-size: 14px;
-    }
-    .sheet-dl dt { font-size: 12px; color: var(--text-muted); }
-    .sheet-dl dd { margin: 2px 0 0; overflow-wrap: anywhere; }
-    .sheet-dl .wide { grid-column: 1 / -1; }
-    @media (max-width: 480px) { .sheet-dl { grid-template-columns: minmax(0, 1fr); } }
 
     /* Current → New comparison. */
     .sheet-compare {
@@ -221,15 +187,6 @@ import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, inject, 
     .sheet-compare .row.foot { display: block; background: var(--surface-page); font-size: 13px; color: var(--text-muted); }
     @media (max-width: 480px) { .sheet-compare .row { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
 
-    /* Activity timeline. */
-    .sheet-timeline { list-style: none; margin: 0; padding: 0; font-size: 14px; }
-    .sheet-timeline li { position: relative; display: flex; gap: 12px; padding-bottom: 14px; }
-    .sheet-timeline li::before { content: ''; flex: 0 0 10px; height: 10px; margin-top: 5px; border-radius: 50%; background: var(--mobi-blue); }
-    .sheet-timeline li.waiting::before { background: transparent; border: 2px dashed #dc6803; box-sizing: border-box; }
-    .sheet-timeline li.bad::before { background: var(--danger); }
-    .sheet-timeline li:not(:last-child)::after { content: ''; position: absolute; left: 4px; top: 18px; bottom: 0; width: 2px; background: var(--border); }
-    .sheet-timeline .meta { font-size: 13px; color: var(--text-muted); }
-
     /* Locked scope chips. */
     .sheet-locked { border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
     .sheet-locked .lock-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--surface-page); font-size: 13px; color: var(--text-muted); }
@@ -237,21 +194,6 @@ import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, inject, 
     .sheet-locked .chip { padding: 5px 10px; border-radius: 999px; background: var(--mobi-blue-tint); color: var(--brand-dark); font-size: 13px; font-weight: 600; }
     .sheet-locked .existing { padding: 8px 14px 12px; font-size: 13px; color: var(--text-muted); }
 
-    /* One-time code input. */
-    .code-input {
-      width: 100%;
-      max-width: 260px;
-      height: 56px;
-      padding: 0 16px;
-      border: 1px solid var(--border-strong);
-      border-radius: 10px;
-      font: inherit;
-      font-size: 24px;
-      font-weight: 600;
-      letter-spacing: 0.5em;
-      font-variant-numeric: tabular-nums;
-    }
-    .code-input:focus { outline: none; border-color: var(--mobi-blue); box-shadow: var(--focus-ring); }
   `,
 })
 export class SideSheet implements AfterViewInit, OnDestroy {

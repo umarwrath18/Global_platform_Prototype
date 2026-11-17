@@ -631,3 +631,46 @@
   border-top: 0;
   padding-top: 0;
 }
+
+/* Global Platform transaction sheet: details in bordered panels, like the other side sheets.
+   (Scoped to the internal sheet; the Merchant Portal keeps its current look until its own work.) */
+app-transaction-sheet {
+  .txn-sec {
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  .txn-sec + .txn-sec {
+    margin-top: 24px;
+  }
+
+  .txn-dl {
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    background: var(--border-soft);
+
+    > div {
+      min-width: 0;
+      padding: 12px 16px;
+      background: var(--surface);
+    }
+
+    > div:last-child:nth-child(odd) {
+      grid-column: 1 / -1;
+    }
+
+    &.boxed {
+      padding: 0;
+
+      > div {
+        background: var(--surface-page);
+      }
+    }
+
+    dd {
+      margin-top: 4px;
+    }
+  }
+}

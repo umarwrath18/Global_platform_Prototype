@@ -121,6 +121,20 @@
           <button type="button" class="sheet-close" (click)="closeDetails()" aria-label="Close"><app-icon name="x" [size]="18" /></button>
         </header>
         <div class="sheet-body">
+          <div class="sheet-hero">
+            <div>
+              <span class="hero-label">{{ technique(x.technique) }}</span>
+              <p class="hero-value">{{ details(x) }}</p>
+              @if (secondary(x); as sc) {<p class="hero-sub">{{ sc }}</p>}
+              @if (vaText(x); as va) {<p class="hero-sub">VA Banks: {{ va }}</p>}
+            </div>
+            <div class="hero-facts">
+              <div class="hero-fact"><span>Effective</span><strong>{{ period(x) }}</strong></div>
+              @if (x.flow === 'payin') {<div class="hero-fact"><span>Settlement Cycle</span><strong>{{ x.settlementSnapshot ?? 'Not set' }}</strong></div>}
+              <div class="hero-fact"><span>Sub-Merchant</span><strong>{{ subName(x) }}</strong></div>
+            </div>
+          </div>
+          @if (x.rejectionReason) {<div class="alert danger compact" role="note"><app-icon name="alert-circle" /><div><strong>Rejected by FinOps.</strong> {{ x.rejectionReason }}</div></div>}
           @if (previousOf(x); as p) {
             <section class="sheet-section">
               <h3>What changes</h3>
@@ -132,21 +146,6 @@
               </div>
             </section>
           }
-          <section class="sheet-section">
-            <h3>Details</h3>
-            <dl class="sheet-dl">
-              <div><dt>Sub-Merchant</dt><dd>{{ subName(x) }}</dd></div>
-              <div><dt>Flow</dt><dd>{{ flowLabel[x.flow] }}</dd></div>
-              @if (vaText(x); as va) {<div class="wide"><dt>VA Banks</dt><dd>{{ va }}</dd></div>}
-              <div><dt>Technique</dt><dd>{{ technique(x.technique) }}</dd></div>
-              <div><dt>Version</dt><dd>v{{ x.version }}</dd></div>
-              <div class="wide"><dt>Pricing Details</dt><dd>{{ details(x) }}</dd></div>
-              @if (secondary(x); as sc) {<div class="wide"><dt>Secondary Charges</dt><dd>{{ sc }}</dd></div>}
-              <div><dt>Effective</dt><dd>{{ period(x) }}</dd></div>
-              @if (x.flow === 'payin') {<div><dt>Settlement Cycle</dt><dd>{{ x.settlementSnapshot ?? 'Not set' }}</dd></div>}
-              @if (x.rejectionReason) {<div class="wide"><dt>Rejection reason</dt><dd>{{ x.rejectionReason }}</dd></div>}
-            </dl>
-          </section>
           <section class="sheet-section">
             <h3>Activity</h3>
             <ol class="sheet-timeline">
