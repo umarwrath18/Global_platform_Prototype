@@ -44,18 +44,19 @@ import { DemoAuthenticatorService } from '../../shared/demo-authenticator';
           <button type="button" class="sheet-close" (click)="dismissDetail()" aria-label="Close"><app-icon name="x" [size]="18" /></button>
         </header>
         <div class="sheet-body">
+          <div class="sheet-hero">
+            <div>
+              <span class="hero-label">{{ technique(x.technique) }} · new rate</span>
+              <p class="hero-value">{{ newRate(i) }}</p>
+              <p class="hero-sub">Now: {{ i.current ?? 'No pricing configured' }}</p>
+            </div>
+            <div class="hero-facts">
+              <div class="hero-fact"><span>Effective</span><strong>{{ day(x.startDate) }} – {{ x.endDate ? day(x.endDate) : 'No end date' }}</strong></div>
+              <div class="hero-fact"><span>Requested by</span><strong>{{ x.createdBy }}</strong></div>
+            </div>
+          </div>
           @if (x.version > 1 && x.status === 'pending_approval') {
             <div class="alert info compact" role="note"><app-icon name="info" /><div>This is v{{ x.version }} – a modified version of the previous configuration. Approving this will supersede the previous version.</div></div>
-          }
-          @if (x.status === 'pending_approval') {
-            <section class="sheet-section">
-              <h3>What changes</h3>
-              <div class="sheet-compare">
-                <div class="row head"><span></span><span>Current</span><span>New · v{{ x.version }}</span></div>
-                <div class="row"><span class="k">Rate</span><span class="was">{{ i.current ?? 'No pricing configured' }}</span><span class="now">{{ newRate(i) }}</span></div>
-                <div class="row"><span class="k">Effective</span><span class="was">Until approved</span><span class="now">{{ day(x.startDate) }} – {{ x.endDate ? day(x.endDate) : 'No end date' }}</span></div>
-              </div>
-            </section>
           }
           <section class="sheet-section">
             <h3>Details</h3>

@@ -23,21 +23,23 @@ let nextId = 0;
           <p>{{ message() }}</p>
         </div>
       </div>
-      <label class="f-label" [for]="id">Code from your authenticator app</label>
-      <input
-        #field
-        [id]="id"
-        class="code-input"
-        inputmode="numeric"
-        autocomplete="one-time-code"
-        maxlength="6"
-        placeholder="000000"
-        [attr.aria-invalid]="!!error()"
-        [attr.aria-describedby]="error() ? id + '-e' : null"
-        (input)="onInput(field)"
-        (keydown.enter)="submit()"
-      />
-      @if (error(); as e) {<p class="f-error" [id]="id + '-e'" role="alert">{{ e }}</p>}
+      <div class="cp-field">
+        <label class="f-label" [for]="id">Code from your authenticator app</label>
+        <input
+          #field
+          [id]="id"
+          class="code-input"
+          inputmode="numeric"
+          autocomplete="one-time-code"
+          maxlength="6"
+          placeholder="000000"
+          [attr.aria-invalid]="!!error()"
+          [attr.aria-describedby]="error() ? id + '-e' : null"
+          (input)="onInput(field)"
+          (keydown.enter)="submit()"
+        />
+        @if (error(); as e) {<p class="f-error" [id]="id + '-e'" role="alert">{{ e }}</p>}
+      </div>
       <div class="sheet-confirm-actions">
         <button type="button" class="btn" (click)="cancelled.emit()" [disabled]="busy()">Back</button>
         <button type="button" class="btn" [class.primary]="tone() === 'primary'" [class.danger]="tone() === 'danger'" (click)="submit()" [disabled]="busy() || code().length !== 6">
@@ -49,6 +51,9 @@ let nextId = 0;
   styles: `
     .cp-head { display: flex; gap: 14px; align-items: flex-start; }
     .cp-icon { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 10px; background: var(--mobi-blue-tint); color: var(--mobi-blue); display: inline-flex; align-items: center; justify-content: center; }
+    .cp-head h3 { margin: 0 0 2px; }
+    .cp-field { display: flex; flex-direction: column; gap: 6px; }
+    .cp-field .f-label { margin: 0; }
     .f-error { margin: 0; color: var(--danger); font-size: 13px; }
   `,
 })
