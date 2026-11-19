@@ -227,8 +227,9 @@
   box-shadow: none;
 }
 
-/* One field for a 6-digit authenticator code. */
-.code-input {
+/* One field for a 6-digit authenticator code (side sheets and inline prompts; the sign-in screens
+   style their full-width `.input.code-input` themselves). */
+.code-input:not(.input) {
   display: block;
   width: 100%;
   max-width: 260px;
