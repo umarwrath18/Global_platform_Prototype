@@ -206,8 +206,23 @@ export class SideSheet implements AfterViewInit, OnDestroy {
   private readonly doc = inject(DOCUMENT);
   private readonly opener = this.doc.activeElement as HTMLElement | null;
   private readonly overflow = this.doc.body.style.overflow;
+  private alerts?: MutationObserver;
 
   ngAfterViewInit() {
+    // A message that appears after a button press (a validation or server error) may land below the
+    // fold of a long sheet body; bring it into view so the press never looks like it did nothing.
+    const panel = this.panel();
+    if (panel && typeof MutationObserver !== 'undefined') {
+      this.alerts = new MutationObserver((records) => {
+        for (const r of records)
+          for (const n of Array.from(r.addedNodes)) {
+            if (!(n instanceof HTMLElement)) continue;
+            const alert = n.matches('[role="alert"]') ? n : n.querySelector<HTMLElement>('[role="alert"]');
+            if (alert) return alert.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+          }
+      });
+      this.alerts.observe(panel, { childList: true, subtree: true });
+    }
     this.doc.body.style.overflow = 'hidden';
     // Lets fixed helpers (the prototype's Demo authenticator) move out of the sheet's way.
     this.doc.body.classList.add('sheet-open');
@@ -220,6 +235,7 @@ export class SideSheet implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.alerts?.disconnect();
     this.doc.body.style.overflow = this.overflow;
     if (this.doc.querySelectorAll('app-side-sheet').length <= 1) this.doc.body.classList.remove('sheet-open'); // this one is still in the DOM
     if (this.opener && this.doc.contains(this.opener)) this.opener.focus({ preventScroll: true });

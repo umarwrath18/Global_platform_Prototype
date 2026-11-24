@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, viewChild } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
+import { Router, RouterLink } from '@angular/router';
 import { isEmail, isPhone, validateRegistrationNumber } from '../../core/merchants/application-rules';
 import { MerchantApi, MerchantClientError, toMerchantError } from '../../core/merchants/merchant-api.service';
 import { MCC_OUTCOME_LABEL, mccCountryCheck, mccLabel } from '../../core/merchants/mcc';
@@ -130,11 +130,13 @@ export class MerchantDetailPage {
 
   protected closeSuspension() {
     this.openSus.set(null);
+    this.clearSuspensionLink();
   }
 
   protected async onSuspensionDone(message: string) {
     this.suspendPreset.set(null);
     this.openSus.set(null);
+    this.clearSuspensionLink();
     await this.load();
     this.flash(message);
   }
@@ -215,11 +217,28 @@ export class MerchantDetailPage {
     effect(() => {
       const d = this.detail();
       const id = this.suspension();
+      if (!id) this.openedLink = null;
       if (!d || !id) return;
       const s = d.suspensions.find((x) => x.id === id);
       const mode: SuspensionMode = this.action() === 'review' ? 'review' : this.action() === 'reactivation' ? 'approve' : this.action() === 'settlement' ? 'settlement' : 'view';
-      if (s && !this.openSus()) this.openSus.set({ s, mode });
+      // Open once per link: closing the sheet must not open it again.
+      const key = `${id}:${mode}`;
+      untracked(() => {
+        if (s && !this.openSus() && this.openedLink !== key) {
+          this.openedLink = key;
+          this.openSus.set({ s, mode });
+        }
+      });
     });
+  }
+
+  private readonly router = inject(Router);
+  private openedLink: string | null = null;
+
+  /** Drops `?suspension=…&action=…` once the sheet it opened is closed, so a refresh doesn't reopen it. */
+  private clearSuspensionLink() {
+    if (!this.suspension()) return;
+    void this.router.navigate([], { queryParams: { suspension: null, action: null }, queryParamsHandling: 'merge', replaceUrl: true });
   }
 
   protected async load(id = this.id()) {
