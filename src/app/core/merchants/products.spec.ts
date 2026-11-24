@@ -20,6 +20,7 @@ import {
   validateSecondary,
   validateTiers,
   vaBanksIntersect,
+  pricingHeadline,
 } from './products';
 
 const draft = (over: Partial<PricingDraft> = {}): PricingDraft => ({
@@ -286,5 +287,22 @@ describe('groupMethods (§3.1 option groups)', () => {
       ['E-Wallets', ['tng', 'grabpay', 'boost']],
       [null, ['cards', 'ezycash']],
     ]);
+  });
+});
+
+describe('pricingHeadline (summary block)', () => {
+  const base = { currency: 'MYR', mdrPct: null, fixedFee: null, minimumFee: null, tiers: null, historical: null, volumePeriod: null } as const;
+  it('shows the rate itself, with one line of context', () => {
+    expect(pricingHeadline({ ...base, technique: 'variable_plus_fixed', mdrPct: 1.8, fixedFee: 0.5 })).toEqual({ value: '1.8% + MYR 0.5', sub: 'Per transaction' });
+    expect(pricingHeadline({ ...base, technique: 'variable_rate', mdrPct: 1.5, minimumFee: 1 }).sub).toBe('Minimum fee MYR 1');
+    expect(pricingHeadline({ ...base, technique: null }).value).toBe('Subscription only');
+  });
+  it('gives volume tiers as a range', () => {
+    const tiers = [
+      { minVolume: 1000, maxVolume: 1_000_000, mdrPct: 1.5, fixedFee: 0 },
+      { minVolume: 1_000_000, maxVolume: 5_000_000, mdrPct: 1.2, fixedFee: 0 },
+      { minVolume: 5_000_000, maxVolume: null, mdrPct: 1, fixedFee: 0 },
+    ];
+    expect(pricingHeadline({ ...base, technique: 'volume_based', tiers, volumePeriod: 'monthly' })).toEqual({ value: '1% – 1.5% MDR', sub: '3 tiers by monthly volume · no fixed fee' });
   });
 });

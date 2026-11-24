@@ -16,6 +16,7 @@ import {
   overlapMessage,
   periodText,
   PricingDraft,
+  pricingHeadline,
   pricingSummary,
   PricingTechnique,
   PricingVersion,
@@ -238,6 +239,51 @@ export class PricingEditor implements OnInit, AfterViewInit {
       { amount, periodVolume: volume, previousPeriodVolume: volume, date: this.startDate() || this.view().today },
     );
   });
+
+  // ------------------------------------------------- summary step (same patterns as the detail sheets)
+  private readonly usdInfo = computed(() => (this.usd() ? { fixedFeeUsd: n(this.fixedFee()) ?? 0, usdExchangeRate: this.view().usdRate, localEquivalent: this.localEquivalent(), localEquivalentCurrency: this.local() } : null));
+  /** The rate itself and one line of context, for the summary block. */
+  protected readonly headline = computed(() => pricingHeadline({ ...this.draft(), usd: this.usdInfo() }));
+  /** The version being edited, as a summary block (it stays in effect until the new one starts). */
+  protected readonly currentHeadline = computed(() => {
+    const e = this.editing();
+    return e ? pricingHeadline(e) : null;
+  });
+  protected volumePeriodLabel(p: VolumePeriod | null) {
+    return p ? VOLUME_PERIOD_LABEL[p] : 'Monthly';
+  }
+  protected readonly appliesTo = computed(() => this.subName() ?? 'Master Merchant');
+  /** Volume tiers as table rows; the one the calculator lands in is marked. */
+  protected readonly tierRows = computed(() => {
+    const vol = n(this.calcVolume()) ?? 0;
+    const tiers = this.draft().tiers ?? [];
+    const fmt = (v: number) => new Intl.NumberFormat('en-GB', { maximumFractionDigits: 2 }).format(v);
+    return tiers.map((t) => ({
+      range: t.maxVolume === null ? `${fmt(t.minVolume)} and above` : `${fmt(t.minVolume)} – ${fmt(t.maxVolume)}`,
+      mdr: `${Number((t.mdrPct || 0).toFixed(4))}%`,
+      fee: t.fixedFee > 0 ? money(t.fixedFee, this.local()) : '–',
+      hit: t.minVolume <= vol && (t.maxVolume === null || vol < t.maxVolume),
+    }));
+  });
+  /** Fee as a share of the test amount. */
+  protected readonly effectiveRate = computed(() => {
+    const amount = n(this.calcAmount()) ?? 0;
+    const c = this.calc();
+    return amount > 0 && c.currency === this.local() ? `${Number(((c.fee / amount) * 100).toFixed(3))}%` : null;
+  });
+
+  /** "100000" → "100,000" in the calculator fields; the value is read back without commas. */
+  protected grouped(v: string) {
+    const x = n(v);
+    if (x === null || !Number.isFinite(x)) return v;
+    const [int, dec] = v.replace(/,/g, '').split('.');
+    return new Intl.NumberFormat('en-GB').format(Number(int)) + (dec !== undefined ? '.' + dec : '');
+  }
+
+  protected setCalc(which: 'amount' | 'volume', raw: string) {
+    const clean = raw.replace(/[^\d.]/g, '');
+    (which === 'amount' ? this.calcAmount : this.calcVolume).set(clean);
+  }
 
   ngOnInit() {
     const p = this.preset();

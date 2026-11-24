@@ -52,16 +52,19 @@
     <div class="sheet-body editor-body">
       @if (editing(); as e) {
         @if (phase() === 'primary') {
-          <div class="sheet-locked">
-            <div class="lock-head"><app-icon name="lock" [size]="14" />Locked for this edit</div>
-            <div class="chips">
-              <span class="chip">{{ flowLabel[flow()] }}</span>
-              <span class="chip">{{ method()?.name }}</span>
-              <span class="chip">{{ subName() ?? 'Master Merchant' }}</span>
-              @if (showVa()) {<span class="chip">VA Banks: {{ vaSummary() }}</span>}
-              <span class="chip">{{ techniqueLabel(e.technique) }}</span>
+          @let ch = currentHeadline()!;
+          <div class="sheet-hero">
+            <div>
+              <span class="hero-label">Current · v{{ e.version }} · {{ techniqueLabel(e.technique) }}</span>
+              <p class="hero-value">{{ ch.value }}</p>
+              <p class="hero-sub">{{ ch.sub }}</p>
             </div>
-            <p class="existing">Existing Configuration: {{ techniqueLabel(e.technique) }} · {{ method()?.name }}@if (subName()) { · {{ subName() }}}@if (showVa()) { · VA Banks: {{ vaSummary() }}} · Effective: {{ day(e.startDate) }} – {{ e.endDate ? day(e.endDate) : 'Ongoing' }}</p>
+            <div class="hero-facts">
+              <div class="hero-fact"><span>Payment Method</span><strong>{{ method()?.name }} · {{ flowLabel[flow()] }}</strong></div>
+              <div class="hero-fact"><span>Applies to</span><strong>{{ appliesTo() }}</strong></div>
+              @if (showVa()) {<div class="hero-fact"><span>VA Banks</span><strong>{{ vaSummary() }}</strong></div>}
+              <div class="hero-fact"><span>Effective</span><strong>{{ day(e.startDate) }} – {{ e.endDate ? day(e.endDate) : 'Ongoing' }}</strong></div>
+            </div>
           </div>
           <div class="alert info compact" role="note">
             <app-icon name="info" />
@@ -138,7 +141,14 @@
             @if (noMerchantLevel()) {
               <div class="alert warning compact" role="note"><app-icon name="alert-circle" /><div><strong>No Master Merchant pricing exists.</strong> Transactions processed by the Master Merchant (not under any sub-merchant) will have no MDR applied. Consider configuring Master Merchant pricing as a fallback.</div></div>
             }
-            <p class="scope-sum">{{ scopeText() }}</p>
+            @if (methodCode()) {
+              <dl class="sheet-dl scope-dl" aria-label="Scope">
+                <div><dt>Merchant</dt><dd>{{ view().merchantName }}</dd></div>
+                <div><dt>Applies to</dt><dd>{{ appliesTo() }}</dd></div>
+                <div><dt>Payment Method</dt><dd>{{ method()?.name }} · {{ flowLabel[flow()] }}</dd></div>
+                @if (showVa()) {<div class="wide"><dt>VA Banks</dt><dd>{{ vaSummary() }}</dd></div>}
+              </dl>
+            }
           }
 
           @case (1) {
@@ -275,36 +285,83 @@
           }
 
           @case (3) {
-            <dl class="editor-sum">
-              <div><dt>Merchant</dt><dd>{{ view().merchantName }}</dd></div>
-              <div><dt>Corridor</dt><dd>{{ cname() }}</dd></div>
-              <div><dt>Sub-Merchant</dt><dd>{{ subName() ?? 'Master Merchant' }}</dd></div>
-              <div><dt>Flow</dt><dd>{{ flowLabel[flow()] }}</dd></div>
-              <div><dt>Payment Method</dt><dd>{{ method()?.name }}</dd></div>
-              @if (showVa()) {<div><dt>VA Banks</dt><dd>{{ vaSummary() }}</dd></div>}
-              <div><dt>Pricing Technique</dt><dd>{{ techniqueLabel(technique()) }}</dd></div>
-              <div class="wide"><dt>Configuration</dt><dd>{{ summary() }}</dd></div>
-              <div><dt>Effective</dt><dd>{{ period() }}</dd></div>
-              @if (flow() === 'payin') {<div><dt>Settlement Cycle</dt><dd>{{ settlement() ?? 'Not set' }} <span class="muted">(set on the product)</span></dd></div>}
-              <div><dt>Status</dt><dd><span class="status" [class.warning]="!onboarding()" [class.success]="onboarding()">{{ onboarding() ? 'Applies when saved' : 'Pending FinOps approval' }}</span></dd></div>
-            </dl>
-
-            <section class="calc" aria-labelledby="calc-title">
-              <h4 id="calc-title">Test Pricing Calculator</h4>
-              <div class="f-row">
-                <div class="f-field"><label for="calc-amt">Transaction Amount ({{ local() }})</label><input id="calc-amt" class="f-input" type="number" step="1" min="0" [value]="calcAmount()" (input)="calcAmount.set($any($event.target).value)" /></div>
-                @if (needsVolume()) {
-                  <div class="f-field"><label for="calc-vol">{{ technique() === 'historical_volume' ? 'Previous Period Volume' : 'Monthly Transaction Volume' }} ({{ local() }})</label><input id="calc-vol" class="f-input" type="number" step="1" min="0" [value]="calcVolume()" (input)="calcVolume.set($any($event.target).value)" /></div>
-                }
+            @let h = headline();
+            <div class="sheet-hero">
+              <div>
+                <span class="hero-label">{{ method()?.name }} · {{ flowLabel[flow()] }} · {{ techniqueLabel(technique()) }}</span>
+                <p class="hero-value">{{ h.value }}</p>
+                <p class="hero-sub">{{ h.sub }}</p>
               </div>
-              @let c = calc();
-              <p class="calc-fee"><span>Calculated Fee</span><strong>{{ money(c.fee, c.currency) }}</strong></p>
-              <p class="f-hint">{{ c.explanation }}</p>
-              <dl class="calc-rows">@for (r of c.breakdown; track r[0]) {<div><dt>{{ r[0] }}</dt><dd>{{ r[1] }}</dd></div>}</dl>
+              <div class="hero-facts">
+                <div class="hero-fact"><span>Effective</span><strong>{{ period() }}</strong></div>
+                @if (flow() === 'payin') {<div class="hero-fact"><span>Settlement Cycle</span><strong>{{ settlement() ?? 'Not set' }} (set on the product)</strong></div>}
+                <div class="hero-fact"><span>Applies to</span><strong>{{ appliesTo() }}</strong></div>
+                <div class="hero-fact"><span>Status</span><strong><span class="status" [class.warning]="!onboarding()" [class.success]="onboarding()">{{ onboarding() ? 'Applies when saved' : 'Pending FinOps approval' }}</span></strong></div>
+              </div>
+            </div>
+
+            @if (technique() === 'volume_based') {
+              <section class="sheet-section">
+                <h3>Volume tiers · {{ volumePeriodLabel(volumePeriod()) }}</h3>
+                <div class="table-wrap">
+                  <table class="data-table sum-tiers">
+                    <thead><tr><th scope="col">{{ volumePeriodLabel(volumePeriod()) }} volume ({{ local() }})</th><th scope="col" class="num">MDR</th><th scope="col" class="num">Fixed fee</th></tr></thead>
+                    <tbody>
+                      @for (r of tierRows(); track $index) {
+                        <tr [class.hit]="r.hit"><td>{{ r.range }}@if (r.hit) {<span class="tier-tag">Test</span>}</td><td class="num">{{ r.mdr }}</td><td class="num">{{ r.fee }}</td></tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            }
+
+            <section class="sheet-section">
+              <h3>Scope</h3>
+              <dl class="sheet-dl">
+                <div><dt>Merchant</dt><dd>{{ view().merchantName }}</dd></div>
+                <div><dt>Corridor</dt><dd>{{ cname() }} · {{ local() }}</dd></div>
+                <div><dt>Applies to</dt><dd>{{ appliesTo() }}</dd></div>
+                <div><dt>Flow</dt><dd>{{ flowLabel[flow()] }}</dd></div>
+                <div><dt>Payment Method</dt><dd>{{ method()?.name }}</dd></div>
+                @if (showVa()) {<div><dt>VA Banks</dt><dd>{{ vaSummary() }}</dd></div>}
+              </dl>
+            </section>
+
+            <section class="sheet-section" aria-labelledby="calc-title">
+              <h3 id="calc-title">Test the pricing</h3>
+              <div class="calc">
+                <div class="f-row">
+                  <div class="f-field"><label for="calc-amt">Transaction Amount</label><span class="f-affix"><span class="prefix" aria-hidden="true">{{ local() }}</span><input id="calc-amt" class="f-input" type="text" inputmode="decimal" [value]="grouped(calcAmount())" (input)="setCalc('amount', $any($event.target).value)" /></span></div>
+                  @if (needsVolume()) {
+                    <div class="f-field"><label for="calc-vol">{{ technique() === 'historical_volume' ? 'Previous Period Volume' : 'Monthly Transaction Volume' }}</label><span class="f-affix"><span class="prefix" aria-hidden="true">{{ local() }}</span><input id="calc-vol" class="f-input" type="text" inputmode="decimal" [value]="grouped(calcVolume())" (input)="setCalc('volume', $any($event.target).value)" /></span></div>
+                  }
+                </div>
+                @let c = calc();
+                <div class="calc-result" aria-live="polite">
+                  <div><span class="calc-k">Calculated Fee</span><strong class="calc-v">{{ money(c.fee, c.currency) }}</strong></div>
+                  @if (effectiveRate(); as r) {<div class="calc-eff"><span class="calc-k">Effective rate</span><strong>{{ r }}</strong></div>}
+                </div>
+                <p class="calc-why">{{ c.explanation }}</p>
+                <details class="calc-more">
+                  <summary>How it's calculated</summary>
+                  <dl class="calc-rows">@for (r of c.breakdown; track r[0]) {<div><dt>{{ r[0] }}</dt><dd>{{ r[1] }}</dd></div>}</dl>
+                </details>
+              </div>
             </section>
           }
         }
       } @else {
+        @let h = headline();
+        <div class="sheet-hero">
+          <div>
+            <span class="hero-label">Primary pricing · {{ method()?.name }} · {{ flowLabel[flow()] }}</span>
+            <p class="hero-value">{{ h.value }}</p>
+            <p class="hero-sub">{{ h.sub }} · {{ period() }} · {{ appliesTo() }}</p>
+          </div>
+        </div>
+        <section class="sheet-section">
+        <h3>Secondary charges</h3>
         <p class="f-hint">Secondary charges are applied in addition to, or as an override to, the primary pricing. You can skip this step if no secondary charges are needed.</p>
 
         <section class="sec-card">
@@ -357,6 +414,7 @@
               </fieldset>
             }
           }
+        </section>
         </section>
       }
 
