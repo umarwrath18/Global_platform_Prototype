@@ -9,7 +9,7 @@ import { CountryConfigService } from '../core/merchants/country-config.service';
 import { MccService } from '../core/merchants/mcc.service';
 import { MerchantSummary, PortalNotification, STAFF_ROLE_LABEL, StaffRole } from '../core/merchants/merchant-models';
 import { ONBOARDING_COUNTRIES } from '../core/merchants/onboarding-config';
-import { ActingRole, SECURITY_ROLE_LABEL, StaffRoleService } from '../core/merchants/staff-role.service';
+import { ActingRole, SECURITY_ROLE_LABEL, StaffRoleService, TECH_ROLE_LABEL } from '../core/merchants/staff-role.service';
 import { Icon, IconName } from './icon';
 import { fmtRelative } from './merchant-ui';
 import { MobiLogo } from './mobi-logo';
@@ -32,6 +32,13 @@ const NAV: NavItem[] = [
   { label: 'Notifications', icon: 'bell', link: '/notifications' },
   { label: 'Approvals', icon: 'check-circle', link: '/approvals' },
   { label: 'Merchant Pricing', icon: 'card', link: '/merchant-pricing' },
+  { label: 'Host Management', icon: 'route', link: '/hosts' },
+];
+
+/** What Tech Ops sees: Host Management (it manages hosts) and the Dashboard; no merchant permissions. */
+const TECHOPS_NAV: NavItem[] = [
+  { label: 'Dashboard', icon: 'grid', link: '/dashboard' },
+  { label: 'Host Management', icon: 'route', link: '/hosts' },
 ];
 
 /** What Mobi Support sees: no merchant permissions, but Transactions (view, notes and flags) to answer queries. */
@@ -39,12 +46,14 @@ const SUPPORT_NAV: NavItem[] = [
   { label: 'Dashboard', icon: 'grid', link: '/dashboard' },
   { label: 'Transactions', icon: 'swap', link: '/transactions' },
   { label: 'User security', icon: 'shield', link: '/security/users' },
+  { label: 'Host Management', icon: 'route', link: '/hosts' },
 ];
 
 /** What Security Admin sees: no merchant or transaction permissions. */
 const SECURITY_NAV: NavItem[] = [
   { label: 'Dashboard', icon: 'grid', link: '/dashboard' },
   { label: 'User security', icon: 'shield', link: '/security/users' },
+  { label: 'Host Management', icon: 'route', link: '/hosts' },
 ];
 
 /** Approved MVP modules not built yet: shown disabled so the roadmap is visible, never clickable. */
@@ -53,7 +62,7 @@ const LATER: NavItem[] = [
   { label: 'Payouts', icon: 'arrow-up' },
   { label: 'Settlements', icon: 'settle' },
   { label: 'Payment Methods', icon: 'card' },
-  { label: 'Hosts & Routing', icon: 'route' },
+  { label: 'Routing', icon: 'route' },
   { label: 'Reports', icon: 'bar-chart' },
   { label: 'Settings', icon: 'settings' },
 ];
@@ -93,7 +102,7 @@ export class PortalShell {
   private readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
 
   protected readonly session = this.auth.session;
-  protected readonly nav = computed(() => (this.roles.securityRole() === 'support' ? SUPPORT_NAV : this.roles.securityRole() ? SECURITY_NAV : NAV));
+  protected readonly nav = computed(() => (this.roles.techOps() ? TECHOPS_NAV : this.roles.securityRole() === 'support' ? SUPPORT_NAV : this.roles.securityRole() ? SECURITY_NAV : NAV));
   protected readonly later = LATER;
   protected readonly menuOpen = signal(false);
   protected readonly bellOpen = signal(false);
@@ -104,9 +113,9 @@ export class PortalShell {
   protected readonly searchOpen = signal(false);
   protected readonly merchants = signal<MerchantSummary[]>([]);
 
-  protected readonly roleOptions = [...Object.keys(STAFF_ROLE_LABEL), ...Object.keys(SECURITY_ROLE_LABEL)] as ActingRole[];
-  protected readonly roleLabel: Record<ActingRole, string> = { ...STAFF_ROLE_LABEL, ...SECURITY_ROLE_LABEL };
-  protected readonly shortRole: Record<ActingRole, string> = { sales: 'Sales / Ops', risk: 'Risk', cs: 'Customer Success', finops: 'FinOps', support: 'Mobi Support', security: 'Security Admin' };
+  protected readonly roleOptions = [...Object.keys(STAFF_ROLE_LABEL), ...Object.keys(SECURITY_ROLE_LABEL), ...Object.keys(TECH_ROLE_LABEL)] as ActingRole[];
+  protected readonly roleLabel: Record<ActingRole, string> = { ...STAFF_ROLE_LABEL, ...SECURITY_ROLE_LABEL, ...TECH_ROLE_LABEL };
+  protected readonly shortRole: Record<ActingRole, string> = { sales: 'Sales / Ops', risk: 'Risk', cs: 'Customer Success', finops: 'FinOps', support: 'Mobi Support', security: 'Security Admin', techops: 'Tech Ops' };
   protected readonly countries = Object.values(ONBOARDING_COUNTRIES);
   protected readonly currencies = [...new Set(Object.values(ONBOARDING_COUNTRIES).map((c) => c.currency))];
   protected readonly ranges = Object.entries(DATE_RANGE_LABEL) as [DateRange, string][];

@@ -6,7 +6,11 @@ import { StaffRole } from './merchant-models';
 const ROLE_KEY = 'mobi.gp.demoActingRole';
 const SECURITY_ROLE_KEY = 'mobi.gp.demoSecurityRole';
 
-export type ActingRole = StaffRole | SecurityRole;
+/** Tech Ops manages hosts (Host Management); like Support and Security, it has no merchant permissions. */
+export type TechRole = 'techops';
+export type ActingRole = StaffRole | SecurityRole | TechRole;
+
+export const TECH_ROLE_LABEL: Record<TechRole, string> = { techops: 'Tech Ops' };
 
 export const SECURITY_ROLE_LABEL: Record<SecurityRole, string> = {
   support: 'Mobi Support',
@@ -25,7 +29,7 @@ export const SECURITY_ROLE_LABEL: Record<SecurityRole, string> = {
 export class StaffRoleService {
   private readonly auth = inject(AuthService);
   private readonly state = signal<StaffRole>(this.read());
-  private readonly securityState = signal<SecurityRole | null>(this.readSecurity());
+  private readonly securityState = signal<SecurityRole | TechRole | null>(this.readSecurity());
   /** The login's own team; null for merchant users or before sign-in. */
   readonly team = computed(() => this.auth.session()?.team ?? null);
   /** Only the prototype admin login may switch teams. */
@@ -37,14 +41,20 @@ export class StaffRoleService {
   readonly securityRole = computed<SecurityRole | null>(() => {
     const t = this.team();
     if (t === 'support' || t === 'security') return t;
-    return t === 'admin' || t === null ? this.securityState() : null;
+    const s = t === 'admin' || t === null ? this.securityState() : null;
+    return s === 'support' || s === 'security' ? s : null;
+  });
+  /** True when acting as Tech Ops (the Tech Ops login, or the prototype admin viewing as it). */
+  readonly techOps = computed(() => {
+    const t = this.team();
+    return t === 'techops' || ((t === 'admin' || t === null) && this.securityState() === 'techops');
   });
   /** What the "View as" switcher (or the fixed team label) shows. */
-  readonly acting = computed<ActingRole>(() => this.securityRole() ?? this.role());
+  readonly acting = computed<ActingRole>(() => this.securityRole() ?? (this.techOps() ? 'techops' : this.role()));
 
   set(role: ActingRole) {
     if (!this.canSwitch()) return;
-    if (role === 'support' || role === 'security') {
+    if (role === 'support' || role === 'security' || role === 'techops') {
       this.securityState.set(role);
     } else {
       this.securityState.set(null);
@@ -69,10 +79,10 @@ export class StaffRoleService {
     }
   }
 
-  private readSecurity(): SecurityRole | null {
+  private readSecurity(): SecurityRole | TechRole | null {
     try {
       const v = localStorage.getItem(SECURITY_ROLE_KEY);
-      return v === 'support' || v === 'security' ? v : null;
+      return v === 'support' || v === 'security' || v === 'techops' ? v : null;
     } catch {
       return null;
     }

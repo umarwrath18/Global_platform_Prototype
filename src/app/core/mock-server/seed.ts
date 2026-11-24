@@ -53,13 +53,14 @@ export interface SeedUser {
 }
 
 /** Internal teams a login can belong to (merchant teams, Mobi Support, Security Admin) or the prototype admin. */
-export type StaffTeam = 'sales' | 'risk' | 'cs' | 'finops' | 'support' | 'security' | 'admin';
+export type StaffTeam = 'sales' | 'risk' | 'cs' | 'finops' | 'support' | 'security' | 'techops' | 'admin';
 
 export const STAFF_TEAM_LABEL: Record<StaffTeam, string> = {
   sales: 'Sales / Operations',
   risk: 'Risk',
   cs: 'Customer Success',
   finops: 'FinOps',
+  techops: 'Tech Ops',
   support: 'Mobi Support',
   security: 'Security Admin (Tech)',
   admin: 'Prototype admin (any team)',
@@ -126,6 +127,7 @@ export const SEED_USERS: SeedUser[] = [
   { id: 'U-14', accountId: 'GA-1001', loginId: 'MOBI-CS', name: 'Mei Ling Wong', email: 'meiling.wong@mobi.example', roleId: 'role-admin', status: 'active', mfaEnrolled: true, team: 'cs' },
   { id: 'U-15', accountId: 'GA-1001', loginId: 'MOBI-SUPPORT', name: 'Priya Nair', email: 'priya.nair@mobi.example', roleId: 'role-admin', status: 'active', mfaEnrolled: true, team: 'support' },
   { id: 'U-16', accountId: 'GA-1001', loginId: 'MOBI-SECURITY', name: 'Wei Jie Chen', email: 'weijie.chen@mobi.example', roleId: 'role-admin', status: 'active', mfaEnrolled: true, team: 'security' },
+  { id: 'U-18', accountId: 'GA-1001', loginId: 'MOBI-TECHOPS', name: 'Wei Ling Tan', email: 'weiling.tan@mobi.example', roleId: 'role-admin', status: 'active', mfaEnrolled: true, team: 'techops' },
   { id: 'U-17', accountId: 'GA-1001', loginId: 'MOBI-ADMIN', name: 'Prototype Admin', email: 'prototype.admin@mobi.example', roleId: 'role-admin', status: 'active', mfaEnrolled: true, team: 'admin' },
 ];
 
@@ -140,6 +142,7 @@ export const DEMO_ACCOUNT_GUIDE: { loginId: string; scenario: string; portal?: '
   { loginId: 'TANJUNG-ADMIN', scenario: 'FinOps · MFA on' },
   { loginId: 'MOBI-SUPPORT', scenario: 'Mobi Support · MFA on' },
   { loginId: 'MOBI-SECURITY', scenario: 'Security Admin (Tech) · MFA on' },
+  { loginId: 'MOBI-TECHOPS', scenario: 'Tech Ops · Host Management · MFA on' },
   { loginId: 'MOBI-ADMIN', scenario: 'Prototype admin · can switch teams with "View as" · MFA on' },
   { loginId: 'TANJUNG-VIEWER', scenario: 'Viewer (Sales / Operations) · MFA on' },
   { loginId: 'LUMI-ADMIN', scenario: 'Account with no active countries · MFA not set up yet' },

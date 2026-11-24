@@ -77,7 +77,7 @@ export const MFA_POLICY = {
 } as const;
 
 /** 9: fixed teams per login, team logins added, Thailand / Philippines removed from GA-1001. */
-const DB_VERSION = 9;
+const DB_VERSION = 10;
 
 interface AccountRec extends SeedAccount {
   /** GMID that created this account at go-live. Only on accounts created after this field existed. */
@@ -1308,6 +1308,12 @@ export class AuthServer {
         if (existing?.version === 5 || existing?.version === 6 || existing?.version === 7) {
           await this.addMissingSeedUsers();
           this.removeRecoveryCodes();
+          this.applyTeamsAndCountries();
+          return;
+        }
+        if (existing?.version === 9) {
+          // Batch 5A: the Tech Ops login (Host Management).
+          await this.addMissingSeedUsers();
           this.applyTeamsAndCountries();
           return;
         }

@@ -1,3 +1,4 @@
+import { HostServer } from './host-server';
 import { HttpErrorResponse, HttpInterceptorFn, HttpResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { from, mergeMap, Observable, timer } from 'rxjs';
@@ -37,6 +38,7 @@ export class MockBackend {
   readonly merchants: MerchantServer = new MerchantServer({ storage: localStorage, auth: this.server, strictValidation: isStrictValidation, countryConfig: this.countryConfig, mcc: this.mcc, fixedTeams: true });
 
   /** Transactions (sample records for live MIDs; see transaction-server.ts). Shared by both apps. */
+  readonly hosts = new HostServer({ storage: localStorage, auth: this.server });
   readonly transactions = new TransactionServer({ storage: localStorage, auth: this.server, sources: () => this.merchants.transactionSources() });
 
   /** Merchant-facing portal (Dashboard, My Transactions; see merchant-portal-server.ts). */
@@ -59,6 +61,7 @@ export class MockBackend {
         await this.countryConfig.resetAll();
         this.merchantPortal.resetAll();
         this.transactions.resetAll();
+        this.hosts.resetAll();
       },
       // Transactions: the audit log (views, exports, notes, flags), newest first.
       transactionAudit: () => console.table(this.transactions.auditLog().map((e) => ({ ...e, at: new Date(e.at).toISOString() }))),
@@ -88,7 +91,9 @@ export const mockBackendInterceptor: HttpInterceptorFn = (req, next) => {
       return;
     }
     const token = req.headers.get('Authorization')?.replace(/^Bearer /, '') ?? null;
-    const handle = MerchantPortalServer.handles(req.url)
+    const handle = HostServer.handles(req.url)
+      ? () => backend.hosts.handle(req.method, req.urlWithParams, req.body, token, req.headers.get('X-Demo-Role'))
+      : MerchantPortalServer.handles(req.url)
       ? () => backend.merchantPortal.handle(req.method, req.urlWithParams, token)
       : TransactionServer.handles(req.url)
       ? () => backend.transactions.handle(req.method, req.urlWithParams, req.body, token, req.headers.get('X-Demo-Role'))
