@@ -161,10 +161,18 @@ describe('Transactions', () => {
     it('fees only for Sales / Ops, CS and FinOps; IP and device only for Risk and Mobi Support', async () => {
       const id = (await list('123', 'payin', 'range=7d&status=successful')).body.items[0].transactionId;
       const fieldsOf = async (login: string) => (await call<TxnDetail>(login, 'GET', `/api/transactions/payin/${id}`)).body.sections.flatMap((s) => s.fields.map((f) => f.label));
-      expect(await fieldsOf('123')).toContain('Fee');
+      const detailOf = async (login: string) => (await call<TxnDetail>(login, 'GET', `/api/transactions/payin/${id}`)).body;
+      // The breakdown (fee, net, rate) and the sales slip: fee teams only; the slip for Sales / Ops and CS.
+      const sales = await detailOf('123');
+      expect(sales.fee).not.toBeUndefined();
+      expect(sales.document).toBe('sales_slip');
+      expect((await detailOf('TANJUNG-ADMIN')).document).toBeNull();
       expect(await fieldsOf('TANJUNG-ADMIN')).toContain('Pricing version');
+      const riskDetail = await detailOf('MOBI-RISK');
+      expect(riskDetail).not.toHaveProperty('fee');
+      expect(riskDetail).not.toHaveProperty('net');
+      expect(riskDetail.document).toBeNull();
       const risk = await fieldsOf('MOBI-RISK');
-      expect(risk).not.toContain('Fee');
       expect(risk).not.toContain('Pricing version');
       expect((await list('MOBI-RISK', 'payin', 'range=7d')).body.items[0].fee).toBeUndefined();
       expect(await fieldsOf('123')).not.toContain('IP address');
@@ -258,7 +266,15 @@ describe('Transactions', () => {
       expect(labels).not.toContain('Provider');
       expect(labels).not.toContain('Mobi request ID');
       expect(labels).not.toContain('Pricing version');
-      expect(labels).toEqual(expect.arrayContaining(['Fee', 'Net amount', 'Payment reference']));
+      expect(labels).toEqual(expect.arrayContaining(['Mobi Ref ID', 'Merchant Ref ID', 'Customer', 'Paid at', 'Reason']));
+      expect(d.fee).not.toBeNull();
+      expect(d.net).toBeCloseTo(d.amount - d.fee!, 2);
+      expect(d.document).toBe('sales_slip');
+      // Any reference finds it, including the bank's.
+      if (d.bankReference) {
+        const byRef = (await mget<MerchantTxnListResponse>('NUSANTARA-MERCHANT', `/api/merchant-portal/transactions?flow=payin&q=${encodeURIComponent(d.bankReference)}`)).body;
+        expect(byRef.items.map((t) => t.transactionId)).toContain(ok.transactionId);
+      }
     });
 
     it('never shows another merchant’s transaction', async () => {

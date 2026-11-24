@@ -674,3 +674,61 @@ app-transaction-sheet {
     }
   }
 }
+
+/* Internal list: settlement column. */
+td.txn-settle {
+  font-size: 13px;
+  white-space: nowrap;
+
+  &.hold {
+    color: var(--warning);
+    font-weight: 600;
+  }
+}
+
+/* Internal details: the merchant-facing breakdown and the slip download. */
+app-transaction-sheet {
+  .int-breakdown {
+    margin: 0;
+    display: grid;
+    gap: 6px;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+
+    div {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    dt {
+      color: var(--text-muted);
+    }
+
+    dd {
+      margin: 0;
+    }
+
+    .total {
+      padding-top: 8px;
+      border-top: 1px dashed var(--border);
+      font-weight: 700;
+
+      dt {
+        color: var(--text);
+      }
+    }
+  }
+
+  .int-doc {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-soft);
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+}

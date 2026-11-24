@@ -21,6 +21,7 @@ import {
   TxnListRow,
   TxnRange,
   TxnStatus,
+  SettlementView,
 } from '../../core/transactions/transactions';
 import { TransactionsApi, TxnQuery } from '../../core/transactions/transactions-api.service';
 import { Icon } from '../../shared/icon';
@@ -85,6 +86,15 @@ export class TransactionsPage {
   protected readonly flagLabel = TXN_FLAG_LABEL;
   protected readonly flags = Object.keys(TXN_FLAG_LABEL) as TxnFlag[];
   protected readonly amount = fmtAmount;
+  /** Fees come back only for teams allowed to see them (Sales / Ops, CS, FinOps). */
+  protected readonly seesFees = computed(() => (this.data()?.items ?? []).some((t) => t.fee !== undefined));
+
+  /** Due 25 Nov · Settled 24 Nov · On hold · — */
+  protected settlementText(s: SettlementView | null | undefined) {
+    if (!s) return '—';
+    if (s.state === 'on_hold') return 'On hold';
+    return `${s.state === 'settled' ? 'Settled' : 'Due'} ${s.date ? new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(s.date) : ''}`.trim();
+  }
   protected readonly money = fmtMoney;
   protected readonly dateTime = (t: number) => fmtDateTime(t);
 
@@ -190,9 +200,9 @@ export class TransactionsPage {
   }
 
   protected search() {
-    const v = this.searchText().trim().toUpperCase();
-    if (v && /[^A-Z0-9-]/.test(v)) {
-      this.flash('danger', 'IDs contain only letters, numbers and dashes.');
+    const v = this.searchText().replace(/\s+/g, '').toUpperCase();
+    if (v && /[^A-Z0-9_.-]/.test(v)) {
+      this.flash('danger', 'References contain only letters, numbers, dashes, dots and underscores.');
       return;
     }
     this.go({ q: v });

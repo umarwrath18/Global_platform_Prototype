@@ -3,6 +3,7 @@ import { toClientError } from '../../core/api/api-error';
 import { fmtDateTime, fmtMoney, TXN_FLOW_LABEL, TxnDetail, TxnFlow } from '../../core/transactions/transactions';
 import { TransactionsApi } from '../../core/transactions/transactions-api.service';
 import { Icon } from '../../shared/icon';
+import { downloadReceipt } from '../../shared/receipt-download';
 import { SideSheet } from '../../shared/side-sheet';
 import { PaymentPath, TxnIpn, TxnSections, TxnStatusBadge, TxnTimeline } from '../../shared/txn-ui';
 
@@ -26,10 +27,10 @@ type Tab = 'details' | 'timeline' | 'ipn' | 'notes' | 'audit';
             <p class="sheet-eyebrow">{{ flowLabel[t.flow] }} · {{ t.methodName }}@if (t.paymentTypeLabel !== t.methodName) { · {{ t.paymentTypeLabel }}} · {{ t.countryName }}</p>
             <div class="txn-id-row">
               <span>{{ t.transactionId }}</span>
-              <button type="button" class="copy" (click)="copy(t.transactionId)" [attr.aria-label]="copied() ? 'Copied' : 'Copy transaction ID'" [title]="copied() ? 'Copied' : 'Copy transaction ID'"><app-icon [name]="copied() ? 'check' : 'copy'" [size]="14" /></button>
+              <button type="button" class="copy" (click)="copy(t.transactionId)" [attr.aria-label]="copied() ? 'Copied' : 'Copy Mobi Ref ID'" [title]="copied() ? 'Copied' : 'Copy Mobi Ref ID'"><app-icon [name]="copied() ? 'check' : 'copy'" [size]="14" /></button>
             </div>
             <div class="txn-sheet-amount"><span class="amt">{{ money(t.amount, t.currency) }}</span><app-txn-status [status]="t.status" /></div>
-            <p class="sheet-sub">Created {{ when(t.createdAt) }}@if (t.completedAt) { · Completed {{ when(t.completedAt) }}}</p>
+            <p class="sheet-sub">Merchant Ref ID {{ t.invoiceId }} · Created {{ when(t.createdAt) }}@if (t.completedAt) { · Completed {{ when(t.completedAt) }}}</p>
           } @else {
             <p class="sheet-eyebrow">{{ flowLabel[flow()] }}</p>
             <div class="txn-id-row">{{ id() }}</div>
@@ -58,6 +59,23 @@ type Tab = 'details' | 'timeline' | 'ipn' | 'notes' | 'audit';
 
           @switch (tab()) {
             @case ('details') {
+              @if (t.fee !== undefined) {
+                <!-- Same breakdown the merchant sees; only teams that see fees get it. -->
+                <div class="sheet-hero">
+                  <dl class="int-breakdown">
+                    <div><dt>Amount</dt><dd>{{ money(t.amount, t.currency) }}</dd></div>
+                    <div><dt>Fee (MDR)@if (t.feeRate) { · {{ t.feeRate }}}</dt><dd>{{ t.fee == null ? '—' : (t.flow === 'payin' ? '− ' : '+ ') + money(t.fee, t.currency) }}</dd></div>
+                    <div class="total"><dt>{{ t.flow === 'payin' ? 'Net amount' : 'Total debited' }}</dt><dd>{{ t.net == null ? '—' : money(t.net, t.currency) }}</dd></div>
+                  </dl>
+                  @if (t.document) {
+                    <div class="int-doc">
+                      <span>{{ t.flow === 'payin' ? 'Sales slip' : 'Payment advice' }} for the merchant (no fees shown)</span>
+                      <button type="button" class="btn sm" (click)="download(t)" [disabled]="downloading()">@if (downloading()) {<span class="spinner" aria-hidden="true"></span>} @else {<app-icon name="download" [size]="14" />}Download</button>
+                    </div>
+                  }
+                  @if (docError(); as e) {<p class="f-error" role="alert"><app-icon name="alert-circle" [size]="14" />{{ e }}</p>}
+                </div>
+              }
               <app-payment-path [steps]="t.path" [flow]="t.flow" />
               <app-txn-sections [sections]="t.sections" [numbered]="true" [links]="true" [flow]="t.flow" />
             }
@@ -180,6 +198,8 @@ export class TransactionSheet {
   protected readonly noteError = signal<string | null>(null);
   protected readonly busy = signal(false);
   protected readonly copied = signal(false);
+  protected readonly downloading = signal(false);
+  protected readonly docError = signal<string | null>(null);
 
   protected readonly flowLabel = TXN_FLOW_LABEL;
   protected readonly money = fmtMoney;
@@ -263,6 +283,20 @@ export class TransactionSheet {
       onError('message' in err && typeof err.message === 'string' ? err.message : 'That didn’t work. Please try again.');
     } finally {
       this.busy.set(false);
+    }
+  }
+
+  /** Sales slip / payment advice for staff to resend to a merchant (Sales / Ops, CS). */
+  protected async download(t: TxnDetail) {
+    if (!t.document || this.downloading()) return;
+    this.downloading.set(true);
+    this.docError.set(null);
+    try {
+      await downloadReceipt(t);
+    } catch {
+      this.docError.set("We couldn't create the document. Please try again.");
+    } finally {
+      this.downloading.set(false);
     }
   }
 

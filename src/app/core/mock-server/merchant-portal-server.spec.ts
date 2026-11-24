@@ -94,7 +94,7 @@ describe('Merchant portal', () => {
       const p = (await list('range=30d')).body;
       expect(p.items.length).toBe(25);
       const t = p.items[0];
-      expect(Object.keys(t).sort()).toEqual(['amount', 'createdAt', 'currency', 'fee', 'flow', 'invoiceId', 'methodCode', 'methodName', 'net', 'paymentType', 'status', 'subMerchantName', 'transactionId']);
+      expect(Object.keys(t).sort()).toEqual(['amount', 'beneficiary', 'createdAt', 'currency', 'customerName', 'fee', 'flow', 'invoiceId', 'methodCode', 'methodDetail', 'methodName', 'net', 'paymentType', 'settlement', 'status', 'subMerchantName', 'transactionId']);
       for (let i = 1; i < p.items.length; i++) expect(p.items[i - 1].createdAt).toBeGreaterThanOrEqual(p.items[i].createdAt);
       expect(JSON.stringify(p.items)).not.toMatch(/host|provider|acquirer|route/i);
     });
@@ -144,9 +144,9 @@ describe('Merchant portal', () => {
       expect(e.rows).toBe(total);
       expect(e.filename).toBe('tanjung-global-trading-sdn-bhd-payin-transactions-2026-11-05.csv');
       const lines = e.csv.trim().split('\r\n');
-      expect(lines[0]).toBe('Date & Time,Invoice ID,Transaction ID,Flow,Sub-merchant,Payment Method,Amount,Fee,Net Amount,Currency,Status');
+      expect(lines[0]).toBe('Date & Time,Merchant Ref ID,Mobi Ref ID,Customer,Sub-merchant,Sub MID,Payment Method,Bank / Wallet / Card,Bank Reference,Amount,Fee (MDR),Net Amount,Currency,Status,Reason,Paid At,Settlement,Settlement Date');
       expect(lines).toHaveLength(total + 1);
-      lines.slice(1).forEach((l) => expect(l).toMatch(/,(MYR|IDR|VND),Successful$/));
+      lines.slice(1).forEach((l) => expect(l).toMatch(/,(MYR|IDR|VND),Successful,Transaction successful,/));
     });
 
     it('returns zero rows when nothing matches', async () => {

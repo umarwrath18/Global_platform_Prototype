@@ -13,8 +13,9 @@ same way real staff will. To see another team's view, sign in with that team's l
   wait for the next.
 - **First sign-in for `123`, `TANJUNG-MERCHANT` and `LUMI-ADMIN`:** you set up MFA first (scan or
   type the key, then enter a code). Other logins already have MFA on.
-- **Two windows:** some steps need two people, such as submitter and approver. Use a normal window
-  and a private window, or two browsers, so both sessions stay signed in.
+- **Two people at once:** some steps need two people, such as submitter and approver. Use two tabs in
+  the same browser window: each tab keeps its own sign-in and both share the demo data. (A private
+  window or another browser has its own separate data.)
 - **Demo data:** it lives in your browser and resets when a new build changes the data. Run
   `mobiDemo.reset()` in the browser console to start again.
 

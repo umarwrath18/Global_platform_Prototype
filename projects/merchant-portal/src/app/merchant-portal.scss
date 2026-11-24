@@ -250,3 +250,43 @@
 .nowrap {
   white-space: nowrap;
 }
+
+/* My Transactions (v2): bank / wallet / card or beneficiary account under the main value; settlement. */
+.mp-txn-table {
+  .sub-line {
+    display: block;
+    margin-top: 1px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  td.settle {
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  td.settle.paused {
+    color: var(--warning);
+    font-weight: 600;
+  }
+}
+
+.txn-strip .txn-ks {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Fit the ten PayIn columns on a laptop screen; narrower screens scroll the table. */
+.data-table.txn-table.mp-txn-table {
+  th,
+  td {
+    padding-left: 10px;
+    padding-right: 10px;
+    font-size: 13px;
+  }
+}
+
+.txn-filters .fld.search {
+  min-width: 340px;
+}

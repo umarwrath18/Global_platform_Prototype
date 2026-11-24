@@ -100,3 +100,23 @@ transactions; a sub-merchant that CS takes live gets transactions from its go-li
 ## Tests
 `transaction-server.spec.ts` (records, filters, ID search, permissions, masking, notes, flags,
 export, merchant view and isolation); `merchant-portal-server.spec.ts` updated for the shared records.
+
+## Update: transaction details v2 (24 Nov 2026)
+
+Based on the current merchant portal's fields and common practice (Stripe, Razorpay). Design approved
+on 24 Nov 2026.
+
+| Topic | Decision |
+|---|---|
+| Names (both portals) | **Mobi Ref ID** (was Transaction ID), **Merchant Ref ID** (was Invoice ID), **Fee (MDR)**, **Net amount** (pay-in) / **Total debited** (payout). "Payable Amount" is retired. |
+| Merchant PayIn list | Date & time · Merchant Ref ID · Mobi Ref ID · Customer ("—" when not sent) · Payment method with the bank, wallet or masked card under it · Amount · Fee (MDR) · Net amount · Status · Settlement (Due / Settled / Paused, with the date). |
+| Merchant Payout list | Date & time · Merchant Ref ID · Mobi Ref ID · Beneficiary (name, masked account) · Bank / wallet · Amount · Fee (MDR) · Total debited · Status. No Merchant Name column. |
+| Totals | Transactions (with successful count) · Gross / Amount (successful) · Fees (MDR) · Net amount / Total debited, per currency. |
+| Search | Any reference: Mobi Ref ID, Merchant Ref ID or the bank's reference (spaces ignored). Settlement filter on PayIn. |
+| Details (side sheet) | Amount with breakdown (Amount, Fee (MDR) and rate, Net amount or Total debited) · References (Mobi Ref ID, Merchant Ref ID, bank reference, Sub MID or MID) · Payment (method, bank / wallet / card, customer, Paid at, Reason) or Beneficiary · Settlement (status, date and cycle) · Timeline · IPN. |
+| Documents | **Download sales slip** (successful pay-in) and **Download payment advice** (successful payout): one-page PDF with the Mobi logo, amount, paid time and references. Never shows Mobi's fee or net. Generated in the browser (sample). |
+| Settlement (sample) | Successful pay-ins settle on the product's cycle (T+n business days). Held settlement (suspension) shows **Paused** to the merchant and **On hold** internally. The Settlements module replaces this later. |
+| Internal | Same names; the list adds Fee (MDR) for teams that see fees and a Settlement column on PayIn. Internal-only detail (provider, path, pricing version, IP / device) is unchanged. |
+| Not included | Transaction Sub Type (needs a definition first). |
+| Internal (added) | Details: the same Amount / Fee (MDR) / Net breakdown for teams that see fees, References at the top, Settlement as its own section (Due / Settled / On hold). List: Customer (pay-in) or Beneficiary (payout) column, and the bank / wallet / card under the method. Sales / Ops and CS can download the sales slip or payment advice to resend to a merchant. |
+| Release | Merchant Portal production deploys are no longer on hold (released 24 Nov 2026). |

@@ -135,6 +135,16 @@ export const TYPE_COLUMNS: Record<TxnFlow, Partial<Record<PaymentType, TypeColum
   },
 };
 
+/** Settlement of a successful pay-in: due on a date, settled, or on hold (suspension). */
+export type SettlementState = 'due' | 'settled' | 'on_hold';
+export interface SettlementView {
+  state: SettlementState;
+  /** Expected (due) or actual (settled) date; null while on hold. */
+  date: number | null;
+}
+/** Internal wording; the Merchant Portal says "Paused" for a hold (neutral, no reason given). */
+export const SETTLEMENT_STATE_LABEL: Record<SettlementState, string> = { due: 'Due', settled: 'Settled', on_hold: 'On hold' };
+
 export interface TxnListRow {
   transactionId: string;
   invoiceId: string;
@@ -163,6 +173,12 @@ export interface TxnListRow {
   settlementHeld?: boolean;
   /** Values of the selected payment type's extra columns. */
   typeValues?: Record<string, string>;
+  /** Successful pay-ins only. */
+  settlement?: SettlementView | null;
+  /** Pay-in customer name (when sent), the bank / wallet / card, and the payout beneficiary. */
+  customerName?: string | null;
+  methodDetail?: string | null;
+  beneficiary?: { name: string | null; account: string | null; bank: string | null } | null;
 }
 
 export interface CurrencyAmount {
@@ -223,7 +239,7 @@ export interface DetailField {
 }
 
 export interface DetailSection {
-  key: 'customer' | 'beneficiary' | 'merchant' | 'mobi' | 'provider' | 'bank' | 'method' | 'payment' | 'fees' | 'settlement';
+  key: 'customer' | 'beneficiary' | 'merchant' | 'mobi' | 'provider' | 'bank' | 'method' | 'payment' | 'fees' | 'settlement' | 'references';
   title: string;
   fields: DetailField[];
 }
@@ -295,6 +311,18 @@ export interface TxnDetail {
   flags: TxnFlagView[];
   audit: TxnAuditEntry[];
   can: { addNote: boolean; flag: boolean };
+  /** Breakdown, only for teams that see fees (Sales / Ops, CS, FinOps); absent otherwise. */
+  fee?: number | null;
+  net?: number | null;
+  feeRate?: string | null;
+  paidAt: number | null;
+  merchantName: string;
+  methodDetail: string | null;
+  bankReference: string | null;
+  customerName: string | null;
+  beneficiary: { name: string | null; account: string | null; bank: string | null } | null;
+  /** Sales slip / payment advice staff can download for a merchant (Sales / Ops, CS; successful only). */
+  document: 'sales_slip' | 'payment_advice' | null;
   sampleData: true;
 }
 
@@ -314,6 +342,14 @@ export interface MerchantTxnRow {
   net: number | null;
   currency: string;
   status: TxnStatus;
+  /** Pay-in: the customer's name when the merchant sent one. */
+  customerName: string | null;
+  /** The bank, wallet, app or masked card under the method ("Maybank2u", "Visa •••• 4242"). */
+  methodDetail: string | null;
+  /** Payout: who receives it. */
+  beneficiary: { name: string | null; account: string | null; bank: string | null } | null;
+  /** Successful pay-ins only. */
+  settlement: SettlementView | null;
 }
 
 export interface MerchantTxnSummary {
@@ -355,6 +391,19 @@ export interface MerchantTxnDetail {
   sections: DetailSection[];
   timeline: TimelineEntry[];
   ipn: { status: string; attempts: IpnAttempt[] };
+  /** Breakdown (successful only): pay-in Amount − Fee = Net; payout Amount + Fee = Total debited. */
+  fee: number | null;
+  net: number | null;
+  /** The pricing in short ("MDR: 1%"), shown next to the fee. */
+  feeRate: string | null;
+  paidAt: number | null;
+  merchantName: string;
+  methodDetail: string | null;
+  bankReference: string | null;
+  customerName: string | null;
+  beneficiary: { name: string | null; account: string | null; bank: string | null } | null;
+  /** What the merchant can download: a sales slip (successful pay-in) or a payment advice (successful payout). */
+  document: 'sales_slip' | 'payment_advice' | null;
   sampleData: true;
 }
 
