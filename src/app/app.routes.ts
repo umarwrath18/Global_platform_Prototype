@@ -116,6 +116,16 @@ export const routes: Routes = [
         loadComponent: () => import('./features/configuration/mcc-catalogue').then((m) => m.MccCataloguePage),
       },
       {
+        path: 'hosts',
+        title: 'Host Management · Mobi Global Platform',
+        loadComponent: () => import('./features/hosts/hosts-page').then((m) => m.HostsPage),
+      },
+      {
+        path: 'hosts/:id',
+        title: 'Host details · Mobi Global Platform',
+        loadComponent: () => import('./features/hosts/host-detail').then((m) => m.HostDetail),
+      },
+      {
         path: 'account/security',
         title: 'Account security · Mobi Global Platform',
         loadComponent: () => import('./features/security/account-security').then((m) => m.AccountSecurity),

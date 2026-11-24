@@ -29,6 +29,7 @@ same way real staff will. To see another team's view, sign in with that team's l
 | `TANJUNG-ADMIN`  | FinOps                     | Approve or reject pricing changes in **Approvals**                        |
 | `MOBI-SUPPORT`   | Mobi Support               | **User security**: open MFA reset requests for users who lost their device |
 | `MOBI-SECURITY`  | Security Admin (Tech)      | **User security**: verify and reset MFA, waive blocks, see Tech alerts  |
+| `MOBI-TECHOPS`   | Tech Ops                   | **Host Management**: add, configure, validate, enable / disable hosts |
 | `MOBI-ADMIN`     | Prototype admin            | Switch teams with **View as** to review any screen                      |
 | `TANJUNG-VIEWER` | Viewer (Sales / Operations) | Check read-only access                                                 |
 

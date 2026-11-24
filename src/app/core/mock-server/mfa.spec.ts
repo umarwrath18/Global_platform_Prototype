@@ -213,7 +213,7 @@ describe('Two-factor authentication', () => {
       const upgraded = new AuthServer({ storage, now: () => now, pbkdf2Iterations: 1000, sendEmail: () => undefined });
       expect(((await upgraded.handle('POST', '/api/auth/login', { loginId: 'TANJUNG-ADMIN', password: DEMO_PASSWORD }, null)).body as any).stage).toBe('verify');
       const after = JSON.parse(storage.getItem(key)!);
-      expect(after.version).toBe(9);
+      expect(after.version).toBe(10);
       expect(after.mfa['U-2']).not.toHaveProperty('recovery');
       expect(after.mfa['U-2'].status).toBe('active');
       expect(after.challenges.some((c: any) => c.stage === 'rebind')).toBe(false);
@@ -341,7 +341,7 @@ describe('Two-factor authentication', () => {
       const upgraded = new AuthServer({ storage, now: () => now, pbkdf2Iterations: 1000, sendEmail: () => undefined });
       expect(((await upgraded.handle('POST', '/api/auth/login', { loginId: '123', password: DEMO_PASSWORD }, null)).body as any).stage).toBe('setup');
       const after = JSON.parse(storage.getItem(key)!);
-      expect(after.version).toBe(9);
+      expect(after.version).toBe(10);
       expect(after.sessions).toEqual([]);
       expect(after.revokedSessions.at(-1)).toMatchObject({ tokenHash: 'abc', reason: 'MFA_REQUIRED' });
       expect(after.users).toHaveLength(v4.users.length);

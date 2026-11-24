@@ -152,7 +152,7 @@ export interface Caller {
   userId: string;
   name: string;
   /** Internal users: the team this login works as; `admin` may switch (absent in older callers). */
-  team?: StaffRole | 'support' | 'security' | 'admin' | null;
+  team?: StaffRole | 'support' | 'security' | 'techops' | 'admin' | null;
 }
 
 export interface ServerReply {
@@ -251,10 +251,10 @@ export class MerchantServer {
     // With fixed teams, a login works only as its own team; only the prototype admin may switch.
     // Mobi Support and Security Admin have no merchant permissions: they can read, never change.
     const team = (auth.caller as Caller).team ?? 'sales';
-    if (this.opts.fixedTeams && (team === 'support' || team === 'security') && method.toUpperCase() !== 'GET') {
+    if (this.opts.fixedTeams && (team === 'support' || team === 'security' || team === 'techops') && method.toUpperCase() !== 'GET') {
       return { status: 403, body: { code: 'ROLE_NOT_PERMITTED', message: 'Mobi Support and Security Admin have no merchant permissions.' } };
     }
-    const role: StaffRole = !this.opts.fixedTeams || team === 'admin' || team === 'support' || team === 'security' ? requested : (team as StaffRole);
+    const role: StaffRole = !this.opts.fixedTeams || team === 'admin' || team === 'support' || team === 'security' || team === 'techops' ? requested : (team as StaffRole);
     this.opts.countryConfig?.sync();
     try {
       this.ensureSeeded();
