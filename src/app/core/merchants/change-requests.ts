@@ -1,17 +1,19 @@
 import { APPROVAL_PRIORITY_LABEL, ApplicationData, ApprovalPriority, connectionTypeLabel, Director, DocumentRecord, GlobalMerchant, merchantCategoryLabel, StaffRole } from './merchant-models';
 import { CountryOnboardingConfig, countryName } from './onboarding-config';
+import { mccLabel, type MccRef } from './mcc';
 
 // Changes after Risk approval. Once Risk has approved a merchant, anything Risk reviewed (legal
 // identity, and each country's business details, bank / settlement account, directors and
 // transaction settings, and documents) changes only through a request that Risk approves. Contact
-// details stay directly editable and are recorded. MCC, products and pricing keep their own flows.
+// details stay directly editable and are recorded. The profile request covers the legal identity
+// and the MCC together. Products and pricing keep their own flows.
 
 export type ChangeScope = 'merchant_profile' | 'country_details';
 export type ChangeSection = 'identity' | 'business' | 'bank' | 'transaction' | 'directors' | 'documents';
 export type ChangeStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn';
 
 export const CHANGE_SECTION_LABEL: Record<ChangeSection, string> = {
-  identity: 'Legal identity',
+  identity: 'Profile change',
   business: 'Business details',
   bank: 'Bank / settlement account',
   transaction: 'Transaction settings',
@@ -30,7 +32,9 @@ export interface FieldChange {
 }
 
 export type IdentityValue = Pick<GlobalMerchant, 'legalName' | 'registrationCountry' | 'registrationNumber'>;
-export type SectionValue = IdentityValue | ApplicationData['business'] | ApplicationData['bank'] | ApplicationData['transaction'] | Director[] | DocumentRecord[];
+/** The Risk-controlled profile fields: legal identity plus the MCC (present only when it changes). */
+export type ProfileValue = IdentityValue & { mcc?: MccRef | null };
+export type SectionValue = ProfileValue | ApplicationData['business'] | ApplicationData['bank'] | ApplicationData['transaction'] | Director[] | DocumentRecord[];
 
 /** A change request as the server stores it. `proposed` (the full new value) is never sent to the browser. */
 export interface ChangeRequestRecord {
@@ -54,31 +58,36 @@ export interface ChangeRequestRecord {
   decisionComment: string | null;
   /** Documents section only: the files in place when the request was made, for a side-by-side view. */
   previousDocuments?: DocumentRecord[];
+  /** Profile changes with a new MCC: countries where the proposed MCC is restricted (flagged to Risk). */
+  restrictedIn?: string[];
 }
 
 /** Documents section: `proposedDocuments` (file details only) is sent so Risk can open both versions. */
 export type ChangeRequest = Omit<ChangeRequestRecord, 'proposed' | 'requestedById'> & { proposedDocuments?: DocumentRecord[] };
 
-/** Merchant profile history: direct edits and profile change requests. */
+/** Merchant profile history: direct edits, MCC set before approval, and profile change requests. */
 export interface ProfileEvent {
   at: number;
   merchantId: string;
-  action: 'contact_updated' | 'identity_updated' | 'change_requested' | 'change_approved' | 'change_rejected' | 'change_withdrawn';
+  action: 'contact_updated' | 'identity_updated' | 'mcc_set' | 'change_requested' | 'change_approved' | 'change_rejected' | 'change_withdrawn';
   changes: FieldChange[];
   reason: string | null;
   by: string;
   role: StaffRole;
   requestId: string | null;
   comment: string | null;
+  /** Countries where a new MCC is restricted (flag only). */
+  restrictedIn?: string[];
 }
 
 export const PROFILE_ACTION_LABEL: Record<ProfileEvent['action'], string> = {
   contact_updated: 'Contact details updated',
   identity_updated: 'Legal identity updated',
-  change_requested: 'Identity change requested',
-  change_approved: 'Identity change approved',
-  change_rejected: 'Identity change rejected',
-  change_withdrawn: 'Identity change withdrawn',
+  mcc_set: 'MCC set',
+  change_requested: 'Profile change requested',
+  change_approved: 'Profile change approved',
+  change_rejected: 'Profile change rejected',
+  change_withdrawn: 'Profile change withdrawn',
 };
 
 export interface CreateChangeRequest {
@@ -126,11 +135,12 @@ export function describeChange(section: ChangeSection, before: SectionValue, aft
   const out: FieldChange[] = [];
   const add = (field: string, label: string, from: string, to: string) => from !== to && out.push({ field, label, from, to });
   if (section === 'identity') {
-    const a = before as IdentityValue;
-    const b = after as IdentityValue;
+    const a = before as ProfileValue;
+    const b = after as ProfileValue;
     add('legalName', 'Legal name', a.legalName, b.legalName);
     add('registrationCountry', 'Registration country', countryName(a.registrationCountry), countryName(b.registrationCountry));
     add('registrationNumber', 'Registration number', a.registrationNumber, b.registrationNumber);
+    if (b.mcc !== undefined) add('mcc', 'MCC', mccLabel(a.mcc ?? null), mccLabel(b.mcc));
   } else if (section === 'business') {
     const a = before as ApplicationData['business'];
     const b = after as ApplicationData['business'];

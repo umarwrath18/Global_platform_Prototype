@@ -1,4 +1,5 @@
 import { HostServer } from './host-server';
+import { RoutingServer } from './routing-server';
 import { HttpErrorResponse, HttpInterceptorFn, HttpResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { from, mergeMap, Observable, timer } from 'rxjs';
@@ -39,6 +40,8 @@ export class MockBackend {
 
   /** Transactions (sample records for live MIDs; see transaction-server.ts). Shared by both apps. */
   readonly hosts = new HostServer({ storage: localStorage, auth: this.server });
+  /** Routing (5B + 5C): reads hosts from Host Management and live merchants from the merchant service. */
+  readonly routing = new RoutingServer({ storage: localStorage, auth: this.server, hosts: () => this.hosts.snapshot(), merchants: () => this.merchants.transactionSources() });
   readonly transactions = new TransactionServer({ storage: localStorage, auth: this.server, sources: () => this.merchants.transactionSources() });
 
   /** Merchant-facing portal (Dashboard, My Transactions; see merchant-portal-server.ts). */
@@ -62,6 +65,7 @@ export class MockBackend {
         this.merchantPortal.resetAll();
         this.transactions.resetAll();
         this.hosts.resetAll();
+        this.routing.resetAll();
       },
       // Transactions: the audit log (views, exports, notes, flags), newest first.
       transactionAudit: () => console.table(this.transactions.auditLog().map((e) => ({ ...e, at: new Date(e.at).toISOString() }))),
@@ -91,7 +95,9 @@ export const mockBackendInterceptor: HttpInterceptorFn = (req, next) => {
       return;
     }
     const token = req.headers.get('Authorization')?.replace(/^Bearer /, '') ?? null;
-    const handle = HostServer.handles(req.url)
+    const handle = RoutingServer.handles(req.url)
+      ? () => backend.routing.handle(req.method, req.urlWithParams, req.body, token, req.headers.get('X-Demo-Role'))
+      : HostServer.handles(req.url)
       ? () => backend.hosts.handle(req.method, req.urlWithParams, req.body, token, req.headers.get('X-Demo-Role'))
       : MerchantPortalServer.handles(req.url)
       ? () => backend.merchantPortal.handle(req.method, req.urlWithParams, token)

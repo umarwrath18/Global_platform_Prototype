@@ -6,14 +6,12 @@ import {
   adapterLabel,
   AUTH_METHOD_LABEL,
   AVAILABILITY_LABEL,
-  HEALTH_STATUS_LABEL,
+  AvailabilityStatus,
   HOST_ENVIRONMENT_LABEL,
+  HOST_STATUS_LABEL,
   HostCapabilityView,
   HostDetailResponse,
   hostTypeLabel,
-  INTEGRATION_STATUS_LABEL,
-  OPERATIONAL_STATUS_LABEL,
-  Partner,
   PAYMENT_FLOW_LABEL,
 } from '../../core/hosts/hosts';
 import { countryName } from '../../core/merchants/onboarding-config';
@@ -21,21 +19,20 @@ import { Icon } from '../../shared/icon';
 import { HostAction, HostActionSheet } from './host-action-sheet';
 import { HostCapabilitySheet } from './host-capability-sheet';
 import { HostEditor } from './host-editor';
-import { availabilityTone, fmtWhen, healthTone, integrationTone, operationalTone } from './host-ui';
+import { availabilityTone, fmtWhen, statusTone } from './host-ui';
 
-type Tab = 'overview' | 'capabilities' | 'integration' | 'health' | 'activity';
+type Tab = 'overview' | 'capabilities' | 'integration' | 'activity';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
-  { id: 'capabilities', label: 'Payment Capabilities' },
+  { id: 'capabilities', label: 'Payment Methods' },
   { id: 'integration', label: 'Integration' },
-  { id: 'health', label: 'Health & Connectivity' },
   { id: 'activity', label: 'Activity Log' },
 ];
 
 /**
- * Host Details: a dedicated page with five tabs. Editing uses the editor side sheet; operational
- * controls, capabilities and credential replacement use small side sheets. Validation and health
- * checks are simulated and say so.
+ * Host Details: a dedicated page with four tabs. Editing uses the editor side sheet; Enable /
+ * Disable / Maintenance and payment methods use small side sheets. One status per host, plus a
+ * setup checklist; no credentials and no health data.
  */
 @Component({
   selector: 'app-host-detail',
@@ -53,13 +50,9 @@ const TABS: { id: Tab; label: string }[] = [
     <div class="host-head">
       <div>
         <h1>{{ h.name }} @if (h.sample) {<span class="sample-tag">Sample</span>}</h1>
-        <p>{{ h.id }} · {{ h.hostCode }} · {{ typeLabel(h.hostType) }} · Partner: {{ h.partnerName ?? 'None' }} · {{ h.markets.join(', ') || 'No markets yet' }}</p>
+        <p>{{ h.id }} · {{ h.hostCode }} · {{ typeLabel(h.hostType) }} · {{ h.markets.join(', ') || 'No markets yet' }}</p>
         <p>Updated {{ when(h.updatedAt) }} by {{ h.updatedBy }}</p>
-        <div class="host-detail-status">
-          <span [class]="integTone(h.integrationStatus)">{{ integLabel[h.integrationStatus] }}</span>
-          <span [class]="opTone(h.operationalStatus)">{{ opLabel[h.operationalStatus] }}</span>
-          @if (h.draft) {<span class="status warning">Draft</span>}
-        </div>
+        <div class="host-detail-status"><span [class]="tone(h.status)">{{ statusLabel[h.status] }}</span></div>
       </div>
       @if (x.can.manage) {
         <div class="actions">
@@ -70,7 +63,7 @@ const TABS: { id: Tab; label: string }[] = [
           } @else if (h.operationalState === 'maintenance') {
             <button type="button" class="btn primary" (click)="act('enable')">Re-enable</button>
             <button type="button" class="btn danger-outline" (click)="act('disable')">Disable</button>
-          } @else {
+          } @else if (h.status === 'disabled') {
             <button type="button" class="btn primary" (click)="act('enable')">Enable</button>
           }
         </div>
@@ -79,10 +72,10 @@ const TABS: { id: Tab; label: string }[] = [
       }
     </div>
 
-    @if (created(); as c) {<div class="alert success compact" role="status"><app-icon name="check-circle" /><div>{{ c === 'draft' ? 'Saved as a draft. Finish it with Edit.' : 'Host saved. It is Disabled until you validate its configuration and enable it.' }}</div></div>}
+    @if (created(); as c) {<div class="alert success compact" role="status"><app-icon name="check-circle" /><div>{{ c === 'draft' ? 'Saved as a draft. Finish it with Edit.' : 'Host saved. It stays Disabled until you enable it.' }}</div></div>}
     @if (toast(); as t) {<div class="alert success compact" role="status"><app-icon name="check-circle" /><div>{{ t }}</div></div>}
-    @if (h.operationalStatus === 'attention') {
-      <div class="host-banner bad" role="alert"><app-icon name="alert-circle" /><div><strong>Attention required.</strong> {{ attentionReason() }}</div></div>
+    @if (h.status === 'active' && !methodsOk()) {
+      <div class="host-banner warn" role="note"><app-icon name="alert-circle" /><div><strong>No payment method is Available.</strong> The host is Active but can't take any payments until a method is switched on.</div></div>
     }
     @if (h.maintenance; as m) {
       <div class="host-banner warn" role="note"><app-icon name="clock" /><div><strong>Under maintenance</strong> since {{ when(m.since) }} by {{ m.by }}: {{ m.reason }}@if (m.until) { · expected end {{ when(m.until) }}}</div></div>
@@ -102,14 +95,19 @@ const TABS: { id: Tab; label: string }[] = [
         <div class="host-layout">
           <div class="host-col">
             <section class="sheet-section">
-              <h3>Operational summary</h3>
+              <h3>Status</h3>
               <dl class="sheet-dl">
-                <div><dt>Integration Status</dt><dd><span [class]="integTone(h.integrationStatus)">{{ integLabel[h.integrationStatus] }}</span>@if (x.integration?.lastValidation; as v) {<span class="sub-line">Last validated {{ when(v.at) }} (simulated)</span>}</dd></div>
-                <div><dt>Operational Status</dt><dd><span [class]="opTone(h.operationalStatus)">{{ opLabel[h.operationalStatus] }}</span>@if (h.operationalStatus === 'active') {<span class="sub-line">Eligible for routing once Routing Management exists</span>}</dd></div>
-                <div><dt>Last health check</dt><dd>@if (h.lastHealth; as l) {{{ healthLabel[l.status] }}@if (l.responseTimeMs) { · {{ l.responseTimeMs }} ms}<span class="sub-line">{{ when(l.checkedAt) }} · simulated</span>} @else {Not checked}</dd></div>
-                <div><dt>Configuration completion</dt><dd>{{ h.completion }}%<div class="progress" role="progressbar" [attr.aria-valuenow]="h.completion" aria-valuemin="0" aria-valuemax="100"><i [style.width.%]="h.completion"></i></div></dd></div>
-                @if (h.operationalState !== 'active' && x.enableBlockers.length) {<div class="wide"><dt>Before it can be enabled</dt><dd><ul class="plain">@for (b of x.enableBlockers; track b) {<li>{{ b }}</li>}</ul></dd></div>}
+                <div class="wide"><dt>Status</dt><dd><span [class]="tone(h.status)">{{ statusLabel[h.status] }}</span><span class="sub-line">{{ statusNote() }}</span></dd></div>
               </dl>
+            </section>
+            <section class="sheet-section">
+              <h3>Setup checklist</h3>
+              <ul class="setup-list">
+                @for (c of h.checklist; track c.id) {
+                  <li [class.done]="c.done"><app-icon [name]="c.done ? 'check-circle' : 'alert-circle'" [size]="16" /><span>{{ c.label }}</span></li>
+                }
+              </ul>
+              @if (h.status !== 'active' && h.status !== 'maintenance' && x.enableBlockers.length) {<p class="f-hint">All four must be done before the host can be enabled.</p>}
             </section>
             <section class="sheet-section">
               <h3>Coverage</h3>
@@ -127,13 +125,12 @@ const TABS: { id: Tab; label: string }[] = [
                 <div><dt>Host Type</dt><dd>{{ typeLabel(h.hostType) }}</dd></div>
                 <div><dt>Country of Registration</dt><dd>{{ h.registrationCountry ? cname(h.registrationCountry) : '—' }}</dd></div>
                 <div><dt>Internal Owner</dt><dd>{{ h.ownerTeam || '—' }}</dd></div>
-                <div><dt>Associated Partner</dt><dd>{{ x.partner ? x.partner.name + ' (sample partner)' : 'None' }}</dd></div>
                 <div><dt>Created</dt><dd>{{ when(h.createdAt) }} · {{ h.createdBy }}</dd></div>
                 @if (h.description) {<div class="wide"><dt>Description</dt><dd>{{ h.description }}</dd></div>}
                 @if (h.notes) {<div class="wide"><dt>Notes</dt><dd>{{ h.notes }}</dd></div>}
               </dl>
             </section>
-            <p class="f-hint">No transaction volumes, success rates or uptime are shown: Mobi has no live data from this host yet. Commercial cost (MDR) is managed in pricing, not here.</p>
+            <p class="f-hint">No transaction volumes, success rates or health data are shown: Mobi has no live data from this host yet. Commercial cost (MDR) is managed in pricing, not here.</p>
           </div>
           <aside class="host-side" aria-label="Recent activity">
             <div class="host-section-head"><h3>Recent activity</h3><a [routerLink]="[]" [queryParams]="{ tab: 'activity' }">View all</a></div>
@@ -146,8 +143,8 @@ const TABS: { id: Tab; label: string }[] = [
 
       @case ('capabilities') {
         <section class="panel-card">
-          <div class="panel-head"><div><h2>Payment capabilities</h2><p>Each method is managed on its own. Disabling one never disables the host.</p></div>
-            @if (x.can.manage) {<button type="button" class="btn" (click)="capSheet.set({ cap: null })"><app-icon name="plus" [size]="14" />Add capability</button>}</div>
+          <div class="panel-head"><div><h2>Payment methods</h2><p>Switch each method on or off on its own. Switching one off never disables the host.</p></div>
+            @if (x.can.manage) {<button type="button" class="btn" (click)="capSheet.set({ cap: null })"><app-icon name="plus" [size]="14" />Add payment method</button>}</div>
           @if (x.capabilities.length) {
             <div class="table-wrap">
               <table class="data-table host-table">
@@ -159,7 +156,7 @@ const TABS: { id: Tab; label: string }[] = [
                       <td><span [class]="availTone(c.availabilityStatus)">{{ availLabel[c.availabilityStatus] }}</span></td>
                       <td>{{ when(c.updatedAt) }}</td>
                       @if (x.can.manage) {
-                        <td><div class="row-actions"><button type="button" class="btn sm" (click)="capSheet.set({ cap: c })">Edit</button>@if (c.availabilityStatus !== 'disabled') {<button type="button" class="btn sm danger-outline" (click)="disableCap(c)" [disabled]="busy()">Disable</button>}</div></td>
+                        <td><div class="row-actions"><button type="button" class="btn sm" (click)="capSheet.set({ cap: c })">Edit</button>@if (c.availabilityStatus === 'disabled') {<button type="button" class="btn sm" (click)="setCap(c, 'available')" [disabled]="busy()">Enable</button>} @else {<button type="button" class="btn sm danger-outline" (click)="setCap(c, 'disabled')" [disabled]="busy()">Disable</button>}</div></td>
                       }
                     </tr>
                   }
@@ -167,21 +164,15 @@ const TABS: { id: Tab; label: string }[] = [
               </table>
             </div>
           } @else {
-            <div class="empty-state"><h3>No payment capabilities yet</h3>@if (x.can.manage) {<button type="button" class="btn primary" (click)="capSheet.set({ cap: null })">Add capability</button>}</div>
+            <div class="empty-state"><h3>No payment methods yet</h3>@if (x.can.manage) {<button type="button" class="btn primary" (click)="capSheet.set({ cap: null })">Add payment method</button>}</div>
           }
         </section>
       }
 
       @case ('integration') {
-        @if (validation(); as v) {
-          <div class="host-banner" [class.ok]="v.result === 'valid'" [class.warn]="v.result === 'incomplete'" [class.bad]="v.result === 'failed'" role="status">
-            <app-icon [name]="v.result === 'valid' ? 'check-circle' : 'alert-circle'" />
-            <div><strong>{{ v.label }}</strong> <span>(simulated: no request was sent to the provider)</span><ul>@for (m of v.messages; track m) {<li>{{ m }}</li>}</ul></div>
-          </div>
-        }
         @if (x.integration; as i) {
           <section class="sheet-section">
-            <h3>Integration configuration</h3>
+            <h3>Integration details</h3>
             <dl class="sheet-dl">
               <div><dt>Integration adapter</dt><dd>{{ adapter(i.adapterType) || '—' }}</dd></div>
               <div><dt>Integration name</dt><dd>{{ i.integrationName || '—' }}</dd></div>
@@ -190,54 +181,23 @@ const TABS: { id: Tab; label: string }[] = [
               <div><dt>Environment</dt><dd>{{ envLabel[i.environment] }}</dd></div>
               <div><dt>Authentication</dt><dd>{{ i.authenticationType ? authLabel[i.authenticationType] : '—' }}@if (authDetail(); as a) {<span class="sub-line">{{ a }}</span>}</dd></div>
               <div><dt>Timeout</dt><dd>{{ i.timeoutSeconds ? i.timeoutSeconds + ' seconds' : '—' }}</dd></div>
-              <div><dt>Credential reference</dt><dd class="mono">{{ i.credentialReferenceMasked ?? '—' }}@if (i.credentialUpdatedAt) {<span class="sub-line">Set {{ when(i.credentialUpdatedAt) }} by {{ i.credentialUpdatedBy }}</span>}</dd></div>
-              <div><dt>Configuration status</dt><dd><span [class]="integTone(i.configurationStatus)">{{ integLabel[i.configurationStatus] }}</span>@if (i.lastValidation; as lv) {<span class="sub-line">Last validation: {{ lv.result === 'valid' ? 'Configuration Valid' : lv.result === 'incomplete' ? 'Configuration Incomplete' : 'Validation Failed' }} · {{ when(lv.at) }}</span>}</dd></div>
-              @if (i.missing.length) {<div class="wide"><dt>Missing</dt><dd>{{ i.missing.join(', ') }}</dd></div>}
+              <div><dt>Details</dt><dd>@if (i.missing.length) {<span class="status warning">Incomplete</span><span class="sub-line">Missing: {{ i.missing.join(', ') }}</span>} @else {<span class="status success">Complete</span>}</dd></div>
               @if (i.connectionConfig) {<div class="wide"><dt>Connection configuration</dt><dd>{{ i.connectionConfig }}</dd></div>}
               @if (i.notes) {<div class="wide"><dt>Integration notes</dt><dd>{{ i.notes }}</dd></div>}
             </dl>
           </section>
-          <p class="f-hint">Provider-specific request and response handling lives in the integration adapter. Credentials are never shown: only a masked reference.</p>
+          <p class="f-hint">Provider-specific request and response handling lives in the integration adapter. Credentials are not kept in Host Management.</p>
           @if (x.can.manage) {
-            <div class="host-actions-row">
-              <button type="button" class="btn" (click)="openEditor(2)">Edit Configuration</button>
-              <button type="button" class="btn" (click)="act('credentials')" [disabled]="!i.authenticationType">Replace Credentials</button>
-              <button type="button" class="btn primary" (click)="validate()" [disabled]="busy()">@if (busy()) {<span class="spinner" aria-hidden="true"></span>}Validate Configuration</button>
-            </div>
+            <div class="host-actions-row"><button type="button" class="btn" (click)="openEditor(2)">Edit integration</button></div>
           }
         } @else {
-          <div class="empty-state"><h3>Not configured</h3><p>No integration configuration yet.</p>@if (x.can.manage) {<button type="button" class="btn primary" (click)="openEditor(2)">Add configuration</button>}</div>
+          <div class="empty-state"><h3>No integration details yet</h3>@if (x.can.manage) {<button type="button" class="btn primary" (click)="openEditor(2)">Add integration details</button>}</div>
         }
-      }
-
-      @case ('health') {
-        <div class="sim-note" role="note"><app-icon name="info" [size]="16" /><div>Simulated health data. Check Connection runs a prototype check; it is not a live connection test to the provider.</div></div>
-        @let last = x.health[0];
-        <div class="host-kpis">
-          <div class="host-kpi" [class.good]="last?.status === 'healthy'" [class.warn]="last?.status === 'degraded'" [class.bad]="last?.status === 'unreachable'"><span>Current health</span><strong>{{ last ? healthLabel[last.status] : 'Unknown' }}</strong></div>
-          <div class="host-kpi"><span>Last health check</span><strong class="small">{{ last ? when(last.checkedAt) : 'Never' }}</strong></div>
-          <div class="host-kpi"><span>Connection status</span><strong class="small">{{ connection() }}</strong></div>
-          <div class="host-kpi"><span>Response time (simulated)</span><strong class="small">{{ last?.responseTimeMs ? last!.responseTimeMs + ' ms' : '—' }}</strong></div>
-        </div>
-        <section class="panel-card">
-          <div class="panel-head"><div><h2>Recent health checks</h2><p>Latest first.</p></div>
-            @if (x.can.manage) {<button type="button" class="btn primary" (click)="check()" [disabled]="busy()">@if (busy()) {<span class="spinner" aria-hidden="true"></span>}Check Connection</button>}</div>
-          @if (x.health.length) {
-            <div class="table-wrap">
-              <table class="data-table host-table">
-                <thead><tr><th scope="col">Checked at</th><th scope="col">Status</th><th scope="col" class="num">Response time</th><th scope="col">Message</th><th scope="col">By</th></tr></thead>
-                <tbody>@for (c of x.health; track c.id) {<tr><td class="mono">{{ when(c.checkedAt) }}</td><td><span [class]="hTone(c.status)">{{ healthLabel[c.status] }}</span></td><td class="num mono">{{ c.responseTimeMs ? c.responseTimeMs + ' ms' : '—' }}</td><td>{{ c.message }}</td><td>{{ c.by }}</td></tr>}</tbody>
-              </table>
-            </div>
-          } @else {
-            <div class="empty-state"><h3>Not checked yet</h3><p>Health is Unknown until a check runs. Saving the configuration never marks a host Healthy.</p></div>
-          }
-        </section>
       }
 
       @case ('activity') {
         <section class="panel-card">
-          <div class="panel-head"><div><h2>Activity log</h2><p>Every change and check, latest first. Actors and times on sample records are simulated.</p></div></div>
+          <div class="panel-head"><div><h2>Activity log</h2><p>Every change, latest first. Actors and times on sample records are simulated.</p></div></div>
           <div class="table-wrap">
             <table class="data-table host-table">
               <thead><tr><th scope="col">Date and Time</th><th scope="col">Activity</th><th scope="col">Performed By</th><th scope="col">Details</th></tr></thead>
@@ -249,7 +209,7 @@ const TABS: { id: Tab; label: string }[] = [
     }
 
     @if (editor(); as e) {
-      <app-host-editor [existing]="x" [partners]="partners()" [startStep]="e.step" (saved)="onEdited($event)" (closed)="editor.set(null)" />
+      <app-host-editor [existing]="x" [startStep]="e.step" (saved)="onEdited($event)" (closed)="editor.set(null)" />
     }
     @if (action(); as a) {
       <app-host-action-sheet [detail]="x" [action]="a" (done)="onDone($event.detail, $event.message)" (closed)="action.set(null)" />
@@ -274,16 +234,12 @@ export class HostDetail {
   protected readonly tabs = TABS;
   protected readonly tab = computed<Tab>(() => (TABS.find((t) => t.id === this.params().get('tab'))?.id ?? 'overview'));
   protected readonly created = computed(() => this.params().get('created'));
-  protected readonly integLabel = INTEGRATION_STATUS_LABEL;
-  protected readonly opLabel = OPERATIONAL_STATUS_LABEL;
-  protected readonly healthLabel = HEALTH_STATUS_LABEL;
+  protected readonly statusLabel = HOST_STATUS_LABEL;
   protected readonly availLabel = AVAILABILITY_LABEL;
   protected readonly flowLabel = PAYMENT_FLOW_LABEL;
   protected readonly envLabel = HOST_ENVIRONMENT_LABEL;
   protected readonly authLabel = AUTH_METHOD_LABEL;
-  protected readonly integTone = integrationTone;
-  protected readonly opTone = operationalTone;
-  protected readonly hTone = healthTone;
+  protected readonly tone = statusTone;
   protected readonly availTone = availabilityTone;
   protected readonly typeLabel = hostTypeLabel;
   protected readonly adapter = adapterLabel;
@@ -291,12 +247,10 @@ export class HostDetail {
   protected readonly when = fmtWhen;
 
   protected readonly d = signal<HostDetailResponse | null>(null);
-  protected readonly partners = signal<Partner[]>([]);
   protected readonly error = signal<string | null>(null);
   protected readonly notFound = signal(false);
   protected readonly busy = signal(false);
   protected readonly toast = signal<string | null>(null);
-  protected readonly validation = signal<{ result: string; label: string; messages: string[] } | null>(null);
   protected readonly editor = signal<{ step: 0 | 1 | 2 | 3 } | null>(null);
   protected readonly action = signal<HostAction | null>(null);
   protected readonly capSheet = signal<{ cap: HostCapabilityView | null } | null>(null);
@@ -307,17 +261,11 @@ export class HostDetail {
     const a = this.d()?.integration?.authConfig ?? {};
     return [a.keyHeader && `Header ${a.keyHeader}`, a.signature, a.clientId && `Client ID ${a.clientId}`, a.tokenUrl && `Token URL ${a.tokenUrl}`, a.scope && `Scope ${a.scope}`, a.description].filter(Boolean).join(' · ') || null;
   });
-  protected readonly connection = computed(() => {
-    const last = this.d()?.health[0];
-    if (!last) return 'Not checked';
-    return { healthy: 'Responding', degraded: 'Responding slowly', unreachable: 'No response', unknown: 'Not checked' }[last.status];
+  protected readonly statusNote = computed(() => {
+    const s = this.d()?.host.status;
+    return s === 'active' ? 'Eligible for routing once Routing Management exists.' : s === 'maintenance' ? 'Not eligible for routing until re-enabled.' : s === 'draft' ? 'Saved incomplete. Finish it with Edit.' : 'Not eligible for routing. Enable it once the setup checklist is complete.';
   });
-  protected readonly attentionReason = computed(() => {
-    const x = this.d();
-    if (!x) return '';
-    if (x.host.lastHealth?.status === 'unreachable') return 'The last health check was Unreachable (simulated). Check the connection again or put the host under maintenance.';
-    return `The integration is ${INTEGRATION_STATUS_LABEL[x.host.integrationStatus]}, not Verified. Validate the configuration again.`;
-  });
+  protected readonly methodsOk = computed(() => !!this.d()?.host.checklist.find((c) => c.id === 'methods')?.done);
 
   constructor() {
     effect(() => {
@@ -329,9 +277,7 @@ export class HostDetail {
   protected async load(id = this.id()) {
     this.error.set(null);
     try {
-      const [detail, list] = await Promise.all([this.api.detail(id), this.api.list()]);
-      this.d.set(detail);
-      this.partners.set(list.partners);
+      this.d.set(await this.api.detail(id));
     } catch (e) {
       const err = toHostError(e);
       this.notFound.set(err.code === 'NOT_FOUND');
@@ -340,7 +286,6 @@ export class HostDetail {
   }
 
   protected openEditor(step: 0 | 1 | 2 | 3) {
-    this.validation.set(null);
     this.editor.set({ step });
   }
 
@@ -359,43 +304,13 @@ export class HostDetail {
     this.flash(message);
   }
 
-  protected async validate() {
+  /** Switch one payment method on or off. The host's own status never changes. */
+  protected async setCap(c: HostCapabilityView, to: AvailabilityStatus) {
     const x = this.d();
     if (!x || this.busy()) return;
     this.busy.set(true);
     try {
-      const res = await this.api.validate(x.host.id);
-      this.validation.set(res.validation);
-      const { validation: _, ...detail } = res;
-      this.d.set(detail);
-    } catch (e) {
-      this.flash(toHostError(e).message ?? "We couldn't validate the configuration.");
-    } finally {
-      this.busy.set(false);
-    }
-  }
-
-  protected async check() {
-    const x = this.d();
-    if (!x || this.busy()) return;
-    this.busy.set(true);
-    try {
-      const res = await this.api.healthCheck(x.host.id);
-      this.d.set(res);
-      this.flash(`Health check: ${HEALTH_STATUS_LABEL[res.health[0].status]} (simulated)`);
-    } catch (e) {
-      this.flash(toHostError(e).message ?? "We couldn't run the check.");
-    } finally {
-      this.busy.set(false);
-    }
-  }
-
-  protected async disableCap(c: HostCapabilityView) {
-    const x = this.d();
-    if (!x || this.busy()) return;
-    this.busy.set(true);
-    try {
-      this.onDone(await this.api.setAvailability(x.host.id, c.id, 'disabled'), `${c.paymentMethodName} disabled; the host is unchanged`);
+      this.onDone(await this.api.setAvailability(x.host.id, c.id, to), to === 'disabled' ? `${c.paymentMethodName} disabled; the host is unchanged` : `${c.paymentMethodName} is Available`);
     } catch (e) {
       this.flash(toHostError(e).message ?? "We couldn't change the capability.");
     } finally {

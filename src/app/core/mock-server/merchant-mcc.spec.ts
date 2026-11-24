@@ -166,6 +166,43 @@ describe('MCC management', () => {
       expect(await decide('GM-100101', req.id, 'reject', 'Second decision attempt')).toMatchObject({ status: 409, body: { code: 'INVALID_TRANSITION' } });
     });
 
+    it('changes legal name and MCC together in one profile change, applied only when Risk approves', async () => {
+      const profile = (value: object, reason = 'Company converted and now sells groceries') =>
+        call<any>('POST', '/api/merchants/GM-100105/changes', { section: 'identity', value, reason });
+      const m = (await detail('GM-100105')).merchant;
+      const base = { legalName: m.legalName, registrationCountry: m.registrationCountry, registrationNumber: m.registrationNumber };
+      expect((await profile({ ...base, mccCode: '5814' }, 'short')).status).toBe(422);
+      expect((await profile({ ...base, mccCode: '9999' })).body.code).toBe('MCC_NOT_AVAILABLE');
+
+      const req = (await profile({ ...base, legalName: 'Nusantara Foods Berhad', mccCode: '5814' })).body;
+      expect(req).toMatchObject({ scope: 'merchant_profile', status: 'pending', restrictedIn: ['ID'] });
+      expect(req.changes.map((c: any) => c.label)).toEqual(['Legal name', 'MCC']);
+      expect(await request('GM-100105', '5411')).toMatchObject({ status: 409, body: { code: 'CHANGE_PENDING' } });
+      let d = await detail('GM-100105');
+      expect(d.merchant.legalName).toBe(m.legalName);
+      expect(d.merchant.mcc?.code ?? null).toBe(m.mcc?.code ?? null);
+      expect(d.profileEvents[0]).toMatchObject({ action: 'change_requested', requestId: req.id, restrictedIn: ['ID'] });
+      const approvals = (await call<any>('GET', '/api/approvals', null, 'risk')).body;
+      expect(approvals.pending.find((i: any) => i.id === req.id)).toMatchObject({ title: 'Profile change', summary: 'Legal name, MCC' });
+
+      now += MINUTE;
+      expect((await call<any>('POST', `/api/changes/${req.id}/decision`, { decision: 'approve', comment: '' }, 'risk')).body.status).toBe('approved');
+      d = await detail('GM-100105');
+      expect(d.merchant).toMatchObject({ legalName: 'Nusantara Foods Berhad', mcc: { code: '5814', setAt: now, viaRequest: req.id } });
+      expect(d.profileEvents[0]).toMatchObject({ action: 'change_approved', changes: [{ field: 'legalName' }, { field: 'mcc' }] });
+    });
+
+    it('shows older MCC-only requests as profile changes, decided through the same endpoint', async () => {
+      const legacy = (await request('GM-100101', '5411')).body;
+      const d = await detail('GM-100101');
+      expect(d.pendingChanges.find((c) => c.id === legacy.id)).toMatchObject({ scope: 'merchant_profile', changes: [{ field: 'mcc', label: 'MCC' }] });
+      expect((await call<any>('POST', '/api/merchants/GM-100101/changes', { section: 'identity', value: { legalName: 'Other Name Sdn Bhd', registrationCountry: d.merchant.registrationCountry, registrationNumber: d.merchant.registrationNumber }, reason: 'Company renamed last month' })).body.code).toBe('CHANGE_PENDING');
+      expect((await call<any>('POST', `/api/changes/${legacy.id}/decision`, { decision: 'approve', comment: '' }, 'risk')).body.status).toBe('approved');
+      const after = await detail('GM-100101');
+      expect(after.merchant.mcc?.code).toBe('5411');
+      expect(after.profileEvents.slice(0, 2).map((e) => e.action)).toEqual(['change_approved', 'change_requested']);
+    });
+
     it('leaves the MCC unchanged when Risk rejects, and requires a reason', async () => {
       await request('GM-100101', '5411');
       await decide('GM-100101', 'MCR-0001', 'approve');

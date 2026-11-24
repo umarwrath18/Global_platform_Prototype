@@ -67,13 +67,10 @@
               <h2>Profile</h2>
               <p>Shared by every country this merchant operates in.</p>
             </div>
-            @if (roles.role() === 'sales' && !editing() && !identityForm()) {
+            @if (roles.role() === 'sales' && !editing() && !profileForm()) {
               <div class="actions">
-                @if (canRequestMcc()) {
-                  <button type="button" class="btn sm" (click)="openMccForm()">Request MCC change</button>
-                }
-                @if (d.mccChangeNeedsRisk && !identityPending()) {
-                  <button type="button" class="btn sm" (click)="openIdentityForm()">Request identity change</button>
+                @if (d.mccChangeNeedsRisk && !profileRequest()) {
+                  <button type="button" class="btn sm" (click)="openProfileForm()">Request profile change</button>
                 }
                 <button type="button" class="btn sm" (click)="startEdit()"><app-icon name="edit" [size]="14" />Edit</button>
               </div>
@@ -135,17 +132,17 @@
               <dl class="kv">
                 <div><dt>GMID</dt><dd class="mono">{{ d.merchant.id }}</dd></div>
                 <div>
-                  <dt>MCC</dt>
+                  <dt>MCC@if (d.mccChangeNeedsRisk) {<span class="via-tag">Via request</span>}</dt>
                   <dd>
                     @if (d.merchant.mcc; as m) {<span class="mono">{{ m.code }}</span> {{ m.description }}} @else {Not captured}
-                    @if (d.mccRequest) {<span class="mcc-tag">Change requested</span>}
-                    <span class="mcc-meta">@if (d.merchant.mcc; as m) {Set {{ date(m.setAt) }} by {{ m.setBy }} · shared by sub-merchants} @else {Shared by sub-merchants}@if (d.merchant.mcc?.catalogueKind === 'test_fixture' || mccService.isTestFixture()) { · test fixture}</span>
+                    @if (requested('mcc')) {<span class="mcc-tag">Change requested</span>}
+                    <span class="mcc-meta">@if (d.merchant.mcc; as m) {Set {{ date(m.setAt) }} by {{ m.setBy }}@if (m.viaRequest) { (approved {{ m.viaRequest }})} · shared by sub-merchants} @else {Shared by sub-merchants}@if (d.merchant.mcc?.catalogueKind === 'test_fixture' || mccService.isTestFixture()) { · test fixture}</span>
                     @if (!d.mccChangeNeedsRisk && roles.role() === 'sales') {<span class="mcc-meta">Until Risk approves this merchant, set or change the MCC in its country application.</span>}
                   </dd>
                 </div>
-                <div><dt>Legal name</dt><dd>{{ d.merchant.legalName }}</dd></div>
-                <div><dt>Registration country</dt><dd>{{ countryName(d.merchant.registrationCountry) }}</dd></div>
-                <div><dt>Registration number</dt><dd>{{ d.merchant.registrationNumber }}</dd></div>
+                <div><dt>Legal name@if (d.mccChangeNeedsRisk) {<span class="via-tag">Via request</span>}</dt><dd>{{ d.merchant.legalName }}@if (requested('legalName')) {<span class="mcc-tag">Change requested</span>}</dd></div>
+                <div><dt>Registration country@if (d.mccChangeNeedsRisk) {<span class="via-tag">Via request</span>}</dt><dd>{{ countryName(d.merchant.registrationCountry) }}@if (requested('registrationCountry')) {<span class="mcc-tag">Change requested</span>}</dd></div>
+                <div><dt>Registration number@if (d.mccChangeNeedsRisk) {<span class="via-tag">Via request</span>}</dt><dd>{{ d.merchant.registrationNumber }}@if (requested('registrationNumber')) {<span class="mcc-tag">Change requested</span>}</dd></div>
                 <div><dt>Main contact</dt><dd>{{ d.merchant.primaryContact.name || '—' }}</dd></div>
                 <div><dt>Email</dt><dd class="truncate" [title]="d.merchant.primaryContact.email">{{ d.merchant.primaryContact.email }}</dd></div>
                 <div><dt>Phone</dt><dd>{{ d.merchant.primaryContact.phone }}</dd></div>
@@ -156,40 +153,45 @@
                 </div>
               </dl>
             }
-            @if (d.mccRequest; as r) {
-              <div class="mcc-request" role="region" aria-label="Pending MCC change">
+            @if (profileRequest(); as r) {
+              <div class="mcc-request" role="region" aria-label="Pending profile change">
                 <div class="mcc-request-head">
-                  <span><strong>MCC change</strong> · {{ r.id }} · requested {{ dateTime(r.requestedAt) }} by {{ r.requestedBy }} ({{ teamLabel(r.requestedRole) }})</span>
+                  <span><strong>Profile change</strong> · {{ r.id }} · requested {{ dateTime(r.requestedAt) }} by {{ r.requestedBy }} ({{ teamLabel(r.requestedRole) }})</span>
                   <span class="status warning">Waiting for Risk</span>
                 </div>
-                <div class="mcc-compare">
-                  <div class="mcc-box"><span>Current</span><strong>{{ mccLabel(r.previous) }}</strong></div>
-                  <span class="mcc-arrow" aria-hidden="true"><app-icon name="arrow-right" [size]="16" /></span>
-                  <div class="mcc-box new"><span>Proposed</span><strong>{{ mccLabel(r.proposed) }}</strong></div>
+                <div class="table-wrap">
+                  <table class="data-table pc-table">
+                    <thead><tr><th scope="col">Field</th><th scope="col">Current</th><th scope="col">Proposed</th></tr></thead>
+                    <tbody>
+                      @for (c of r.changes; track c.field) {
+                        <tr><td>{{ c.label }}</td><td class="muted wrap">{{ c.from }}</td><td class="wrap"><strong>{{ c.to }}</strong></td></tr>
+                      }
+                    </tbody>
+                  </table>
                 </div>
-                <div class="mcc-reason"><span>Reason</span><p>{{ r.reason }}</p></div>
-                @if (r.restrictedIn.length) {
-                  <p class="mcc-flag"><app-icon name="alert-circle" [size]="14" />Restricted in {{ r.restrictedIn.map(countryName).join(', ') }} – Risk review</p>
+                @if (r.restrictedIn?.length) {
+                  <p class="mcc-flag"><app-icon name="alert-circle" [size]="14" />MCC {{ proposedMccCode(r) }} is restricted in {{ r.restrictedIn!.map(countryName).join(', ') }} – Risk review</p>
                 }
+                <div class="mcc-reason"><span>Reason</span><p>{{ r.reason }}</p></div>
                 @if (roles.role() === 'risk') {
                   <div class="f-field">
-                    <label for="mcc-comment">Comment <span class="muted">(required to reject)</span></label>
-                    <textarea id="mcc-comment" class="f-input" rows="3" maxlength="1000" [value]="mccComment()" (input)="mccComment.set($any($event.target).value)"></textarea>
+                    <label for="pc-comment">Comment <span class="muted">(required to reject)</span></label>
+                    <textarea id="pc-comment" class="f-input" rows="3" maxlength="1000" [value]="pcComment()" (input)="pcComment.set($any($event.target).value)"></textarea>
                   </div>
-                  @if (mccError(); as e) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
+                  @if (pcDecideError(); as e) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
                   <div class="actions edit-actions">
-                    <button type="button" class="btn danger-outline" [disabled]="!!mccBusy()" (click)="decideMcc('reject')">@if (mccBusy() === 'reject') {<span class="spinner" aria-hidden="true"></span>}Reject</button>
-                    <button type="button" class="btn primary" [disabled]="!!mccBusy()" (click)="decideMcc('approve')">@if (mccBusy() === 'approve') {<span class="spinner" aria-hidden="true"></span>}Approve change</button>
+                    <button type="button" class="btn danger-outline" [disabled]="!!pcBusy()" (click)="decideProfile('reject')">@if (pcBusy() === 'reject') {<span class="spinner" aria-hidden="true"></span>}Reject</button>
+                    <button type="button" class="btn primary" [disabled]="!!pcBusy()" (click)="decideProfile('approve')">@if (pcBusy() === 'approve') {<span class="spinner" aria-hidden="true"></span>}Approve change</button>
                   </div>
                 } @else {
-                  <p class="f-hint">The MCC stays {{ r.previous?.code ?? 'unset' }} until Risk approves this change.</p>
+                  <p class="f-hint">Nothing changes until Risk approves.</p>
                 }
               </div>
             }
           </div>
         </section>
 
-        <app-pending-changes [changes]="d.pendingChanges" (changed)="onChangeAction($event)" />
+        <app-pending-changes [changes]="countryChanges()" (changed)="onChangeAction($event)" />
 
         <section class="panel-card">
           <div class="panel-head">
@@ -282,36 +284,23 @@
           </ol>
         </section>
         <section class="profile-history">
-          <div class="panel-head"><div><h2>Profile history</h2><p>Contact edits, identity changes and Risk decisions</p></div></div>
+          <div class="panel-head"><div><h2>Profile history</h2><p>Contact edits, profile change requests and Risk decisions</p></div></div>
           <ol class="timeline">
             @for (e of d.profileEvents; track $index) {
               <li>
-                <span class="t-action">{{ profileActionLabel[e.action] }}@if (e.requestId) { · {{ e.requestId }}}</span>
-                @for (c of e.changes; track c.field) {<span class="t-comment">{{ c.label }}: {{ c.from }} → {{ c.to }}</span>}
+                <span class="t-action">{{ profileActionLabel[e.action] }}@if (e.requestId) { · {{ e.requestId }}}@if (e.action === 'mcc_set') { · {{ mccTo(e) }}}@if (e.action === 'contact_updated') { · {{ fieldNames(e) }}}</span>
+                @if (e.action === 'change_requested' || e.action === 'change_withdrawn') {
+                  <span class="t-comment">{{ fieldNames(e) }}</span>
+                } @else if (e.action !== 'mcc_set' && e.action !== 'contact_updated') {
+                  @for (c of e.changes; track c.field) {<span class="t-comment">{{ c.label }}: {{ histValue(c, 'from') }} → {{ histValue(c, 'to') }}</span>}
+                }
                 <span class="t-meta">{{ dateTime(e.at) }} · {{ e.by }} · {{ teamLabel(e.role) }}</span>
-                @if (e.reason) {<span class="t-meta">Reason: {{ e.reason }}</span>}
+                @if (e.reason && e.action === 'change_requested') {<span class="t-meta">Reason: {{ e.reason }}</span>}
                 @if (e.comment) {<span class="t-meta">Risk: {{ e.comment }}</span>}
+                @if (e.restrictedIn?.length && e.action === 'change_requested') {<span class="t-meta">MCC restricted in {{ e.restrictedIn!.map(countryName).join(', ') }}</span>}
               </li>
             } @empty {
               <li class="t-empty">No profile changes recorded.</li>
-            }
-          </ol>
-        </section>
-        <section class="mcc-history">
-          <div class="panel-head"><div><h2>MCC history</h2><p>Changes, requests and Risk decisions</p></div></div>
-          <ol class="timeline">
-            @for (e of d.mccEvents; track $index) {
-              <li>
-                <span class="t-action">{{ mccOutcomeLabel[e.outcome] }}@if (e.requestId) { · {{ e.requestId }}}</span>
-                <span class="t-comment">{{ mccLabel(e.previous) }} → {{ mccLabel(e.next) }}</span>
-                <span class="t-meta">Requested {{ dateTime(e.requestedAt) }} · {{ e.requestedBy }} · {{ teamLabel(e.requestedRole) }}</span>
-                @if (e.decidedBy) {<span class="t-meta">{{ e.outcome === 'change_approved' ? 'Approved' : 'Rejected' }} {{ dateTime(e.decidedAt!) }} · {{ e.decidedBy }} · {{ teamLabel(e.decidedRole) }}</span>}
-                <span class="t-meta">Reason: {{ e.reason }}</span>
-                @if (e.comment) {<span class="t-meta">Risk: {{ e.comment }}</span>}
-                @if (e.restrictedIn.length) {<span class="t-meta">Restricted in {{ e.restrictedIn.join(', ') }}</span>}
-              </li>
-            } @empty {
-              <li class="t-empty">No MCC changes recorded.</li>
             }
           </ol>
         </section>
@@ -344,87 +333,76 @@
       <app-suspension-sheet [suspension]="o.s" [detail]="d" [mode]="o.mode" (done)="onSuspensionDone($event)" (closed)="closeSuspension()" />
     }
   }
-  @if (identityForm() && detail(); as d) {
-    <app-side-sheet size="editor" label="Request a legal identity change" (dismiss)="closeIdentityForm()">
+  @if (profileForm() && detail(); as d) {
+    <app-side-sheet size="editor" label="Request profile change" (dismiss)="closeProfileForm()">
       <header class="sheet-head">
         <div class="sheet-titles">
-          <p class="sheet-eyebrow">Change request</p>
-          <h2 class="sheet-title">Request a legal identity change</h2>
+          <p class="sheet-eyebrow">Change request · Profile</p>
+          <h2 class="sheet-title">Request profile change</h2>
           <p class="sheet-sub">{{ d.merchant.legalName }} · {{ d.merchant.id }}</p>
         </div>
-        <button type="button" class="sheet-close" (click)="closeIdentityForm()" aria-label="Close"><app-icon name="x" [size]="18" /></button>
+        <button type="button" class="sheet-close" (click)="closeProfileForm()" aria-label="Close"><app-icon name="x" [size]="18" /></button>
       </header>
-      <form class="sheet-body id-sheet" id="id-form" (submit)="$event.preventDefault(); requestIdentity()" novalidate>
-        <p class="f-hint">Nothing changes until Risk approves. Risk sees the current and proposed values side by side.</p>
+      <form class="sheet-body pc-sheet" id="pc-form" (submit)="$event.preventDefault(); requestProfile()" novalidate>
+        <p class="f-hint">Risk approved this merchant, so these details change only when Risk approves. Change only what's needed; the rest stays as it is.</p>
         <div class="f-grid">
-          <div class="f-field full"><label for="id-name">Legal name</label><input id="id-name" class="f-input" [value]="idDraft().legalName" (input)="setId('legalName', $any($event.target).value)" />@if (idIssue('identity.legalName'); as m) {<p class="f-error">{{ m }}</p>}</div>
-          <div class="f-field"><label for="id-rc">Registration country</label>
-            <select id="id-rc" class="f-input" (change)="setId('registrationCountry', $any($event.target).value)">
-              @for (c of regCountries; track c.code) {<option [value]="c.code" [selected]="c.code === idDraft().registrationCountry">{{ c.name }}</option>}
-            </select></div>
-          <div class="f-field"><label for="id-rn">Registration number</label><input id="id-rn" class="f-input" [value]="idDraft().registrationNumber" (input)="setId('registrationNumber', $any($event.target).value)" />@if (idIssue('identity.registrationNumber'); as m) {<p class="f-error">{{ m }}</p>}</div>
-          <div class="f-field full"><label for="id-reason">Reason <span class="req">*</span></label><textarea id="id-reason" class="f-input" rows="3" maxlength="500" [value]="idReason()" (input)="idReason.set($any($event.target).value)"></textarea><p class="f-hint">At least 10 characters.</p></div>
+          <div class="f-field full">
+            <label for="pc-name">Legal name@if (pcChanged('legalName')) {<span class="pc-changed">Changed</span>}</label>
+            <input id="pc-name" class="f-input" [class.invalid]="pcIssue('identity.legalName')" [value]="pcDraft().legalName" (input)="setPc('legalName', $any($event.target).value)" />
+            @if (pcIssue('identity.legalName'); as m) {<p class="f-error">{{ m }}</p>} @else if (pcChanged('legalName')) {<p class="f-hint">Current: {{ d.merchant.legalName }}</p>}
+          </div>
+          <div class="f-field">
+            <label for="pc-rc">Registration country@if (pcChanged('registrationCountry')) {<span class="pc-changed">Changed</span>}</label>
+            <select id="pc-rc" class="f-input" (change)="setPc('registrationCountry', $any($event.target).value)">
+              @for (c of regCountries; track c.code) {<option [value]="c.code" [selected]="c.code === pcDraft().registrationCountry">{{ c.name }}</option>}
+            </select>
+            @if (pcChanged('registrationCountry')) {<p class="f-hint">Current: {{ countryName(d.merchant.registrationCountry) }}</p>}
+          </div>
+          <div class="f-field">
+            <label for="pc-rn">Registration number@if (pcChanged('registrationNumber')) {<span class="pc-changed">Changed</span>}</label>
+            <input id="pc-rn" class="f-input" [class.invalid]="pcIssue('identity.registrationNumber')" [value]="pcDraft().registrationNumber" (input)="setPc('registrationNumber', $any($event.target).value)" />
+            @if (pcIssue('identity.registrationNumber'); as m) {<p class="f-error">{{ m }}</p>} @else if (pcChanged('registrationNumber')) {<p class="f-hint">Current: {{ d.merchant.registrationNumber }}</p>}
+          </div>
+          <div class="f-field full">
+            <label for="pc-mcc">MCC@if (pcChanged('mccCode')) {<span class="pc-changed">Changed</span>}</label>
+            <select id="pc-mcc" class="f-input" [disabled]="!mccCandidates().length" (change)="setPc('mccCode', $any($event.target).value)">
+              @if (!d.merchant.mcc) {<option value="" [selected]="!pcDraft().mccCode">Not captured</option>}
+              @for (e of mccCandidates(); track e.code) {
+                <option [value]="e.code" [selected]="e.code === pcDraft().mccCode">{{ e.code }} – {{ e.description }}{{ e.check.restricted.length ? ' (restricted in ' + e.check.restricted.map(countryName).join(', ') + ')' : '' }}</option>
+              }
+            </select>
+            @if (!mccCandidates().length) {
+              <p class="f-hint">No MCC catalogue is loaded, so the MCC can't be changed yet.</p>
+            } @else {
+              <p class="f-hint">@if (pcChanged('mccCode')) {Current: {{ d.merchant.mcc ? d.merchant.mcc.code + ' ' + d.merchant.mcc.description : 'Not captured' }} · }Only codes available in {{ mccCountryNames() }} are listed.</p>
+            }
+            @if (pcRestricted().length) {<p class="mcc-flag"><app-icon name="alert-circle" [size]="14" />MCC {{ pcDraft().mccCode }} is restricted in {{ pcRestricted().map(countryName).join(', ') }} – Risk review</p>}
+          </div>
+          <div class="f-field full">
+            <label for="pc-reason">Reason <span class="req">*</span></label>
+            <textarea id="pc-reason" class="f-input" rows="3" maxlength="500" [class.invalid]="pcIssue('reason')" [value]="pcReason()" (input)="pcReason.set($any($event.target).value); clearReasonIssue()"></textarea>
+            @if (pcIssue('reason'); as m) {<p class="f-error">{{ m }}</p>} @else {<p class="f-hint">At least 10 characters. Risk sees this, and it's kept in Profile history.</p>}
+          </div>
         </div>
-        @if (idError(); as e) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
+        @if (pcSummary(); as sm) {<p class="pc-summary"><strong>{{ sm.count }} change{{ sm.count === 1 ? '' : 's' }}:</strong> {{ sm.text }}</p>}
+        @if (pcError(); as e) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
       </form>
-      @if (idDiscardAsk()) {
-        <div class="sheet-confirm" role="alertdialog" aria-labelledby="id-discard">
-          <h3 id="id-discard">Discard this change request?</h3>
+      @if (pcDiscardAsk()) {
+        <div class="sheet-confirm" role="alertdialog" aria-labelledby="pc-discard">
+          <h3 id="pc-discard">Discard this change request?</h3>
           <p>What you've entered will be lost.</p>
           <div class="sheet-confirm-actions">
-            <button type="button" class="btn" (click)="idDiscardAsk.set(false)" autofocus>Keep editing</button>
-            <button type="button" class="btn danger" (click)="identityForm.set(false)">Discard</button>
+            <button type="button" class="btn" (click)="pcDiscardAsk.set(false)" autofocus>Keep editing</button>
+            <button type="button" class="btn danger" (click)="profileForm.set(false)">Discard</button>
           </div>
         </div>
       } @else {
         <footer class="sheet-foot">
-          <span class="sheet-foot-note">Risk reviews it on Approvals.</span>
-          <button type="button" class="btn" (click)="closeIdentityForm()" [disabled]="idBusy()">Cancel</button>
-          <button type="submit" form="id-form" class="btn primary" [disabled]="idBusy()">@if (idBusy()) {<span class="spinner" aria-hidden="true"></span>}Send to Risk</button>
+          <span class="sheet-foot-note">Risk reviews it here or on Approvals.</span>
+          <button type="button" class="btn" (click)="closeProfileForm()" [disabled]="pcBusy()">Cancel</button>
+          <button type="submit" form="pc-form" class="btn primary" [disabled]="!!pcBusy()">@if (pcBusy() === 'request') {<span class="spinner" aria-hidden="true"></span>}Send to Risk</button>
         </footer>
       }
-    </app-side-sheet>
-  }
-  @if (mccForm() && detail(); as d) {
-    <app-side-sheet size="editor" label="Request MCC change" (dismiss)="closeMccForm()">
-      <header class="sheet-head">
-        <div class="sheet-titles">
-          <p class="sheet-eyebrow">Change request · MCC</p>
-          <h2 class="sheet-title">Request MCC change</h2>
-          <p class="sheet-sub">{{ d.merchant.legalName }} · {{ d.merchant.id }}</p>
-        </div>
-        <button type="button" class="sheet-close" (click)="closeMccForm()" aria-label="Close"><app-icon name="x" [size]="18" /></button>
-      </header>
-      <form class="sheet-body" id="mcc-form" (submit)="$event.preventDefault(); requestMcc()" novalidate>
-        <div class="sheet-hero">
-          <div>
-            <span class="hero-label">Current MCC</span>
-            <p class="hero-value">{{ d.merchant.mcc ? d.merchant.mcc.code + ' ' + d.merchant.mcc.description : 'Not captured' }}</p>
-            <p class="hero-sub">Shared by sub-merchants · applies in {{ mccCountryNames() }}</p>
-          </div>
-        </div>
-        <div class="f-field">
-          <label for="mcc-new">New MCC <span class="req">*</span></label>
-          <select id="mcc-new" class="f-input" (change)="mccCode.set($any($event.target).value)">
-            <option value="" [selected]="!mccCode()">Select MCC</option>
-            @for (e of mccCandidates(); track e.code) {
-              <option [value]="e.code">{{ e.code }} – {{ e.description }}{{ e.check.restricted.length ? ' (restricted in ' + e.check.restricted.join(', ') + ')' : '' }}</option>
-            }
-          </select>
-          <p class="f-hint">Only codes available in every country this merchant has applied for are listed.</p>
-        </div>
-        <div class="f-field">
-          <label for="mcc-reason">Reason <span class="req">*</span></label>
-          <textarea id="mcc-reason" class="f-input" rows="3" maxlength="500" [value]="mccReason()" (input)="mccReason.set($any($event.target).value)"></textarea>
-          <p class="f-hint">At least 10 characters. Risk sees this, and it's kept in the MCC history.</p>
-        </div>
-        @if (mccError(); as e) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
-      </form>
-      <footer class="sheet-foot">
-        <span class="sheet-foot-note">Risk reviews it here or on Approvals.</span>
-        <button type="button" class="btn" (click)="closeMccForm()" [disabled]="!!mccBusy()">Cancel</button>
-        <button type="submit" form="mcc-form" class="btn primary" [disabled]="!!mccBusy()">@if (mccBusy() === 'request') {<span class="spinner" aria-hidden="true"></span>}Send to Risk</button>
-      </footer>
     </app-side-sheet>
   }
   @if (toast(); as t) {

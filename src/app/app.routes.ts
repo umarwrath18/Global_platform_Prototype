@@ -126,6 +126,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/hosts/host-detail').then((m) => m.HostDetail),
       },
       {
+        path: 'routing',
+        title: 'Routing · Mobi Global Platform',
+        loadComponent: () => import('./features/routing/routing-page').then((m) => m.RoutingPage),
+      },
+      {
         path: 'account/security',
         title: 'Account security · Mobi Global Platform',
         loadComponent: () => import('./features/security/account-security').then((m) => m.AccountSecurity),

@@ -1,16 +1,8 @@
-import { AvailabilityStatus, HealthStatus, IntegrationStatus, OperationalStatus } from '../../core/hosts/hosts';
+import { AvailabilityStatus, HostStatus } from '../../core/hosts/hosts';
 
-/** Badge tones (global `.status` classes): one colour language for every host status. */
-export function integrationTone(s: IntegrationStatus): string {
-  return { not_configured: 'status', incomplete: 'status warning', configured: 'status info', testing: 'status info', verified: 'status success', error: 'status danger' }[s];
-}
-
-export function operationalTone(s: OperationalStatus): string {
-  return { active: 'status success', disabled: 'status', maintenance: 'status warning', attention: 'status danger' }[s];
-}
-
-export function healthTone(s: HealthStatus): string {
-  return { healthy: 'status success', degraded: 'status warning', unreachable: 'status danger', unknown: 'status' }[s];
+/** Badge tones (global `.status` classes): one colour language for host and method statuses. */
+export function statusTone(s: HostStatus): string {
+  return { draft: 'status info', active: 'status success', disabled: 'status', maintenance: 'status warning' }[s];
 }
 
 export function availabilityTone(s: AvailabilityStatus): string {
