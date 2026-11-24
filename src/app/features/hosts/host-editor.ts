@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, OnInit, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, OnInit, output, signal, untracked } from '@angular/core';
 import { HostApi, toHostError } from '../../core/hosts/host-api.service';
 import {
   adapterLabel,
@@ -295,6 +295,7 @@ export class HostEditor implements OnInit {
   protected readonly askDiscard = signal(false);
   protected readonly serverError = signal<string | null>(null);
   protected readonly errors = signal<Record<string, string>>({});
+  private readonly serverErrors = signal<Record<string, { message: string; value: string }>>({});
 
   protected readonly name = signal('');
   protected readonly hostCode = signal('');
@@ -319,6 +320,18 @@ export class HostEditor implements OnInit {
   protected readonly iConn = signal('');
   protected readonly iNotes = signal('');
   private initial = '';
+  /** Steps the user tried to leave: their messages update as fields are fixed. */
+  private readonly attempted = signal<ReadonlySet<Step>>(new Set());
+
+  constructor() {
+    effect(() => {
+      const s = this.step();
+      if (!this.attempted().has(s) || s === 3) return;
+      // Re-check the step whenever one of its fields changes (reads below are tracked).
+      void [this.name(), this.hostCode(), this.hostType(), this.regCountry(), this.ownerTeam(), this.caps(), this.iTimeout(), this.iUrl()];
+      untracked(() => this.checkStep(s, true));
+    });
+  }
 
   protected readonly title = computed(() => (this.existing() ? `Edit ${this.existing()!.host.name}` : 'Add Host'));
   /** A saved (non-draft) host can't go back to being a draft. */
@@ -374,7 +387,23 @@ export class HostEditor implements OnInit {
   }
 
   protected err(field: string): string | null {
-    return this.errors()[field] ?? null;
+    const server = this.serverErrors()[field];
+    // A server message (e.g. a duplicate host code) stays until that field changes.
+    return this.errors()[field] ?? (server && server.value === this.fieldValue(field) ? server.message : null);
+  }
+
+  private fieldValue(field: string): string {
+    const map: Record<string, () => string> = {
+      'basic.name': this.name,
+      'basic.hostCode': this.hostCode,
+      'basic.hostType': this.hostType,
+      'basic.registrationCountry': this.regCountry,
+      'basic.ownerTeam': this.ownerTeam,
+      'basic.associatedPartnerId': this.partnerId,
+      'integration.timeoutSeconds': this.iTimeout,
+      capabilities: () => JSON.stringify(this.caps()),
+    };
+    return map[field]?.() ?? '';
   }
 
   protected flowOf(c: CapRow): string {
@@ -439,7 +468,14 @@ export class HostEditor implements OnInit {
     } catch (e) {
       const err = toHostError(e);
       if (err.errors.length) {
-        this.errors.set(Object.fromEntries(err.errors.map((x) => [x.field.startsWith('capabilities.') ? 'capabilities' : x.field, x.message])));
+        this.serverErrors.set(
+          Object.fromEntries(
+            err.errors.map((x) => {
+              const field = x.field.startsWith('capabilities.') ? 'capabilities' : x.field;
+              return [field, { message: x.message, value: this.fieldValue(field) }];
+            }),
+          ),
+        );
         const first = err.errors[0].field;
         this.step.set(first.startsWith('basic') ? 0 : first.startsWith('capabilities') ? 1 : 2);
       }
@@ -502,7 +538,8 @@ export class HostEditor implements OnInit {
     return !Object.keys(e).length;
   }
 
-  private checkStep(s: Step): boolean {
+  private checkStep(s: Step, live = false): boolean {
+    if (!live) this.attempted.update((a) => new Set([...a, s]));
     const e: Record<string, string> = { ...this.errors() };
     for (const k of Object.keys(e)) if (k.startsWith(s === 0 ? 'basic' : s === 1 ? 'capabilities' : 'integration')) delete e[k];
     if (s === 0) {
@@ -519,7 +556,7 @@ export class HostEditor implements OnInit {
       if (this.urlError()) e['integration.apiBaseUrl'] = this.urlError()!;
     }
     this.errors.set(e);
-    this.serverError.set(null);
+    if (!live) this.serverError.set(null);
     return !Object.keys(e).some((k) => k.startsWith(s === 0 ? 'basic' : s === 1 ? 'capabilities' : 'integration'));
   }
 
