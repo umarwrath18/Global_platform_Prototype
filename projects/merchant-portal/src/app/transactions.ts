@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signa
 import { toClientError } from '@gp/core/api/api-error';
 import { TransactionPage } from '@gp/core/merchants/merchant-portal';
 import { MerchantPortalApi } from '@gp/core/merchants/merchant-portal-api.service';
-import { CurrencyAmount, fmtAmount, fmtDateTime, fmtMoney, PAYMENT_TYPE_LABEL, PaymentType, TXN_FLOW_LABEL, TXN_RANGE_LABEL, TXN_STATUS_LABEL, TXN_STATUSES, TxnFlow, TxnRange, TxnStatus } from '@gp/core/transactions/transactions';
+import { CurrencyAmount, fmtAmount, fmtDateTime, fmtMoney, PAYMENT_TYPE_LABEL, PaymentType, TXN_FLOW_LABEL, TXN_RANGE_LABEL, TXN_STATUS_LABEL, TXN_STATUSES, TxnFlow, TxnRange, TxnStatus, SettlementState, SettlementView } from '@gp/core/transactions/transactions';
 import { TxnQuery } from '@gp/core/transactions/transactions-api.service';
 import { Icon } from '@gp/shared/icon';
 import { Pager } from '@gp/shared/pager';
@@ -11,7 +11,8 @@ import { MerchantTransactionSheet } from './transaction-sheet';
 
 /**
  * My Transactions: PayIn | Payout tabs, payment type chips, filters, a summary per currency, the
- * list with Fee and Net amount, CSV export, and the details in a side sheet. The records are the
+ * list (Merchant Ref ID, Mobi Ref ID, customer or beneficiary, Fee (MDR), Net amount or Total debited,
+ * settlement), CSV export, and the details in a side sheet. The records are the
  * same ones the Global Platform shows (sample data until the transaction service exists).
  */
 @Component({
@@ -61,7 +62,7 @@ import { MerchantTransactionSheet } from './transaction-sheet';
           <label class="fld search">
             Search
             <span class="search-row">
-              <input class="f-input" type="search" placeholder="Transaction ID or Invoice ID" maxlength="64" [value]="search()" (input)="search.set($any($event.target).value)" />
+              <input class="f-input" type="search" placeholder="Mobi Ref ID, Merchant Ref ID or bank reference" maxlength="64" [value]="search()" (input)="search.set($any($event.target).value)" />
               <button type="submit" class="btn" aria-label="Search"><app-icon name="search" [size]="16" /></button>
             </span>
           </label>
@@ -109,6 +110,17 @@ import { MerchantTransactionSheet } from './transaction-sheet';
               @for (s of statuses; track s) {<option [value]="s" [selected]="status() === s">{{ statusLabel[s] }}</option>}
             </select>
           </label>
+          @if (flow() === 'payin') {
+            <label class="fld">
+              Settlement
+              <select class="f-input" (change)="setFilter('settlement', $any($event.target).value)">
+                <option value="" [selected]="!settlement()">All settlement</option>
+                <option value="due" [selected]="settlement() === 'due'">Due</option>
+                <option value="settled" [selected]="settlement() === 'settled'">Settled</option>
+                <option value="on_hold" [selected]="settlement() === 'on_hold'">Paused</option>
+              </select>
+            </label>
+          }
           @if (hasFilters()) {<button type="button" class="btn ghost" (click)="clearFilters()">Clear filters</button>}
         </form>
 
@@ -127,10 +139,9 @@ import { MerchantTransactionSheet } from './transaction-sheet';
           <div class="skeleton-rows" aria-busy="true"><span></span><span></span><span></span><span></span><span></span></div>
         } @else if (page(); as p) {
           <div class="txn-strip" aria-label="Summary for these filters">
-            <div class="txn-kpi"><div class="txn-kl">Transactions</div><div class="txn-kv">{{ p.summary.total.toLocaleString('en-US') }}</div></div>
-            <div class="txn-kpi"><div class="txn-kl">Successful</div><div class="txn-kv success">{{ p.summary.successful.toLocaleString('en-US') }}</div></div>
-            <div class="txn-kpi"><div class="txn-kl">Gross volume</div>@for (a of amounts(p.summary.gross); track a) {<div class="txn-ka strong">{{ a }}</div>} @empty {<div class="txn-kv">—</div>}</div>
-            <div class="txn-kpi"><div class="txn-kl">Fees</div>@for (a of amounts(p.summary.fees); track a) {<div class="txn-ka strong">{{ a }}</div>} @empty {<div class="txn-kv">—</div>}</div>
+            <div class="txn-kpi"><div class="txn-kl">{{ flow() === 'payin' ? 'Transactions' : 'Payouts' }}</div><div class="txn-kv">{{ p.summary.total.toLocaleString('en-US') }}</div><div class="txn-ks">{{ p.summary.successful.toLocaleString('en-US') }} successful</div></div>
+            <div class="txn-kpi"><div class="txn-kl">{{ flow() === 'payin' ? 'Gross (successful)' : 'Amount (successful)' }}</div>@for (a of amounts(p.summary.gross); track a) {<div class="txn-ka strong">{{ a }}</div>} @empty {<div class="txn-kv">—</div>}</div>
+            <div class="txn-kpi"><div class="txn-kl">Fees (MDR)</div>@for (a of amounts(p.summary.fees); track a) {<div class="txn-ka strong">{{ a }}</div>} @empty {<div class="txn-kv">—</div>}</div>
             <div class="txn-kpi"><div class="txn-kl">{{ flow() === 'payin' ? 'Net amount' : 'Total debited' }}</div>@for (a of amounts(p.summary.net); track a) {<div class="txn-ka strong">{{ a }}</div>} @empty {<div class="txn-kv">—</div>}</div>
           </div>
           @if (p.total === 0) {
@@ -142,34 +153,46 @@ import { MerchantTransactionSheet } from './transaction-sheet';
             </div>
           } @else {
             <div class="table-wrap" [class.dim]="loading()" [attr.aria-busy]="loading()">
-              <table class="data-table txn-table">
+              <table class="data-table txn-table mp-txn-table">
                 <thead>
                   <tr>
                     <th scope="col">Date &amp; time</th>
-                    <th scope="col">Invoice ID</th>
-                    <th scope="col">Transaction ID</th>
+                    <th scope="col">Merchant Ref ID</th>
+                    <th scope="col">Mobi Ref ID</th>
+                    @if (flow() === 'payin') {<th scope="col">Customer</th>} @else {<th scope="col">Beneficiary</th>}
                     @if (showSub()) {<th scope="col">Sub-merchant</th>}
-                    <th scope="col">Payment method</th>
+                    @if (flow() === 'payin') {<th scope="col">Payment method</th>} @else {<th scope="col">Bank / wallet</th>}
                     <th scope="col" class="num">Amount</th>
-                    <th scope="col" class="num">Fee</th>
+                    <th scope="col" class="num">Fee (MDR)</th>
                     <th scope="col" class="num">{{ flow() === 'payin' ? 'Net amount' : 'Total debited' }}</th>
-                    <th scope="col">Currency</th>
                     <th scope="col">Status</th>
+                    @if (flow() === 'payin') {<th scope="col">Settlement</th>}
                   </tr>
                 </thead>
                 <tbody>
                   @for (t of p.items; track t.transactionId) {
                     <tr class="clickable" [class.selected]="openId() === t.transactionId" (click)="openId.set(t.transactionId)">
-                      <td class="muted">{{ dateTime(t.createdAt) }}</td>
+                      <td class="when">{{ day(t.createdAt) }}<span class="sub-line">{{ time(t.createdAt) }}</span></td>
                       <td class="mono">{{ t.invoiceId }}</td>
                       <td><a class="txn-id" href="" (click)="$event.preventDefault(); $event.stopPropagation(); openId.set(t.transactionId)">{{ t.transactionId }}</a></td>
+                      @if (flow() === 'payin') {
+                        <td [class.muted]="!t.customerName">{{ t.customerName ?? '—' }}</td>
+                      } @else {
+                        <td>{{ t.beneficiary?.name ?? '—' }}@if (t.beneficiary?.account; as acc) {<span class="sub-line">{{ acc }}</span>}</td>
+                      }
                       @if (showSub()) {<td>{{ t.subMerchantName ?? 'Master Merchant' }}</td>}
-                      <td>{{ t.methodName }}</td>
-                      <td class="num mono">{{ amount(t.amount, t.currency) }}</td>
+                      @if (flow() === 'payin') {
+                        <td>{{ t.methodName }}@if (t.methodDetail; as m) {<span class="sub-line">{{ m }}</span>}</td>
+                      } @else {
+                        <td>{{ t.beneficiary?.bank ?? t.methodName }}<span class="sub-line">{{ t.methodName }}</span></td>
+                      }
+                      <td class="num mono">{{ money(t.amount, t.currency) }}</td>
                       <td class="num mono" [class.muted]="t.fee === null">{{ t.fee === null ? '—' : amount(t.fee, t.currency) }}</td>
                       <td class="num mono" [class.muted]="t.net === null">{{ t.net === null ? '—' : amount(t.net, t.currency) }}</td>
-                      <td>{{ t.currency }}</td>
                       <td><app-txn-status [status]="t.status" /></td>
+                      @if (flow() === 'payin') {
+                        <td class="settle" [class.muted]="!t.settlement" [class.paused]="t.settlement?.state === 'on_hold'">{{ settlementState(t.settlement) }}@if (t.settlement?.date; as d) {<span class="sub-line">{{ shortDay(d) }}</span>}</td>
+                      }
                     </tr>
                   }
                 </tbody>
@@ -196,7 +219,10 @@ export class MerchantTransactions {
   protected readonly statuses = TXN_STATUSES;
   protected readonly statusLabel = TXN_STATUS_LABEL;
   protected readonly amount = fmtAmount;
+  protected readonly money = fmtMoney;
   protected readonly dateTime = (t: number) => fmtDateTime(t);
+  protected readonly day = (t: number) => new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(t);
+  protected readonly time = (t: number) => new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false }).format(t);
   protected readonly today = isoDate(new Date());
 
   protected readonly flow = signal<TxnFlow>('payin');
@@ -208,6 +234,7 @@ export class MerchantTransactions {
   protected readonly subMerchant = signal('');
   protected readonly method = signal('');
   protected readonly status = signal<TxnStatus | ''>('');
+  protected readonly settlement = signal<SettlementState | ''>('');
   protected readonly search = signal('');
   private readonly appliedSearch = signal('');
   protected readonly pageIndex = signal(0);
@@ -225,7 +252,7 @@ export class MerchantTransactions {
   protected readonly methods = computed(() => (this.page()?.options.methods ?? []).filter((m) => !this.type() || m.type === this.type()));
   /** Live sub-merchants only (they have their own MID); none → no column. */
   protected readonly showSub = computed(() => this.flow() === 'payin' && !!this.page()?.options.subMerchants.length);
-  protected readonly hasFilters = computed(() => !!(this.type() || this.country() || this.subMerchant() || this.method() || this.status() || this.appliedSearch()) || this.range() !== '24h');
+  protected readonly hasFilters = computed(() => !!(this.type() || this.country() || this.subMerchant() || this.method() || this.status() || this.settlement() || this.appliedSearch()) || this.range() !== '24h');
   protected readonly dateError = computed(() => (this.range() === 'custom' && (!this.from() || !this.to() || this.from() > this.to()) ? 'Choose a start date on or before the end date.' : null));
 
   constructor() {
@@ -244,6 +271,7 @@ export class MerchantTransactions {
       subMerchant: this.subMerchant(),
       method: this.method(),
       status: this.status(),
+      settlement: this.flow() === 'payin' ? this.settlement() : '',
       q: this.appliedSearch(),
       page: this.pageIndex() + 1,
       pageSize: this.pageSize(),
@@ -279,6 +307,7 @@ export class MerchantTransactions {
     this.type.set('');
     this.method.set('');
     this.subMerchant.set('');
+    this.settlement.set('');
     this.openId.set(null);
     this.reload();
   }
@@ -299,21 +328,22 @@ export class MerchantTransactions {
     this.reload();
   }
 
-  protected setFilter(which: 'country' | 'subMerchant' | 'method' | 'status', v: string) {
+  protected setFilter(which: 'country' | 'subMerchant' | 'method' | 'status' | 'settlement', v: string) {
     if (which === 'country') {
       this.country.set(v);
       this.method.set('');
       this.subMerchant.set('');
     } else if (which === 'subMerchant') this.subMerchant.set(v);
     else if (which === 'method') this.method.set(v);
+    else if (which === 'settlement') this.settlement.set(v as SettlementState | '');
     else this.status.set(v as TxnStatus | '');
     this.reload();
   }
 
   protected applySearch() {
-    const v = this.search().trim().toUpperCase();
-    if (v && /[^A-Z0-9-]/.test(v)) {
-      this.flash('danger', 'IDs contain only letters, numbers and dashes.');
+    const v = this.search().replace(/\s+/g, '').toUpperCase();
+    if (v && /[^A-Z0-9_.-]/.test(v)) {
+      this.flash('danger', 'References contain only letters, numbers, dashes, dots and underscores.');
       return;
     }
     this.appliedSearch.set(v);
@@ -327,6 +357,7 @@ export class MerchantTransactions {
     this.subMerchant.set('');
     this.method.set('');
     this.status.set('');
+    this.settlement.set('');
     this.search.set('');
     this.appliedSearch.set('');
     this.reload();
@@ -341,6 +372,13 @@ export class MerchantTransactions {
     this.pageSize.set(n);
     this.reload();
   }
+
+  /** Due · Settled · Paused (merchant-facing wording) · —; the date goes on the line below. */
+  protected settlementState(s: SettlementView | null) {
+    return !s ? '—' : s.state === 'on_hold' ? 'Paused' : s.state === 'settled' ? 'Settled' : 'Due';
+  }
+
+  protected readonly shortDay = (t: number) => shortDate(t);
 
   protected amounts(list: CurrencyAmount[]) {
     return list.map((a) => fmtMoney(a.amount, a.currency));
@@ -376,6 +414,10 @@ export class MerchantTransactions {
     clearTimeout(this.noticeTimer);
     this.noticeTimer = setTimeout(() => this.notice.set(null), 6000);
   }
+}
+
+function shortDate(t: number) {
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(t);
 }
 
 function daysAgo(n: number) {

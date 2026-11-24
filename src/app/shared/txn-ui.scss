@@ -674,3 +674,14 @@ app-transaction-sheet {
     }
   }
 }
+
+/* Internal list: settlement column. */
+td.txn-settle {
+  font-size: 13px;
+  white-space: nowrap;
+
+  &.hold {
+    color: var(--warning);
+    font-weight: 600;
+  }
+}

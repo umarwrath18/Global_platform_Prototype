@@ -1,4 +1,4 @@
-import { pricingSummary, techniqueLabel } from '../merchants/products';
+import { pricingShort, pricingSummary, techniqueLabel } from '../merchants/products';
 import {
   CurrencyAmount,
   DetailField,
@@ -16,6 +16,9 @@ import {
   PAYMENT_TYPE_ORDER,
   PaymentType,
   paymentTypeOf,
+  SETTLEMENT_STATE_LABEL,
+  SettlementState,
+  SettlementView,
   TimelineEntry,
   TXN_FLAG_LABEL,
   TXN_FLOWS,
@@ -135,6 +138,8 @@ interface Filters {
   from: number;
   to: number;
   q: string;
+  /** Pay-in settlement state (successful pay-ins only). */
+  settlement: SettlementState | null;
   sort: 'created' | 'amount' | 'updated';
   dir: 'asc' | 'desc';
 }
@@ -221,7 +226,8 @@ export class TransactionServer {
   }
 
   private detailRec(t: TxnRecord): TxnDetailRecord | undefined {
-    return this.tables().details[t.paymentType].get(t.id);
+    // The tables are already built for this request (rows() / find() ran first); reuse them per row.
+    return (this.cache?.tables ?? this.tables()).details[t.paymentType].get(t.id);
   }
 
   private ops(): OpsDb {
@@ -314,8 +320,11 @@ export class TransactionServer {
     const amountMax = amt('amountMax');
     const currency = q.get('currency')?.toUpperCase() || null;
     if ((amountMin !== null || amountMax !== null) && !currency && !country) fail(400, 'VALIDATION_FAILED', 'Choose one country or currency to filter by amount.');
-    const search = (q.get('q') ?? '').trim().toUpperCase();
-    if (search.length > 64 || /[^A-Z0-9-]/.test(search)) fail(400, 'VALIDATION_FAILED', 'IDs contain only letters, numbers and dashes.');
+    // References are compared without spaces (VA numbers and bank references are often shown grouped).
+    const search = (q.get('q') ?? '').replace(/\s+/g, '').toUpperCase();
+    if (search.length > 64 || /[^A-Z0-9_.-]/.test(search)) fail(400, 'VALIDATION_FAILED', 'References contain only letters, numbers, dashes, dots and underscores.');
+    const settlement = (q.get('settlement') || null) as SettlementState | null;
+    if (settlement && !SETTLEMENT_STATE_LABEL[settlement]) fail(400, 'VALIDATION_FAILED', 'Unknown settlement state.');
     const sort = (['created', 'amount', 'updated'].includes(q.get('sort') ?? '') ? q.get('sort') : 'created') as Filters['sort'];
     return {
       flow,
@@ -333,6 +342,7 @@ export class TransactionServer {
       from,
       to,
       q: search,
+      settlement: flow === 'payin' ? settlement : null,
       sort,
       dir: q.get('dir') === 'asc' ? 'asc' : 'desc',
     };
@@ -346,7 +356,8 @@ export class TransactionServer {
   private apply(rows: TxnRecord[], f: Filters, db: OpsDb | null, partialId = false): TxnRecord[] {
     const now = this.now();
     // The Merchant Portal keeps its partial Transaction ID match (My Transactions, Batch 4).
-    if (f.q) return rows.filter((t) => (partialId ? t.id.includes(f.q) : t.id === f.q) || t.invoiceId.toUpperCase() === f.q).sort((a, b) => b.createdAt - a.createdAt);
+    // Any reference finds the record: Mobi Ref ID, Merchant Ref ID or the bank's reference.
+    if (f.q) return rows.filter((t) => (partialId ? t.id.includes(f.q) : t.id === f.q) || t.invoiceId.toUpperCase() === f.q || bankReference(t, this.detailRec(t), statusAt(t, now))?.replace(/\s+/g, '').toUpperCase() === f.q).sort((a, b) => b.createdAt - a.createdAt);
     const out = rows.filter(
       (t) =>
         t.createdAt >= f.from &&
@@ -361,7 +372,8 @@ export class TransactionServer {
         (!f.status || statusAt(t, now) === f.status) &&
         (f.amountMin === null || t.amount >= f.amountMin) &&
         (f.amountMax === null || t.amount <= f.amountMax) &&
-        (!f.flag || (db !== null && this.flagsOf(t, db).includes(f.flag))),
+        (!f.flag || (db !== null && this.flagsOf(t, db).includes(f.flag))) &&
+        (!f.settlement || settlementView(t, statusAt(t, now), now)?.state === f.settlement),
     );
     const key = (t: TxnRecord) => (f.sort === 'amount' ? t.amount : f.sort === 'updated' ? updatedAt(t, now) : t.createdAt);
     const dir = f.dir === 'asc' ? 1 : -1;
@@ -435,6 +447,7 @@ export class TransactionServer {
       row.net = status === 'successful' && t.fee !== null ? netOf(t) : null;
     }
     if (type) row.typeValues = typeValues(this.detailRec(t));
+    if (t.flow === 'payin') row.settlement = settlementView(t, status, now);
     return row;
   }
 
@@ -480,8 +493,8 @@ export class TransactionServer {
     if (rows.length > MAX_EXPORT_ROWS) fail(413, 'EXPORT_TOO_LARGE', `Exports are limited to ${MAX_EXPORT_ROWS.toLocaleString('en-US')} rows. Narrow the filters and try again.`);
     const seeFees = FEE_TEAMS.includes(who.team);
     const now = this.now();
-    const header = ['Created', 'Transaction ID', 'Invoice ID', 'Flow', 'Merchant', 'GMID', 'Sub-merchant', 'MID', 'Country', 'Payment type', 'Payment method', 'Provider', 'Amount', 'Currency', 'Status', 'Status reason', 'Completed', 'Last updated', 'Flags', 'Provider reference', 'Mobi request ID'];
-    if (seeFees) header.push('Fee', flow === 'payin' ? 'Net amount' : 'Total debited', 'Pricing version', 'Technique');
+    const header = ['Created', 'Mobi Ref ID', 'Merchant Ref ID', 'Flow', 'Merchant', 'GMID', 'Sub-merchant', 'MID', 'Country', 'Payment type', 'Payment method', 'Provider', 'Amount', 'Currency', 'Status', 'Status reason', 'Completed', 'Last updated', 'Flags', 'Provider reference', 'Mobi request ID'];
+    if (seeFees) header.push('Fee (MDR)', flow === 'payin' ? 'Net amount' : 'Total debited', 'Pricing version', 'Technique');
     const iso = (t: number | null) => (t === null ? '' : new Date(t).toISOString());
     const lines = rows.map((t) => {
       const status = statusAt(t, now);
@@ -564,7 +577,7 @@ export class TransactionServer {
         t.subMerchantMid ? { label: 'Master MID', value: t.masterMid } : null,
         { label: 'Country', value: t.countryName },
         { label: 'Channel', value: t.channel },
-        { label: 'Invoice ID', value: t.invoiceId },
+        { label: 'Merchant Ref ID', value: t.invoiceId },
         t.description ? { label: 'Description', value: t.description } : null,
         { label: 'IPN status', value: ipnStatus.text, tone: ipnStatus.tone },
         { label: 'IPN callback URL', value: this.ipnUrl(t) || '—' },
@@ -574,7 +587,7 @@ export class TransactionServer {
     const mobi: (DetailField | null)[] = [{ label: 'Amount', value: fmtMoney(t.amount, t.currency) }];
     if (seeFees) {
       const fee = status === 'successful' ? t.fee : null;
-      mobi.push({ label: 'Fee', value: fee === null ? '—' : fmtMoney(fee, t.currency) });
+      mobi.push({ label: 'Fee (MDR)', value: fee === null ? '—' : fmtMoney(fee, t.currency) });
       mobi.push({ label: flow === 'payin' ? 'Net amount' : 'Total debited', value: fee === null ? '—' : fmtMoney(netOf(t), t.currency) });
       if (t.pricing) {
         const v = t.pricing.summary;
@@ -742,7 +755,7 @@ export class TransactionServer {
     }
     const ok = rows.filter((t) => statusAt(t, now) === 'successful');
     return {
-      items: items.map((t) => merchantRow(t, now)),
+      items: items.map((t) => merchantRow(t, now, this.detailRec(t))),
       total: rows.length,
       page,
       pageSize,
@@ -769,10 +782,22 @@ export class TransactionServer {
     const rows = this.apply(mine, f, null, true);
     if (rows.length > MAX_EXPORT_ROWS) fail(413, 'EXPORT_TOO_LARGE', `Exports are limited to ${MAX_EXPORT_ROWS.toLocaleString('en-US')} rows. Narrow the filters and try again.`);
     const now = this.now();
-    const header = ['Date & Time', 'Invoice ID', 'Transaction ID', 'Flow', 'Sub-merchant', 'Payment Method', 'Amount', 'Fee', flow === 'payin' ? 'Net Amount' : 'Total Debited', 'Currency', 'Status'];
+    const header =
+      flow === 'payin'
+        ? ['Date & Time', 'Merchant Ref ID', 'Mobi Ref ID', 'Customer', 'Sub-merchant', 'Sub MID', 'Payment Method', 'Bank / Wallet / Card', 'Bank Reference', 'Amount', 'Fee (MDR)', 'Net Amount', 'Currency', 'Status', 'Reason', 'Paid At', 'Settlement', 'Settlement Date']
+        : ['Date & Time', 'Merchant Ref ID', 'Mobi Ref ID', 'Beneficiary', 'Beneficiary Account', 'Bank / Wallet', 'Bank Reference', 'Payment Method', 'Amount', 'Fee (MDR)', 'Total Debited', 'Currency', 'Status', 'Reason', 'Paid At'];
     const lines = rows.map((t) => {
-      const r = merchantRow(t, now);
-      return [localDateTime(t.createdAt), t.invoiceId, t.id, flow === 'payin' ? 'PayIn' : 'Payout', t.subMerchantName ?? '', t.methodName, t.amount.toFixed(dec(t.currency)), r.fee === null ? '' : r.fee.toFixed(dec(t.currency)), r.net === null ? '' : r.net.toFixed(dec(t.currency)), t.currency, TXN_STATUS_LABEL[r.status]];
+      const money = (n: number | null) => (n === null ? '' : n.toFixed(dec(t.currency)));
+      const d = this.detailRec(t);
+      const r = merchantRow(t, now, d);
+      const ref = bankReference(t, d, r.status) ?? '';
+      const paid = r.status === 'successful' ? localDateTime(t.finalAt) : '';
+      const reason = reasonText(t, r.status);
+      if (flow === 'payin') {
+        const st = r.settlement;
+        return [localDateTime(t.createdAt), t.invoiceId, t.id, r.customerName ?? '', t.subMerchantName ?? '', t.subMerchantMid ?? '', t.methodName, r.methodDetail ?? '', ref, t.amount.toFixed(dec(t.currency)), money(r.fee), money(r.net), t.currency, TXN_STATUS_LABEL[r.status], reason, paid, st ? MERCHANT_SETTLEMENT_LABEL[st.state] : '', st?.date ? localDateTime(st.date).slice(0, 10) : ''];
+      }
+      return [localDateTime(t.createdAt), t.invoiceId, t.id, r.beneficiary?.name ?? '', r.beneficiary?.account ?? '', r.beneficiary?.bank ?? '', ref, t.methodName, t.amount.toFixed(dec(t.currency)), money(r.fee), money(r.net), t.currency, TXN_STATUS_LABEL[r.status], reason, paid];
     });
     const csv = [header, ...lines].map((l) => l.map(csvCell).join(',')).join('\r\n') + '\r\n';
     const d = new Date(now);
@@ -784,54 +809,62 @@ export class TransactionServer {
     const now = this.now();
     const status = statusAt(t, now);
     const d = this.detailRec(t);
+    const row = merchantRow(t, now, d);
     const final = status === 'successful' || status === 'failed' || status === 'expired';
-    const fee = status === 'successful' ? t.fee : null;
+    const ref = bankReference(t, d, status);
     const sections: DetailSection[] = [
       {
-        key: 'payment',
-        title: flow === 'payin' ? 'Payment' : 'Payout',
+        key: 'references',
+        title: 'References',
         fields: compact([
-          { label: 'Transaction ID', value: t.id },
-          { label: 'Invoice ID', value: t.invoiceId },
-          { label: 'Status', value: TXN_STATUS_LABEL[status] },
-          final && t.merchantReason && status !== 'successful' ? { label: 'Reason', value: t.merchantReason, tone: status === 'expired' ? 'warning' : 'danger' } : null,
-          { label: 'Payment method', value: t.methodName },
-          { label: 'Created', value: fmtDateTime(t.createdAt) },
-          { label: 'Completed', value: final ? fmtDateTime(t.finalAt) : '—' },
-          t.subMerchantName ? { label: 'Sub-merchant', value: t.subMerchantName } : null,
-          { label: 'MID', value: t.subMerchantMid ?? t.masterMid },
-          { label: 'Channel', value: t.channel },
-          t.description ? { label: 'Description', value: t.description } : null,
+          { label: 'Mobi Ref ID', value: t.id },
+          { label: 'Merchant Ref ID', value: t.invoiceId },
+          { label: bankReferenceLabel(d), value: ref ?? (final ? '—' : 'Not yet issued') },
+          t.subMerchantMid ? { label: 'Sub MID', value: `${t.subMerchantMid} · ${t.subMerchantName}` } : { label: 'MID', value: t.masterMid },
         ]),
-      },
-      {
-        key: 'fees',
-        title: 'Amount and fees',
-        fields: [
-          { label: 'Amount', value: fmtMoney(t.amount, t.currency) },
-          { label: 'Fee', value: fee === null ? '—' : `${flow === 'payin' ? '− ' : '+ '}${fmtMoney(fee, t.currency)}` },
-          { label: flow === 'payin' ? 'Net amount' : 'Total debited', value: fee === null ? '—' : fmtMoney(netOf(t), t.currency) },
-        ],
       },
     ];
     if (flow === 'payin') {
       const c = t.customer;
       // The merchant sent these details, so it sees them in full.
-      const fields = compact([
-        c.name ? { label: 'Customer name', value: c.name } : null,
-        c.reference ? { label: 'Customer reference', value: c.reference } : null,
-        c.email ? { label: 'Customer email', value: c.email } : null,
-        c.phone ? { label: 'Customer phone', value: c.phone } : null,
-        { label: 'Payment details', value: paymentDetails(t, d) },
-      ]);
-      sections.push({ key: 'customer', title: 'Customer', fields });
+      sections.push({
+        key: 'payment',
+        title: 'Payment',
+        fields: compact([
+          { label: 'Payment method', value: `${t.methodName} · ${PAYMENT_TYPE_LABEL.payin[t.paymentType]}` },
+          row.methodDetail ? { label: methodDetailLabel(d), value: row.methodDetail } : null,
+          { label: 'Customer', value: c.name ?? '—' },
+          c.email ? { label: 'Customer email', value: c.email } : null,
+          c.phone ? { label: 'Customer phone', value: c.phone } : null,
+          c.reference ? { label: 'Customer reference', value: c.reference } : null,
+          { label: 'Paid at', value: status === 'successful' ? fmtDateTime(t.finalAt) : '—' },
+          t.description ? { label: 'Description', value: t.description } : null,
+          { label: 'Reason', value: reasonText(t, status), tone: status === 'failed' ? 'danger' : status === 'expired' ? 'warning' : undefined },
+        ]),
+      });
+      const st = row.settlement;
+      sections.push({
+        key: 'settlement',
+        title: 'Settlement',
+        fields: [
+          { label: 'Status', value: st ? MERCHANT_SETTLEMENT_LABEL[st.state] : status === 'successful' ? 'Not settled yet' : 'Not applicable' },
+          { label: st?.state === 'settled' ? 'Settled on' : 'Settlement date', value: st?.date ? `${fmtDate(st.date)}${t.settlementCycle ? ` (${t.settlementCycle})` : ''}` : '—' },
+        ],
+      });
     } else {
-      sections.push({ key: 'beneficiary', title: 'Beneficiary', fields: beneficiaryFields(d) });
-    }
-    sections.push({ key: 'bank', title: 'Bank', fields: bankFields(t, d, status, false) });
-    if (flow === 'payin') {
-      const settle = settlementOf(t, status, true);
-      sections.push({ key: 'settlement', title: 'Settlement', fields: [{ label: 'Settlement cycle', value: t.settlementCycle ?? '—' }, { label: 'Expected settlement date', value: settle.expected }, { label: 'Settlement status', value: settle.status }, { label: 'Settlement reference', value: '—' }] });
+      const b = row.beneficiary;
+      sections.push({
+        key: 'beneficiary',
+        title: 'Beneficiary',
+        fields: compact([
+          { label: 'Name', value: b?.name ?? '—' },
+          { label: d?.type === 'ewallet' ? 'Wallet' : 'Bank', value: b?.bank ?? '—' },
+          { label: d?.type === 'ewallet' ? 'Wallet account' : 'Account number', value: b?.account ?? '—' },
+          { label: 'Payment method', value: t.methodName },
+          { label: 'Paid at', value: status === 'successful' ? fmtDateTime(t.finalAt) : '—' },
+          { label: 'Reason', value: reasonText(t, status), tone: status === 'failed' ? 'danger' : status === 'expired' ? 'warning' : undefined },
+        ]),
+      });
     }
     return {
       transactionId: t.id,
@@ -848,6 +881,16 @@ export class TransactionServer {
       sections,
       timeline: merchantTimeline(t, now),
       ipn: { status: ipnState(t, now).text, attempts: ipnAttempts(t, now) },
+      fee: row.fee,
+      net: row.net,
+      feeRate: row.fee !== null && t.pricing ? pricingShort(t.pricing.summary) : null,
+      paidAt: status === 'successful' ? t.finalAt : null,
+      merchantName: t.merchantName,
+      methodDetail: row.methodDetail,
+      bankReference: ref,
+      customerName: row.customerName,
+      beneficiary: row.beneficiary,
+      document: status === 'successful' ? (flow === 'payin' ? 'sales_slip' : 'payment_advice') : null,
       sampleData: true,
     };
   }
@@ -900,7 +943,7 @@ function summarise(rows: TxnRecord[], now: number): TxnSummary {
   return { total: rows.length, totalAmounts: sumBy(rows, (t) => t.amount), byStatus };
 }
 
-function merchantRow(t: TxnRecord, now: number): MerchantTxnRow {
+function merchantRow(t: TxnRecord, now: number, d: TxnDetailRecord | undefined): MerchantTxnRow {
   const status = statusAt(t, now);
   const fee = status === 'successful' ? t.fee : null;
   return {
@@ -917,7 +960,115 @@ function merchantRow(t: TxnRecord, now: number): MerchantTxnRow {
     net: fee === null ? null : netOf(t),
     currency: t.currency,
     status,
+    customerName: t.flow === 'payin' ? (t.customer.name ?? null) : null,
+    methodDetail: methodDetail(d),
+    beneficiary: t.flow === 'payout' ? beneficiaryOf(d) : null,
+    settlement: t.flow === 'payin' ? settlementView(t, status, now) : null,
   };
+}
+
+/** Merchant Portal wording: a hold reads "Paused" (no reason given to the merchant). */
+const MERCHANT_SETTLEMENT_LABEL: Record<SettlementState, string> = { due: 'Due', settled: 'Settled', on_hold: 'Paused' };
+
+/** The bank, wallet, app or masked card under the payment method. */
+function methodDetail(d: TxnDetailRecord | undefined): string | null {
+  if (!d) return null;
+  switch (d.type) {
+    case 'cards':
+      return `${d.brand} •••• ${d.last4}`;
+    case 'ewallet':
+      return d.wallet;
+    case 'online_banking':
+      return d.bank;
+    case 'qr':
+      return d.payerApp;
+    case 'virtual_account':
+      return d.vaBank;
+    case 'otc':
+      return d.outlet;
+    case 'bank_transfer':
+      return d.bank;
+  }
+}
+
+function methodDetailLabel(d: TxnDetailRecord | undefined): string {
+  switch (d?.type) {
+    case 'cards':
+      return 'Card';
+    case 'ewallet':
+      return 'Wallet';
+    case 'qr':
+      return 'Payer app / bank';
+    case 'otc':
+      return 'Outlet';
+    default:
+      return 'Bank';
+  }
+}
+
+/** Payout beneficiary: name, masked account and the bank or wallet. */
+function beneficiaryOf(d: TxnDetailRecord | undefined): { name: string | null; account: string | null; bank: string | null } | null {
+  if (d?.type === 'bank_transfer') return { name: d.beneficiaryName ?? null, account: d.beneficiaryAccount ?? null, bank: d.bank };
+  if (d?.type === 'ewallet') return { name: d.beneficiaryName ?? null, account: d.walletAccount, bank: d.wallet };
+  return null;
+}
+
+/** The bank's (or scheme's) reference once the payment reached it; VA numbers and OTC codes exist from the start. */
+function bankReference(t: TxnRecord, d: TxnDetailRecord | undefined, status: TxnStatus): string | null {
+  if (!d) return null;
+  const ref = { cards: () => (d as { rrn: string }).rrn, online_banking: () => (d as { fpxTransactionId: string }).fpxTransactionId, ewallet: () => (d as { walletTransactionId: string }).walletTransactionId, qr: () => (d as { qrReference: string }).qrReference, virtual_account: () => (d as { vaNumber: string }).vaNumber, otc: () => (d as { paymentCode: string }).paymentCode, bank_transfer: () => (d as { transferReference: string }).transferReference }[d.type]();
+  const reached = status === 'successful' || (status === 'failed' && t.failStage === 'bank');
+  // A masked value (e.g. a VA number shown as •••• 1234) isn't a reference anyone can search or quote.
+  if (!ref || ref.includes('•')) return null;
+  return reached || d.type === 'virtual_account' || d.type === 'otc' ? ref : null;
+}
+
+function bankReferenceLabel(d: TxnDetailRecord | undefined): string {
+  switch (d?.type) {
+    case 'online_banking':
+      return 'Bank reference (FPX transaction ID)';
+    case 'cards':
+      return 'Bank reference (RRN)';
+    case 'ewallet':
+      return 'Wallet transaction ID';
+    case 'qr':
+      return 'QR reference';
+    case 'virtual_account':
+      return 'VA number';
+    case 'otc':
+      return 'Payment code';
+    default:
+      return 'Bank reference';
+  }
+}
+
+function reasonText(t: TxnRecord, status: TxnStatus): string {
+  if (status === 'successful') return 'Transaction successful';
+  if (status === 'failed' || status === 'expired') return t.merchantReason ?? (status === 'expired' ? 'Payment window expired' : 'Transaction failed');
+  return status === 'pending' ? 'Waiting for the customer to pay' : t.flow === 'payout' ? 'Waiting for the bank to confirm' : 'Waiting for the bank to confirm';
+}
+
+/** Settlement of a successful pay-in: on hold, due on its date, or settled once the date has passed. */
+function settlementView(t: TxnRecord, status: TxnStatus, now: number): SettlementView | null {
+  if (t.flow !== 'payin' || status !== 'successful') return null;
+  if (t.settlementHeld) return { state: 'on_hold', date: null };
+  const date = settlementDate(t);
+  if (date === null) return null;
+  return { state: date <= now ? 'settled' : 'due', date };
+}
+
+/** Business days after the payment, per the product's settlement cycle (T+n). */
+function settlementDate(t: TxnRecord): number | null {
+  if (!t.settlementCycle) return null;
+  const days = Number(t.settlementCycle.replace('T+', '')) || 0;
+  const d = new Date(t.finalAt);
+  let added = 0;
+  while (added < days) {
+    d.setDate(d.getDate() + 1);
+    if (d.getDay() !== 0 && d.getDay() !== 6) added++;
+  }
+  d.setHours(9, 0, 0, 0);
+  return d.getTime();
 }
 
 function maskEmail(e: string) {
@@ -1161,8 +1312,9 @@ function merchantTimeline(t: TxnRecord, now: number): TimelineEntry[] {
   if (status === 'successful') {
     out.push({ at: t.finalAt, title: t.flow === 'payin' ? 'Paid' : 'Paid out', source: '' });
     if (t.flow === 'payin') {
-      const s = settlementOf(t, status, true);
-      out.push({ at: Number.MAX_SAFE_INTEGER, title: 'Settled', source: '', detail: s.expected === '—' ? 'Not settled yet' : `Expected ${s.expected}` });
+      const st = settlementView(t, status, now);
+      if (st?.state === 'settled') out.push({ at: st.date!, title: 'Settled', source: '' });
+      else out.push({ at: Number.MAX_SAFE_INTEGER, title: 'Settlement', source: '', detail: st?.state === 'on_hold' ? 'Paused' : st?.date ? `Due ${fmtDate(st.date)}` : 'Not settled yet' });
     }
   } else if (status === 'failed') out.push({ at: t.finalAt, title: 'Failed', source: '', detail: t.merchantReason ?? '' });
   else if (status === 'expired') out.push({ at: t.finalAt, title: 'Expired', source: '', detail: t.merchantReason ?? '' });

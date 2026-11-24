@@ -35,7 +35,7 @@
       <label class="fld search">
         Search
         <span class="search-row">
-          <input class="f-input" type="search" placeholder="Transaction ID or Invoice ID" [value]="searchText()" (input)="searchText.set($any($event.target).value)" maxlength="64" />
+          <input class="f-input" type="search" placeholder="Mobi Ref ID, Merchant Ref ID or bank reference" [value]="searchText()" (input)="searchText.set($any($event.target).value)" maxlength="64" />
           <button type="submit" class="btn" aria-label="Search"><app-icon name="search" [size]="16" /></button>
         </span>
       </label>
@@ -166,8 +166,8 @@
             <thead>
               <tr>
                 <th scope="col" [attr.aria-sort]="ariaSort('created')"><button type="button" class="sort" (click)="sortBy('created')">Created <app-icon [name]="ariaSort('created') === 'ascending' ? 'chevron-up' : 'chevron-down'" [size]="12" /></button></th>
-                <th scope="col">Transaction ID</th>
-                <th scope="col">Invoice ID</th>
+                <th scope="col">Merchant Ref ID</th>
+                <th scope="col">Mobi Ref ID</th>
                 <th scope="col">Merchant</th>
                 <th scope="col">Country</th>
                 <th scope="col">Payment method</th>
@@ -175,15 +175,17 @@
                 @for (c of d.typeColumns; track c.key) {<th scope="col" class="type-col">{{ c.label }}</th>}
                 <th scope="col" class="num" [attr.aria-sort]="ariaSort('amount')"><button type="button" class="sort" (click)="sortBy('amount')">Amount <app-icon [name]="ariaSort('amount') === 'ascending' ? 'chevron-up' : 'chevron-down'" [size]="12" /></button></th>
                 <th scope="col">Currency</th>
+                @if (seesFees()) {<th scope="col" class="num">Fee (MDR)</th>}
                 <th scope="col">Status</th>
+                @if (flow() === 'payin') {<th scope="col">Settlement</th>}
               </tr>
             </thead>
             <tbody>
               @for (t of d.items; track t.transactionId) {
                 <tr class="clickable" [class.selected]="openId() === t.transactionId" (click)="open(t)">
                   <td class="muted">{{ dateTime(t.createdAt) }}</td>
-                  <td><a class="txn-id" href="" (click)="$event.preventDefault(); $event.stopPropagation(); open(t)">{{ t.transactionId }}</a></td>
                   <td class="mono">{{ t.invoiceId }}</td>
+                  <td><a class="txn-id" href="" (click)="$event.preventDefault(); $event.stopPropagation(); open(t)">{{ t.transactionId }}</a></td>
                   <td class="merchant" [title]="t.merchantName">{{ t.merchantName }}@if (t.subMerchantName) {<div class="sub-line">{{ t.subMerchantName }}</div>}</td>
                   <td>{{ t.countryName }}</td>
                   <td>{{ t.methodName }}</td>
@@ -191,13 +193,16 @@
                   @for (c of d.typeColumns; track c.key) {<td class="mono">{{ t.typeValues?.[c.key] ?? '—' }}</td>}
                   <td class="num mono">{{ amount(t.amount, t.currency) }}</td>
                   <td>{{ t.currency }}</td>
+                  @if (seesFees()) {<td class="num mono" [class.muted]="t.fee == null">{{ t.fee == null ? '—' : amount(t.fee, t.currency) }}</td>}
                   <td>
                     <app-txn-status [status]="t.status" />
-                    @if (t.settlementHeld) {<div class="sub-line">Settlement on hold</div>}
                     @if (t.flags.length) {
                       <div class="txn-flags">@for (f of t.flags; track f) {<span class="txn-flag" [class.investigation]="f === 'investigation'">{{ flagLabel[f] }}</span>}</div>
                     }
                   </td>
+                  @if (flow() === 'payin') {
+                    <td class="txn-settle" [class.muted]="!t.settlement" [class.hold]="t.settlement?.state === 'on_hold'">{{ settlementText(t.settlement) }}</td>
+                  }
                 </tr>
               }
             </tbody>
