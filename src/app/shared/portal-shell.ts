@@ -33,12 +33,14 @@ const NAV: NavItem[] = [
   { label: 'Approvals', icon: 'check-circle', link: '/approvals' },
   { label: 'Merchant Pricing', icon: 'card', link: '/merchant-pricing' },
   { label: 'Host Management', icon: 'route', link: '/hosts' },
+  { label: 'Routing', icon: 'swap', link: '/routing' },
 ];
 
 /** What Tech Ops sees: Host Management (it manages hosts) and the Dashboard; no merchant permissions. */
 const TECHOPS_NAV: NavItem[] = [
   { label: 'Dashboard', icon: 'grid', link: '/dashboard' },
   { label: 'Host Management', icon: 'route', link: '/hosts' },
+  { label: 'Routing', icon: 'swap', link: '/routing' },
 ];
 
 /** What Mobi Support sees: no merchant permissions, but Transactions (view, notes and flags) to answer queries. */
@@ -47,6 +49,7 @@ const SUPPORT_NAV: NavItem[] = [
   { label: 'Transactions', icon: 'swap', link: '/transactions' },
   { label: 'User security', icon: 'shield', link: '/security/users' },
   { label: 'Host Management', icon: 'route', link: '/hosts' },
+  { label: 'Routing', icon: 'swap', link: '/routing' },
 ];
 
 /** What Security Admin sees: no merchant or transaction permissions. */
@@ -54,6 +57,7 @@ const SECURITY_NAV: NavItem[] = [
   { label: 'Dashboard', icon: 'grid', link: '/dashboard' },
   { label: 'User security', icon: 'shield', link: '/security/users' },
   { label: 'Host Management', icon: 'route', link: '/hosts' },
+  { label: 'Routing', icon: 'swap', link: '/routing' },
 ];
 
 /** Approved MVP modules not built yet: shown disabled so the roadmap is visible, never clickable. */
@@ -62,7 +66,6 @@ const LATER: NavItem[] = [
   { label: 'Payouts', icon: 'arrow-up' },
   { label: 'Settlements', icon: 'settle' },
   { label: 'Payment Methods', icon: 'card' },
-  { label: 'Routing', icon: 'route' },
   { label: 'Reports', icon: 'bar-chart' },
   { label: 'Settings', icon: 'settings' },
 ];

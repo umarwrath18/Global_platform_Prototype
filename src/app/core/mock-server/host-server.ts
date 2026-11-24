@@ -133,6 +133,15 @@ export class HostServer {
     }
   }
 
+  /** Read-only view for Routing: each host's status and its payment methods (no access check: server-side use only). */
+  snapshot(): { hosts: { id: string; name: string; hostCode: string; status: HostView['status'] }[]; capabilities: Pick<HostCapability, 'hostId' | 'countryCode' | 'paymentMethodCode' | 'paymentFlow' | 'availabilityStatus'>[] } {
+    const db = this.load();
+    return {
+      hosts: db.hosts.map((h) => ({ id: h.id, name: h.name, hostCode: h.hostCode, status: statusOf(h) })),
+      capabilities: db.capabilities.map(({ hostId, countryCode, paymentMethodCode, paymentFlow, availabilityStatus }) => ({ hostId, countryCode, paymentMethodCode, paymentFlow, availabilityStatus })),
+    };
+  }
+
   /** Prototype/QA: restores the sample hosts. */
   resetAll() {
     this.opts.storage.removeItem(KEY);

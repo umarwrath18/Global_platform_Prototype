@@ -44,7 +44,7 @@ capabilities (country, method, flow, currency, availability) without knowing pro
 `POST /api/hosts/:id/status` (`enable` / `disable` / `maintenance`, code).
 
 ## Deferred
-- **5B / 5C:** Routing Management (priorities, fallback, Smart Routing), linking Transactions'
+- **Routing (5B / 5C) is built: see `routing-5b-5c.md`.** Still deferred: linking Transactions'
   "Provider" to hosts, real health monitoring, credential management in a real vault, maker-checker
   for production changes, and a Partner module.
 
