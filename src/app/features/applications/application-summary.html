@@ -131,7 +131,12 @@
         <span class="doc-name">{{ x.rule.label }}@if (!x.rule.required) {<span class="tag">Optional</span>}</span>
         <span class="doc-files">
           @for (f of x.files; track f.id) {
-            <span>{{ f.fileName }} · {{ f.sizeKb }} KB · {{ date(f.uploadedAt) }}</span>
+            @if (openable()) {
+              <button type="button" class="doc-link" (click)="openDoc.emit(f)" [attr.aria-label]="'Open ' + f.fileName">{{ f.fileName }}</button>
+              <span class="doc-meta">{{ fileType(f.fileName) }} · {{ fileSize(f.sizeKb) }} · {{ date(f.uploadedAt) }}@if (f.uploadedBy) { · {{ f.uploadedBy }}}@if (f.sample) {<span class="tag">Sample</span>}</span>
+            } @else {
+              <span>{{ f.fileName }} · {{ f.sizeKb }} KB · {{ date(f.uploadedAt) }}</span>
+            }
           } @empty {
             <span [class.muted]="!x.rule.required" [class.missing]="x.rule.required">{{ x.rule.required ? 'Not uploaded' : 'Not provided' }}</span>
           }

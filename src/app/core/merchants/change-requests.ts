@@ -52,9 +52,12 @@ export interface ChangeRequestRecord {
   decidedRole: StaffRole | null;
   decidedAt: number | null;
   decisionComment: string | null;
+  /** Documents section only: the files in place when the request was made, for a side-by-side view. */
+  previousDocuments?: DocumentRecord[];
 }
 
-export type ChangeRequest = Omit<ChangeRequestRecord, 'proposed' | 'requestedById'>;
+/** Documents section: `proposedDocuments` (file details only) is sent so Risk can open both versions. */
+export type ChangeRequest = Omit<ChangeRequestRecord, 'proposed' | 'requestedById'> & { proposedDocuments?: DocumentRecord[] };
 
 /** Merchant profile history: direct edits and profile change requests. */
 export interface ProfileEvent {

@@ -1,3 +1,4 @@
+import { stampUploads } from './documents';
 import { suspensionApprovals } from './suspensions';
 import { validateApplication, validateRegistrationNumber } from '../merchants/application-rules';
 import {
@@ -13,7 +14,7 @@ import {
   SectionValue,
 } from '../merchants/change-requests';
 import { mccLabel } from '../merchants/mcc';
-import { ApplicationData, CountryApplication, FieldIssue, READINESS_STATUSES, StaffRole } from '../merchants/merchant-models';
+import { ApplicationData, CountryApplication, DocumentRecord, FieldIssue, READINESS_STATUSES, StaffRole } from '../merchants/merchant-models';
 import { countryName, ONBOARDING_COUNTRIES, REGISTRATION_COUNTRIES } from '../merchants/onboarding-config';
 import { fmtDay, pricingSummary } from '../merchants/products';
 import type { Caller, MerchantDb, MerchantRecord } from './merchant-server';
@@ -45,8 +46,8 @@ export function merchantRiskApproved(db: MerchantDb, merchantId: string): boolea
 }
 
 export function toChangeView(r: ChangeRequestRecord): ChangeRequest {
-  const { proposed: _p, requestedById: _u, ...view } = r;
-  return view;
+  const { proposed, requestedById: _u, ...view } = r;
+  return r.section === 'documents' ? { ...view, proposedDocuments: structuredClone(proposed as DocumentRecord[]) } : view;
 }
 
 function requireRole(ctx: ChangeContext, needed: StaffRole, message: string) {
@@ -139,6 +140,7 @@ export function requestCountryChange(ctx: ChangeContext, applicationId: string, 
   requireNoPending(ctx.db, (r) => r.applicationId === app.id && r.section === section, CHANGE_SECTION_LABEL[section]);
   const reason = readReason(body);
   const r = create(ctx, { scope: 'country_details', section, merchantId: m.id, applicationId: app.id, country: app.country, changes, proposed, reason });
+  if (section === 'documents') r.previousDocuments = structuredClone(app.data.documents);
   ctx.recordApp(app, `Change requested – ${CHANGE_SECTION_LABEL[section]} (${r.id})`, reason);
   ctx.notify('change_requested', m, app, ['risk'], `Change to review: ${m.legalName} · ${cfg.name} · ${CHANGE_SECTION_LABEL[section]}`, `${ctx.caller.name} asked to change ${CHANGE_SECTION_LABEL[section].toLowerCase()} for ${app.id} (${r.id}): ${summary(r)}. Reason: ${reason}`);
   return toChangeView(r);
@@ -148,7 +150,7 @@ export function requestCountryChange(ctx: ChangeContext, applicationId: string, 
  * Parses one section with the onboarding parser and validates it against the country's current
  * rules. A blank bank account number keeps the current one (it is never shown in full).
  */
-function readCountrySection(ctx: ChangeContext, app: CountryApplication, section: ChangeSection, raw: any): SectionValue {
+function readCountrySection(ctx: ChangeContext, app: CountryApplication, section: ChangeSection, raw: any, knownDocs: DocumentRecord[] = app.data.documents): SectionValue {
   const merchant = findMerchant(ctx.db, app.merchantId);
   let value = raw;
   if (section === 'bank') value = { ...(raw ?? {}), accountNumber: str(raw?.accountNumber, 120).trim() || app.data.bank['accountNumber'] || '' };
@@ -157,6 +159,7 @@ function readCountrySection(ctx: ChangeContext, app: CountryApplication, section
   const data = ctx.readData(app.country, { ...app.data, [section]: value });
   const issues = validateApplication(app.country, data, merchant).filter((i) => i.section === section);
   if (issues.length) fail(422, 'VALIDATION_FAILED', { errors: issues, message: `${issues.length} item${issues.length === 1 ? '' : 's'} must be fixed.` });
+  if (section === 'documents') return stampUploads(knownDocs, data.documents, ctx.caller.name, ctx.role);
   return structuredClone(data[section as keyof ApplicationData]) as SectionValue;
 }
 
@@ -180,7 +183,8 @@ export function decideChange(ctx: ChangeContext, id: string, body: any): ChangeR
       const value = readIdentity(ctx.db, m.id, r.proposed);
       Object.assign(m, value, { updatedAt: ctx.now });
     } else {
-      const value = readCountrySection(ctx, app!, r.section, r.proposed);
+      // Files keep the uploader recorded when the request was made.
+      const value = readCountrySection(ctx, app!, r.section, r.proposed, [...app!.data.documents, ...(r.section === 'documents' ? (r.proposed as DocumentRecord[]) : [])]);
       (app!.data as any)[r.section] = value;
       app!.updatedAt = ctx.now;
     }

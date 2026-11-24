@@ -158,7 +158,8 @@ describe('Pricing editor (§7.4, §8.5)', () => {
   it('walks Scope → Technique → Configure Rules → Summary, with the scope summary and six methods', async () => {
     const { el, settle, button } = await editor({ flow: 'payin', methodCode: 'fpx', editOf: null });
     expect(el.querySelector('.scope-strip')?.textContent).toContain('Corridor: 🇲🇾 Malaysia | Currency: MYR');
-    expect(el.querySelector('.scope-sum')?.textContent?.trim()).toBe('Scope: Malaysia / Kedai Ujian Sdn Bhd / Master Merchant / PayIn / FPX');
+    const scope = [...el.querySelectorAll('.scope-dl dd')].map((d) => d.textContent?.trim());
+    expect(scope).toEqual(['Kedai Ujian Sdn Bhd', 'Master Merchant', 'FPX · PayIn']);
     button('Next')!.click();
     await settle();
     expect([...el.querySelectorAll('.t-card strong')].map((x) => x.textContent)).toEqual(['Percentage', 'Fixed Fee', 'Percentage + Fixed Fee', 'Higher of Percentage or Fixed Fee', 'Volume-Based (Waterfall)', 'Historical Volume']);
@@ -175,7 +176,7 @@ describe('Pricing editor (§7.4, §8.5)', () => {
     el.querySelector('#pe-mdr')!.dispatchEvent(new Event('input'));
     button('Next')!.click();
     await settle();
-    expect(el.querySelector('.calc-fee')?.textContent).toContain('MYR 1,200.00');
+    expect(el.querySelector('.calc-v')?.textContent).toContain('MYR 1,200.00');
     expect(button('Next: Secondary Charges')).toBeTruthy();
   });
 

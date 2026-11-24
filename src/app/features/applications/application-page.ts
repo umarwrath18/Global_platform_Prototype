@@ -6,6 +6,7 @@ import {
   ApplicationDetail,
   ApplicationStatus,
   CountryApplication,
+  DocumentRecord,
   HistoryEvent,
   READINESS_STATUSES,
   SECTION_LABEL,
@@ -21,6 +22,7 @@ import { ApplicationSummaryView } from './application-summary';
 import { ProductPaymentConfig } from '../products/product-payment-config';
 import { ChangeRequestForm } from '../changes/change-request-form';
 import { PendingChanges } from '../changes/pending-changes';
+import { DocumentSheet } from '../documents/document-sheet';
 import { productPhase } from '../../core/merchants/products';
 import { ReadinessPanel } from './readiness-panel';
 import { ReviewPanel } from './review-panel';
@@ -42,7 +44,7 @@ const NEXT_OWNER: Partial<Record<ApplicationStatus, { role: StaffRole; text: str
 @Component({
   selector: 'app-application-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, Icon, StatusBadge, StatusTracker, ApplicationForm, ApplicationSummaryView, ReviewPanel, ReadinessPanel, ProductPaymentConfig, ChangeRequestForm, PendingChanges, SideSheet],
+  imports: [RouterLink, Icon, StatusBadge, StatusTracker, ApplicationForm, ApplicationSummaryView, ReviewPanel, ReadinessPanel, ProductPaymentConfig, ChangeRequestForm, PendingChanges, SideSheet, DocumentSheet],
   templateUrl: './application-page.html',
   styleUrl: './application-page.scss',
 })
@@ -82,6 +84,20 @@ export class ApplicationPage implements HasUnsavedChanges {
   protected readonly inReadiness = computed(() => READINESS_STATUSES.includes(this.app()?.status as ApplicationStatus));
   protected readonly next = computed(() => NEXT_OWNER[this.app()?.status as ApplicationStatus] ?? null);
   protected readonly history = computed(() => [...(this.app()?.history ?? [])].reverse());
+
+  // ------------------------------------------------------------- documents
+  /** Sales / Operations, Risk and CS open documents; the server checks this again and records each open. */
+  protected readonly canOpenDocs = computed(() => ['sales', 'risk', 'cs'].includes(this.role()));
+  protected readonly openDoc = signal<DocumentRecord | null>(null);
+
+  protected docLabel(type: string) {
+    return this.cfg()?.documents.find((r) => r.type === type)?.label ?? type;
+  }
+
+  /** Shows the new history entry without reloading the page (which would close the sheet). */
+  protected onDocRecorded(history: HistoryEvent[]) {
+    this.detail.update((d) => (d ? { ...d, application: { ...d.application, history } } : d));
+  }
   protected readonly rejectionReason = computed(() => this.app()?.history.find((h) => h.toStatus === 'rejected')?.comment ?? '');
 
   constructor() {

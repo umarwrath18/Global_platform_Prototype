@@ -158,7 +158,7 @@
                 </app-side-sheet>
               }
               @if (d.changes.length) {
-                <app-pending-changes [changes]="d.changes" title="Change requests" (changed)="onChangeAction($event)" />
+                <app-pending-changes [changes]="d.changes" title="Change requests" (changed)="onChangeAction($event)" (docRecorded)="onDocRecorded($event)" />
               } @else if (!changeForm()) {
                 <p class="hint-line"><app-icon name="info" [size]="14" />Business details, bank account, directors and documents change only through a request that Risk approves.</p>
               }
@@ -174,7 +174,7 @@
                 <p>{{ a.submittedProfile ? 'As submitted' : 'Draft' }}</p>
               </div>
             </div>
-            <app-application-summary [application]="a" [merchant]="m" />
+            <app-application-summary [application]="a" [merchant]="m" [openable]="canOpenDocs()" (openDoc)="openDoc.set($event)" />
           </section>
         }
       </div>
@@ -195,6 +195,12 @@
         </ol>
       </aside>
     </div>
+  }
+
+  @if (openDoc(); as doc) {
+    @if (detail(); as d) {
+      <app-document-sheet [doc]="doc" [typeLabel]="docLabel(doc.type)" [subtitle]="d.merchant.legalName + ' · ' + d.application.id + ' · ' + (cfg()?.name ?? d.application.country)" [applicationId]="d.application.id" (closed)="openDoc.set(null)" (recorded)="onDocRecorded($event)" />
+    }
   }
 
   @if (toast(); as t) {

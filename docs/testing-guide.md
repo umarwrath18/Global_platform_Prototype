@@ -113,6 +113,11 @@ Shortcut: the seeded Nusantara Home Retail (Malaysia) is already live, so you ca
 - **IPN after go-live:** as `MOBI-CS` or `123`, open a live application and change the IPN callback
   URL in the Go-live panel. It saves directly, no Risk approval, and appears in the application
   history. As `MOBI-RISK` the field is read only.
+- **Open uploaded documents:** as `123` (Sales / Ops), open an approved application (e.g.
+  APP-2026-0009) → **Request a change** → **Documents**, replace a file with a real PDF, JPG or PNG
+  and send it. Then, in another tab of the same window, sign in as `MOBI-RISK`: the change request
+  shows the **Current** and **Proposed** files side by side; click either to open it. Seeded files
+  open a *Sample document* page. Views and downloads appear in the application's Activity.
 - **Profile or bank change after Risk approval:** as `123`, request a change on an approved merchant;
   approve it as `MOBI-RISK` from **Approvals**.
 - **Lost authenticator:** as `MOBI-SUPPORT`, open a reset request for a user in **User security**;
@@ -128,5 +133,6 @@ Shortcut: the seeded Nusantara Home Retail (Malaysia) is already live, so you ca
 
 No emails are sent: OTP codes appear in an on-screen **Email preview**, and Tech alert emails are
 recorded as simulated. There is no transaction service: transactions are sample data generated
-from each live merchant's setup and pricing. The exchange rates used for pricing limits are fixed
+from each live merchant's setup and pricing. Uploaded files are kept only in the browser they were
+uploaded from (IndexedDB); seeded documents have no file. The exchange rates used for pricing limits are fixed
 sample rates.

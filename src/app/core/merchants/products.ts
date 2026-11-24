@@ -293,6 +293,42 @@ export function pricingSummary(v: Pick<PricingDraft, 'technique' | 'currency' | 
   }
 }
 
+/**
+ * The headline of a pricing rule for a summary block: the rate itself, then one line of context.
+ * "1% – 1.5% MDR" / "3 tiers by monthly volume", "1.8% + MYR 0.50" / "Per transaction".
+ */
+export function pricingHeadline(v: Pick<PricingDraft, 'technique' | 'currency' | 'mdrPct' | 'fixedFee' | 'minimumFee' | 'tiers' | 'historical' | 'volumePeriod'> & { usd?: UsdFee | null }): { value: string; sub: string } {
+  const cur = v.currency;
+  const fee = (n: number | null | undefined) => `${cur} ${num(n ?? 0)}`;
+  switch (v.technique) {
+    case null:
+      return { value: 'Subscription only', sub: 'No per-transaction fee' };
+    case 'fixed_fee':
+      return v.usd
+        ? { value: `USD ${num(v.usd.fixedFeeUsd)} per transaction`, sub: `≈ ${v.usd.localEquivalentCurrency} ${num(v.usd.localEquivalent)} at ${num(v.usd.usdExchangeRate)} ${v.usd.localEquivalentCurrency}/USD` }
+        : { value: `${fee(v.fixedFee)} per transaction`, sub: 'Fixed fee' };
+    case 'variable_rate':
+      return { value: `${pct(v.mdrPct)} MDR`, sub: v.minimumFee && v.minimumFee > 0 ? `Minimum fee ${fee(v.minimumFee)}` : 'Per transaction' };
+    case 'variable_plus_fixed':
+      return { value: `${pct(v.mdrPct)} + ${fee(v.fixedFee)}`, sub: 'Per transaction' };
+    case 'higher_of':
+      return { value: `${pct(v.mdrPct)} or ${fee(v.minimumFee)}`, sub: 'Whichever is higher, per transaction' };
+    case 'volume_based': {
+      const tiers = v.tiers ?? [];
+      const rates = tiers.map((t) => t.mdrPct).filter((r) => Number.isFinite(r));
+      const lo = rates.length ? Math.min(...rates) : 0;
+      const hi = rates.length ? Math.max(...rates) : 0;
+      const fixed = tiers.some((t) => t.fixedFee > 0);
+      const period = (v.volumePeriod ? VOLUME_PERIOD_LABEL[v.volumePeriod] : 'Monthly').toLowerCase();
+      return { value: lo === hi ? `${pct(lo)} MDR` : `${pct(lo)} – ${pct(hi)} MDR`, sub: `${tiers.length} tier${tiers.length === 1 ? '' : 's'} by ${period} volume${fixed ? ' · with fixed fees' : ' · no fixed fee'}` };
+    }
+    case 'historical_volume': {
+      const h = v.historical!;
+      return { value: `${pct(h.resultingMdr)} or ${pct(h.defaultMdr)} MDR`, sub: `${pct(h.resultingMdr)} when ${REFERENCE_PERIOD_SHORT[h.referencePeriod]} ${METRIC_SHORT[h.evaluationMetric]} ${h.thresholdDirection} ${num(h.volumeThreshold)}, otherwise ${pct(h.defaultMdr)}` };
+    }
+  }
+}
+
 /** Short pricing text for the table's Pricing column. */
 export function pricingShort(v: PricingVersion): string {
   switch (v.technique) {

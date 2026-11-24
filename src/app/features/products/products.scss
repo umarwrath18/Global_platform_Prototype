@@ -803,25 +803,110 @@
 }
 
 .calc {
-  padding: 12px;
-  border-radius: var(--r-control);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
   background: var(--surface-page);
 
-  h4 {
-    margin: 0 0 10px;
-    font-size: 13px;
+  .f-row {
+    margin: 0;
   }
 }
 
-.calc-fee {
+.calc-result {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin: 10px 0 0;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+
+  > div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+}
+
+.calc-k {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.calc-v {
+  font-size: 24px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.calc-eff {
+  text-align: right;
 
   strong {
-    font-size: 20px;
+    font-size: 16px;
+    font-variant-numeric: tabular-nums;
   }
+}
+
+.calc-why {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.calc-more {
+  font-size: 13px;
+
+  summary {
+    width: fit-content;
+    font-weight: 600;
+    color: var(--mobi-blue);
+    cursor: pointer;
+  }
+
+  summary:focus-visible {
+    outline: none;
+    border-radius: 4px;
+    box-shadow: var(--focus-ring);
+  }
+}
+
+/* Volume tiers on the Summary step; the tier the calculator lands in is marked. */
+.sum-tiers {
+  font-size: 14px;
+
+  .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  tr.hit td {
+    background: var(--info-bg);
+  }
+}
+
+.tier-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 5px;
+  background: var(--mobi-blue);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: 1px;
+}
+
+.scope-dl {
+  font-size: 14px;
 }
 
 .calc-rows {
@@ -845,12 +930,18 @@
 }
 
 .sec-card {
-  padding: 12px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--r-control);
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--surface);
 
   > * + * {
-    margin-top: 10px;
+    margin-top: 14px;
+  }
+
+  &:has(input[role='switch']:checked) {
+    border-color: var(--mobi-blue);
+    box-shadow: 0 0 0 1px var(--mobi-blue-tint);
   }
 }
 
