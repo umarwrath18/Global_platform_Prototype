@@ -14,11 +14,11 @@ import { SideSheet } from '../../shared/side-sheet';
   imports: [SideSheet, Icon],
   styleUrl: './hosts.scss',
   template: `
-<app-side-sheet [label]="cap() ? 'Edit payment capability' : 'Add payment capability'" (dismiss)="closed.emit()">
+<app-side-sheet [label]="cap() ? 'Edit payment method' : 'Add payment method'" (dismiss)="closed.emit()">
   <header class="sheet-head">
     <div class="sheet-titles">
-      <p class="sheet-eyebrow">Payment capabilities</p>
-      <h2 class="sheet-title">{{ cap() ? 'Edit ' + cap()!.paymentMethodName : 'Add payment capability' }}</h2>
+      <p class="sheet-eyebrow">Payment methods</p>
+      <h2 class="sheet-title">{{ cap() ? 'Edit ' + cap()!.paymentMethodName : 'Add payment method' }}</h2>
       <p class="sheet-sub">{{ detail().host.name }} · {{ detail().host.id }}</p>
     </div>
     <button type="button" class="sheet-close" (click)="closed.emit()" aria-label="Close"><app-icon name="x" [size]="18" /></button>
@@ -57,7 +57,7 @@ import { SideSheet } from '../../shared/side-sheet';
   <footer class="sheet-foot">
     <span class="sheet-foot-note"></span>
     <button type="button" class="btn" (click)="closed.emit()" [disabled]="busy()">Cancel</button>
-    <button type="button" class="btn primary" (click)="save()" [disabled]="busy()">@if (busy()) {<span class="spinner" aria-hidden="true"></span>}{{ cap() ? 'Save' : 'Add capability' }}</button>
+    <button type="button" class="btn primary" (click)="save()" [disabled]="busy()">@if (busy()) {<span class="spinner" aria-hidden="true"></span>}{{ cap() ? 'Save' : 'Add payment method' }}</button>
   </footer>
 </app-side-sheet>
   `,

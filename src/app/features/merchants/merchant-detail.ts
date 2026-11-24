@@ -338,7 +338,12 @@ export class MerchantDetailPage {
 
   protected setPc(key: keyof ProfileRequestDraft, value: string) {
     this.pcDraft.update((d) => ({ ...d, [key]: value }));
+    this.pcError.set(null);
     this.pcIssues.update((list) => list.filter((i) => i.field !== `identity.${key}`));
+  }
+
+  protected clearReasonIssue() {
+    if (this.pcReason().trim().length >= 10) this.pcIssues.update((list) => list.filter((i) => i.field !== 'reason'));
   }
 
   protected pcIssue(field: string) {

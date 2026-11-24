@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { HostDetailResponse, HostDraftInput, HostHealthRow, HostListResponse } from '../hosts/hosts';
+import { HostDetailResponse, HostDraftInput, HostListResponse } from '../hosts/hosts';
 import { AuthServer } from './auth-server';
 import { HostServer } from './host-server';
 import { FlakyStorage } from './testing/merchant-test-data';
 import { currentCode, signIn } from './testing/sign-in';
 
-// Host Management (Batch 5A). Seed: six sample hosts (HARSYA, WINPAY, LINKQU, Public Bank,
-// Saigon PayLink, CIMB Collect) and four sample partners. MOBI-TECHOPS manages; others view.
+// Host Management. Seed: six sample hosts (HARSYA, WINPAY, LINKQU, Public Bank, Saigon PayLink,
+// CIMB Collect). One status per host (Draft · Active · Disabled · Maintenance) plus a setup
+// checklist. MOBI-TECHOPS manages; others view.
 
 describe('Host Management', () => {
   let now: number;
@@ -35,7 +36,7 @@ describe('Host Management', () => {
 
   const input = (over: Partial<HostDraftInput> = {}): HostDraftInput => ({
     draft: false,
-    basic: { name: 'Mekong Pay', hostCode: 'MEKONG', description: 'Sample', hostType: 'payment_gateway', associatedPartnerId: 'PTN-004', registrationCountry: 'VN', ownerTeam: 'Tech Ops – Vietnam', notes: '' },
+    basic: { name: 'Mekong Pay', hostCode: 'MEKONG', description: 'Sample', hostType: 'payment_gateway', registrationCountry: 'VN', ownerTeam: 'Tech Ops – Vietnam', notes: '' },
     capabilities: [
       { countryCode: 'VN', paymentMethodCode: 'vietqr', availabilityStatus: 'available' },
       { countryCode: 'VN', paymentMethodCode: 'bank_transfer_payout', availabilityStatus: 'available' },
@@ -52,17 +53,19 @@ describe('Host Management', () => {
     server = new HostServer({ storage, auth, now: () => now });
   });
 
-  it('lists the sample hosts with summary cards worked out from the data', async () => {
+  it('lists the sample hosts with one status each and a setup checklist', async () => {
     const l = await list();
     expect(l.hosts.map((h) => h.hostCode).sort()).toEqual(['CIMBCOLLECT', 'HARSYA', 'LINKQU', 'PBB', 'SAIGONPAY', 'WINPAY']);
     expect(l.hosts.every((h) => h.sample)).toBe(true);
-    const count = (s: string) => l.hosts.filter((h) => h.operationalStatus === s).length;
-    expect(l.summary).toEqual({ total: 6, active: count('active'), inactive: count('disabled') + count('maintenance'), attention: count('attention') });
-    // WINPAY is active but its last check was Unreachable; Saigon PayLink's integration is incomplete.
-    expect((await byCode('WINPAY')).operationalStatus).toBe('attention');
-    expect((await byCode('SAIGONPAY')).integrationStatus).toBe('incomplete');
-    expect((await byCode('LINKQU')).integrationStatus).toBe('testing');
-    expect((await byCode('HARSYA')).integrationStatus).toBe('verified');
+    expect(l.summary).toEqual({ total: 6, active: 3, disabled: 2, maintenance: 1, draft: 0 });
+    expect(Object.fromEntries(l.hosts.map((h) => [h.hostCode, h.status]))).toEqual({ CIMBCOLLECT: 'maintenance', HARSYA: 'active', LINKQU: 'disabled', PBB: 'active', SAIGONPAY: 'disabled', WINPAY: 'active' });
+    const open = (c: string) => l.hosts.find((h) => h.hostCode === c)!.checklist.filter((x) => !x.done).map((x) => x.id);
+    expect(open('HARSYA')).toEqual([]);
+    expect(open('LINKQU')).toEqual(['production']);
+    expect(open('SAIGONPAY')).toEqual(['integration', 'production']);
+    // Nothing removed in this release comes back in the API.
+    const raw = JSON.stringify(l);
+    for (const gone of ['partner', 'credential', 'health', 'integrationStatus', 'attention', 'lastValidation']) expect(raw).not.toContain(gone);
     expect(l.can.manage).toBe(true);
   });
 
@@ -86,12 +89,12 @@ describe('Host Management', () => {
 
     const r = await call<HostDetailResponse>('POST', '/api/hosts', input());
     expect(r.status).toBe(201);
-    expect(r.body.host).toMatchObject({ id: 'HST-VN-002', hostCode: 'MEKONG', draft: false, operationalStatus: 'disabled', integrationStatus: 'configured', partnerName: 'Mekong Commerce Partners' });
+    expect(r.body.host).toMatchObject({ id: 'HST-VN-002', hostCode: 'MEKONG', draft: false, status: 'disabled' });
+    expect(r.body.host.checklist.every((c) => c.done)).toBe(true);
+    expect(r.body.enableBlockers).toEqual([]);
     expect(r.body.capabilities.map((c) => [c.paymentMethodName, c.paymentFlow, c.supportedCurrencies])).toEqual([['VietQR', 'payin', ['VND']], ['Bank Transfer', 'payout', ['VND']]]);
-    // A credential reference is assigned and only ever shown masked.
-    expect(r.body.integration!.credentialReferenceMasked).toMatch(/^cred_••••\w{4}$/);
-    expect(r.body.integration).not.toHaveProperty('credentialReference');
-    expect(r.body.activity.map((a) => a.action)).toEqual(expect.arrayContaining(['Host created', 'Payment methods added', 'Integration configuration updated']));
+    expect(r.body.integration!.missing).toEqual([]);
+    expect(r.body.activity.map((a) => a.action)).toEqual(expect.arrayContaining(['Host created', 'Payment methods added', 'Integration details updated']));
     // Payment methods must come from the country catalogue.
     const unknown = await call('POST', '/api/hosts', input({ basic: { ...input().basic, hostCode: 'X2' }, capabilities: [{ countryCode: 'VN', paymentMethodCode: 'fpx', availabilityStatus: 'available' }] }));
     expect(unknown.body.errors[0].message).toBe('Choose a payment method configured for Vietnam.');
@@ -100,17 +103,30 @@ describe('Host Management', () => {
   it('saves a draft with only a name and code, and completes it later', async () => {
     const d = await call<HostDetailResponse>('POST', '/api/hosts', { draft: true, basic: { name: 'Draft Host', hostCode: 'DRAFT1' }, capabilities: [], integration: null });
     expect(d.status).toBe(201);
-    expect(d.body.host).toMatchObject({ draft: true, operationalStatus: 'disabled', integrationStatus: 'not_configured' });
+    expect(d.body.host).toMatchObject({ draft: true, status: 'draft' });
     expect(d.body.enableBlockers[0]).toContain('draft');
+    expect(d.body.host.checklist.filter((c) => c.done)).toEqual([]);
     const done = await call<HostDetailResponse>('PUT', `/api/hosts/${d.body.host.id}`, input({ basic: { ...input().basic, name: 'Draft Host', hostCode: 'DRAFT1' } }));
     expect(done.body.host.draft).toBe(false);
     expect(done.body.activity).toEqual(expect.arrayContaining([expect.objectContaining({ action: 'Host created', details: 'Draft completed and saved.' })]));
   });
 
-  it('never stores secrets: anything that looks like a secret is refused', async () => {
-    const r = await call('POST', '/api/hosts', input({ integration: { ...input().integration!, ...({ secret: 'sk_live_123' } as object) } }));
-    expect(r.status).toBe(422);
+  it('never stores credentials: anything that looks like a secret is refused', async () => {
+    for (const extra of [{ secret: 'sk_live_123' }, { credentialReference: 'cred_ref_ABCD' }]) {
+      const r = await call('POST', '/api/hosts', input({ integration: { ...input().integration!, ...(extra as object) } }));
+      expect(r.status).toBe(422);
+    }
     expect(storage.getItem('mobi.gp.hostdb') ?? '').not.toContain('sk_live_123');
+  });
+
+  it('checks the endpoint on save: valid URL; Production needs https and not a test URL', async () => {
+    const at = async (apiBaseUrl: string, environment: 'sandbox' | 'production') =>
+      (await call('POST', '/api/hosts', input({ integration: { ...input().integration!, apiBaseUrl, environment } }))).body.errors?.[0]?.message;
+    expect(await at('not a url', 'sandbox')).toBe('Enter a valid URL, starting with https://.');
+    expect(await at('http://api.mekongpay.example', 'production')).toBe('Production endpoints must use https.');
+    expect(await at('https://sandbox.mekongpay.example', 'production')).toContain('looks like a test URL');
+    const sandbox = (await call<HostDetailResponse>('POST', '/api/hosts', input({ integration: { ...input().integration!, apiBaseUrl: 'https://sandbox.mekongpay.example', environment: 'sandbox' } }))).body;
+    expect(sandbox.enableBlockers).toEqual(['Set the Production endpoint: a Sandbox endpoint cannot take live payments.']);
   });
 
   it('manages capabilities one by one: disabling a method never disables the host', async () => {
@@ -119,80 +135,55 @@ describe('Host Management', () => {
     const ovo = before.capabilities.find((c) => c.paymentMethodCode === 'ovo')!;
     const r = await call<HostDetailResponse>('PUT', `/api/hosts/${h.id}/capabilities/${ovo.id}`, { availabilityStatus: 'disabled' });
     expect(r.body.capabilities.find((c) => c.id === ovo.id)!.availabilityStatus).toBe('disabled');
-    expect(r.body.host.operationalStatus).toBe('active');
+    expect(r.body.host.status).toBe('active');
     expect(r.body.activity[0]).toMatchObject({ action: 'Payment method disabled', details: 'OVO · PayIn · Indonesia · Disabled' });
+    const back = await call<HostDetailResponse>('PUT', `/api/hosts/${h.id}/capabilities/${ovo.id}`, { availabilityStatus: 'available' });
+    expect(back.body.activity[0]).toMatchObject({ action: 'Payment method updated', details: 'OVO · PayIn · Indonesia · Available' });
     const add = await call<HostDetailResponse>('POST', `/api/hosts/${h.id}/capabilities`, { countryCode: 'ID', paymentMethodCode: 'dana', availabilityStatus: 'available' });
     expect(add.status).toBe(201);
     expect((await call('POST', `/api/hosts/${h.id}/capabilities`, { countryCode: 'ID', paymentMethodCode: 'dana' })).status).toBe(409);
   });
 
-  it('validates the configuration (simulated) and tells Testing from Verified', async () => {
-    const created = (await call<HostDetailResponse>('POST', '/api/hosts', input({ integration: { ...input().integration!, environment: 'sandbox', apiBaseUrl: 'https://sandbox.mekongpay.example' } }))).body;
-    const v = await call<HostDetailResponse & { validation: { result: string } }>('POST', `/api/hosts/${created.host.id}/validate`);
-    expect(v.body.validation.result).toBe('valid');
-    expect(v.body.host.integrationStatus).toBe('testing');
-    // Switching to production with a sandbox URL fails validation.
-    await call('PUT', `/api/hosts/${created.host.id}`, input({ integration: { ...input().integration!, apiBaseUrl: 'https://sandbox.mekongpay.example' } }));
-    expect((await detail(created.host.id)).host.integrationStatus).toBe('configured');
-    const failed = await call<HostDetailResponse & { validation: { result: string; messages: string[] } }>('POST', `/api/hosts/${created.host.id}/validate`);
-    expect(failed.body.validation).toMatchObject({ result: 'failed', messages: ['The production endpoint looks like a test URL (contains sandbox, staging, test or UAT).'] });
-    expect(failed.body.host.integrationStatus).toBe('error');
-    // Incomplete configuration.
+  it('enables only a host whose setup checklist is complete; disable and maintenance need a reason and a code', async () => {
     const saigon = await byCode('SAIGONPAY');
-    const inc = await call<HostDetailResponse & { validation: { result: string; messages: string[] } }>('POST', `/api/hosts/${saigon.id}/validate`);
-    expect(inc.body.validation.result).toBe('incomplete');
-    expect(inc.body.validation.messages).toEqual(expect.arrayContaining(['Token URL is missing.']));
-  });
+    expect((await call('POST', `/api/hosts/${saigon.id}/status`, { action: 'enable', code: await code() })).body.message).toContain('Complete the integration details.');
+    const draft = (await call<HostDetailResponse>('POST', '/api/hosts', { draft: true, basic: { name: 'Draft Host', hostCode: 'DRAFT2' }, capabilities: [], integration: null })).body;
+    expect((await call('POST', `/api/hosts/${draft.host.id}/status`, { action: 'disable', reason: 'Not needed now', confirm: true })).body.message).toContain('draft');
 
-  it('replaces the credential reference only with an authenticator code', async () => {
-    const h = await byCode('HARSYA');
-    expect((await call('POST', `/api/hosts/${h.id}/credentials`, {})).body).toMatchObject({ code: 'MFA_CODE_REQUIRED' });
-    const before = (await detail(h.id)).integration!.credentialReferenceMasked;
-    const r = await call<HostDetailResponse>('POST', `/api/hosts/${h.id}/credentials`, { code: await code() });
-    expect(r.body.integration!.credentialReferenceMasked).not.toBe(before);
-    // A new reference changes the configuration: validate again before it is Verified.
-    expect(r.body.host.integrationStatus).toBe('configured');
-    expect(r.body.host.operationalStatus).toBe('attention');
-    expect(r.body.activity[0].action).toBe('Credential reference replaced');
-  });
-
-  it('enables only a verified host with an available capability; disable and maintenance need a reason and a code', async () => {
     const created = (await call<HostDetailResponse>('POST', '/api/hosts', input())).body;
     const id = created.host.id;
-    expect((await call('POST', `/api/hosts/${id}/status`, { action: 'enable', code: await code() })).body.message).toContain('must be Verified');
-    await call('POST', `/api/hosts/${id}/validate`);
     expect((await call('POST', `/api/hosts/${id}/status`, { action: 'enable' })).body).toMatchObject({ code: 'MFA_CODE_REQUIRED' });
     const on = await call<HostDetailResponse>('POST', `/api/hosts/${id}/status`, { action: 'enable', code: await code() });
-    expect(on.body.host.operationalStatus).toBe('active');
+    expect(on.body.host.status).toBe('active');
     expect(on.body.activity[0]).toMatchObject({ action: 'Host enabled' });
 
     expect((await call('POST', `/api/hosts/${id}/status`, { action: 'maintenance', reason: 'x', code: await code() })).body.message).toBe('Enter a reason (at least 5 characters).');
     const m = await call<HostDetailResponse>('POST', `/api/hosts/${id}/status`, { action: 'maintenance', reason: 'Provider upgrade tonight', until: now + 3600_000, code: await code() });
-    expect(m.body.host.operationalStatus).toBe('maintenance');
+    expect(m.body.host.status).toBe('maintenance');
     expect(m.body.host.maintenance).toMatchObject({ reason: 'Provider upgrade tonight' });
     const back = await call<HostDetailResponse>('POST', `/api/hosts/${id}/status`, { action: 'enable', code: await code() });
     expect(back.body.activity[0].action).toBe('Host re-enabled');
 
     expect((await call('POST', `/api/hosts/${id}/status`, { action: 'disable', reason: 'Provider outage on VA', code: await code() })).body.message).toBe('Confirm that the host stops being eligible for routing.');
     const off = await call<HostDetailResponse>('POST', `/api/hosts/${id}/status`, { action: 'disable', reason: 'Provider outage on VA', confirm: true, code: await code() });
-    expect(off.body.host).toMatchObject({ operationalStatus: 'disabled', disabledReason: 'Provider outage on VA' });
+    expect(off.body.host).toMatchObject({ status: 'disabled', disabledReason: 'Provider outage on VA' });
     expect(off.body.activity[0].details).toContain('No traffic is rerouted automatically.');
   });
 
-  it('simulates health checks; an incomplete configuration is never Healthy', async () => {
-    const saigon = await byCode('SAIGONPAY');
-    const r = await call<HostDetailResponse>('POST', `/api/hosts/${saigon.id}/health-check`);
-    expect(r.body.health[0]).toMatchObject({ status: 'unknown', simulated: true });
-    const h = await byCode('PBB');
-    const checks = [];
-    for (let i = 0; i < 6; i++) {
-      now += 1000;
-      checks.push((await call<HostDetailResponse>('POST', `/api/hosts/${h.id}/health-check`)).body.health[0]);
-    }
-    expect(checks.every((c) => ['healthy', 'degraded', 'unreachable'].includes(c.status) && c.simulated && c.message.includes('simulated'))).toBe(true);
-    const rows = (await call<HostHealthRow[]>('GET', '/api/hosts/health')).body;
-    expect(rows.find((x) => x.hostCode === 'SAIGONPAY')!.status).toBe('unknown');
-    expect(rows.find((x) => x.hostCode === 'WINPAY')).toMatchObject({ status: 'unreachable', recentError: 'No response within 30 s (simulated).' });
+  it('an active host stays ready: edits that would break its setup are refused until it is disabled', async () => {
+    const h = await byCode('HARSYA');
+    const d = await detail(h.id);
+    const same = (over: Partial<HostDraftInput>): HostDraftInput => ({
+      draft: false,
+      basic: { name: h.name, hostCode: h.hostCode, description: h.description, hostType: h.hostType, registrationCountry: h.registrationCountry, ownerTeam: h.ownerTeam, notes: h.notes },
+      capabilities: d.capabilities.map((c) => ({ countryCode: c.countryCode, paymentMethodCode: c.paymentMethodCode, availabilityStatus: c.availabilityStatus })),
+      integration: { ...d.integration!, apiBaseUrl: d.integration!.apiBaseUrl },
+      ...over,
+    });
+    const toSandbox = await call('PUT', `/api/hosts/${h.id}`, same({ integration: { ...d.integration!, environment: 'sandbox', apiBaseUrl: 'https://sandbox.harsya.example' } }));
+    expect(toSandbox).toMatchObject({ status: 409, body: { code: 'INVALID_TRANSITION' } });
+    expect(toSandbox.body.message).toContain('Disable it first');
+    expect((await call('PUT', `/api/hosts/${h.id}`, same({ basic: { ...same({}).basic, description: 'Updated description' } }))).status).toBe(200);
   });
 
   it('keeps hosts after a reload (new server, same storage) and lists all activity', async () => {

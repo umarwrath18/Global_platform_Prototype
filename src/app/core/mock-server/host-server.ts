@@ -2,9 +2,8 @@ import {
   AuthMethod,
   AVAILABILITY_LABEL,
   AvailabilityStatus,
-  completionOf,
+  checklistOf,
   enableBlockers,
-  HEALTH_STATUS_LABEL,
   Host,
   HOST_ADAPTERS,
   HOST_CODE_RE,
@@ -16,8 +15,6 @@ import {
   HostDetailResponse,
   HostEnvironment,
   HostFieldError,
-  HostHealthCheck,
-  HostHealthRow,
   HostIntegration,
   HostIntegrationView,
   HostListResponse,
@@ -25,41 +22,33 @@ import {
   HostView,
   hostCountries,
   hostMethods,
-  integrationFingerprint,
   integrationMissing,
-  integrationStatusOf,
-  maskReference,
   methodName,
-  operationalStatusOf,
-  Partner,
   PAYMENT_FLOW_LABEL,
   registrationCountries,
-  VALIDATION_RESULT_LABEL,
-  validateIntegration,
+  statusOf,
 } from '../hosts/hosts';
 import { countryName } from '../merchants/onboarding-config';
 
 /**
- * Host Management (Batch 5A), simulated backend. Hosts, capabilities, integrations, health checks
- * and activity are stored apart (own localStorage key), linked by host ID. Every internal team can
- * view; only Tech Ops (or the prototype admin acting as Tech Ops) can change anything. Enable,
- * disable, maintenance and credential replacement need a current authenticator code.
+ * Host Management, simulated backend. Hosts, capabilities, integrations and activity are stored
+ * apart (own localStorage key), linked by host ID. Every internal team can view; only Tech Ops (or
+ * the prototype admin acting as Tech Ops) can change anything. Enable, disable and maintenance
+ * need a current authenticator code.
  *
- * No secrets are ever received or stored: integrations keep an opaque credential reference that
- * this server generates. Validation and health checks are simulated and never contact a provider.
+ * No credentials or secrets are received or stored, and no connection or health data exists.
  */
 
 const KEY = 'mobi.gp.hostdb';
-const DB_VERSION = 1;
+/** 2: one status, setup checklist; partners, credential references, validation and health removed. */
+const DB_VERSION = 2;
 
 interface HostDb {
   version: number;
   seq: { host: Record<string, number>; any: number };
-  partners: Partner[];
   hosts: Host[];
   capabilities: HostCapability[];
   integrations: HostIntegration[];
-  health: HostHealthCheck[];
   activity: HostActivity[];
 }
 
@@ -124,21 +113,12 @@ export class HostServer {
       const [, , id, sub, subId] = rawPath.split('/').filter(Boolean);
       const m = method.toUpperCase();
       if (m === 'GET' && !id) return ok(this.list(who));
-      if (m === 'GET' && id === 'health' && !sub) return ok(this.healthRows());
       if (m === 'GET' && id === 'activity' && !sub) return ok(this.allActivity(q));
       if (m === 'POST' && !id) return ok(this.save(who, null, body), 201);
       if (m === 'GET' && id && !sub) return ok(this.detail(who, id));
       if (m === 'PUT' && id && !sub) return ok(this.save(who, id, body));
       if (m === 'POST' && id && sub === 'capabilities' && !subId) return ok(this.addCapability(who, id, body), 201);
       if (m === 'PUT' && id && sub === 'capabilities' && subId) return ok(this.updateCapability(who, id, subId, body));
-      if (m === 'POST' && id && sub === 'validate') return ok(this.validate(who, id));
-      if (m === 'POST' && id && sub === 'health-check') return ok(this.healthCheck(who, id));
-      if (m === 'POST' && id && sub === 'credentials') {
-        this.requireManage(who);
-        const denied = await this.stepUp(token, body?.code);
-        if (denied) return denied;
-        return ok(this.replaceCredential(who, id));
-      }
       if (m === 'POST' && id && sub === 'status') {
         this.requireManage(who);
         this.checkStatusChange(id, body);
@@ -187,15 +167,10 @@ export class HostServer {
   private list(who: Who): HostListResponse {
     const db = this.load();
     const hosts = db.hosts.map((h) => this.view(db, h)).sort((a, b) => a.name.localeCompare(b.name));
+    const count = (st: HostView['status']) => hosts.filter((h) => h.status === st).length;
     return {
       hosts,
-      partners: db.partners,
-      summary: {
-        total: hosts.length,
-        active: hosts.filter((h) => h.operationalStatus === 'active').length,
-        inactive: hosts.filter((h) => h.operationalStatus === 'disabled' || h.operationalStatus === 'maintenance').length,
-        attention: hosts.filter((h) => h.operationalStatus === 'attention').length,
-      },
+      summary: { total: hosts.length, active: count('active'), disabled: count('disabled'), maintenance: count('maintenance'), draft: count('draft') },
       can: { manage: who.manage },
       sampleData: true,
     };
@@ -205,41 +180,16 @@ export class HostServer {
     const db = this.load();
     const host = this.find(db, id);
     const view = this.view(db, host);
-    const caps = db.capabilities.filter((c) => c.hostId === host.id);
     const integration = db.integrations.find((i) => i.hostId === host.id) ?? null;
     return {
       host: view,
-      capabilities: caps.map(capView),
-      integration: integration ? integrationView(integration) : null,
-      health: db.health.filter((x) => x.hostId === host.id).sort((a, b) => b.checkedAt - a.checkedAt).slice(0, 20),
+      capabilities: db.capabilities.filter((c) => c.hostId === host.id).map(capView),
+      integration: integration ? { ...integration, missing: integrationMissing(integration) } : null,
       activity: db.activity.filter((a) => a.hostId === host.id).sort((a, b) => b.timestamp - a.timestamp || b.id.localeCompare(a.id)),
-      partner: db.partners.find((p) => p.id === host.associatedPartnerId) ?? null,
-      enableBlockers: enableBlockers(host, view.integrationStatus, caps),
+      enableBlockers: enableBlockers(view.checklist),
       can: { manage: who.manage },
       sampleData: true,
     };
-  }
-
-  private healthRows(): HostHealthRow[] {
-    const db = this.load();
-    return db.hosts
-      .map((h) => {
-        const v = this.view(db, h);
-        const last = v.lastHealth;
-        const lastProblem = db.health.filter((x) => x.hostId === h.id && x.status !== 'healthy' && x.status !== 'unknown').sort((a, b) => b.checkedAt - a.checkedAt)[0];
-        return {
-          hostId: h.id,
-          hostName: h.name,
-          hostCode: h.hostCode,
-          countries: v.markets,
-          paymentMethods: v.paymentMethods,
-          status: last?.status ?? 'unknown',
-          checkedAt: last?.checkedAt ?? null,
-          responseTimeMs: last?.responseTimeMs ?? null,
-          recentError: last && last.status !== 'healthy' ? last.message : (lastProblem?.message ?? null),
-        };
-      })
-      .sort((a, b) => a.hostName.localeCompare(b.hostName));
   }
 
   private allActivity(q: URLSearchParams): HostActivity[] {
@@ -253,18 +203,13 @@ export class HostServer {
   private view(db: HostDb, h: Host): HostView {
     const caps = db.capabilities.filter((c) => c.hostId === h.id);
     const integration = db.integrations.find((i) => i.hostId === h.id) ?? null;
-    const integrationStatus = integrationStatusOf(integration);
-    const lastHealth = db.health.filter((x) => x.hostId === h.id).sort((a, b) => b.checkedAt - a.checkedAt)[0] ?? null;
     const active = caps.filter((c) => c.availabilityStatus !== 'disabled');
     return {
       ...h,
-      integrationStatus,
-      operationalStatus: operationalStatusOf(h, integrationStatus, lastHealth),
-      partnerName: db.partners.find((p) => p.id === h.associatedPartnerId)?.name ?? null,
+      status: statusOf(h),
       markets: [...new Set(caps.map((c) => countryName(c.countryCode)))],
       paymentMethods: [...new Set(active.map((c) => methodName(c.countryCode, c.paymentMethodCode) + (c.paymentFlow === 'payout' ? ' (Payout)' : '')))],
-      lastHealth,
-      completion: completionOf(h, caps, integrationStatus),
+      checklist: checklistOf(h, caps, integration),
     };
   }
 
@@ -280,6 +225,12 @@ export class HostServer {
     const caps = this.readCapabilities(body?.capabilities, draft, errors);
     const integ = this.readIntegration(body?.integration, errors);
     if (errors.length) fail(422, 'VALIDATION_FAILED', `${errors.length} item${errors.length === 1 ? '' : 's'} must be fixed.`, errors);
+    if (existing && existing.operationalState !== 'disabled' && !existing.draft) {
+      // An active (or maintenance) host must stay ready to enable; disable it first to take it apart.
+      const prospective = checklistOf({ ...existing, ...basic, draft }, caps, integ ? ({ ...integ } as HostIntegration) : (db.integrations.find((i) => i.hostId === existing.id) ?? null));
+      const open = enableBlockers(prospective);
+      if (draft || open.length) fail(409, 'INVALID_TRANSITION', `${existing.name} is ${existing.operationalState === 'active' ? 'Active' : 'under maintenance'}, so it must stay ready: ${draft ? 'it cannot go back to draft.' : open.join(' ')} Disable it first to make this change.`);
+    }
     const now = this.now();
 
     let host: Host;
@@ -338,23 +289,18 @@ export class HostServer {
     }
     if (!existing && caps.length) this.log(db, host, who, 'Payment methods added', caps.map((c) => `${methodName(c.countryCode, c.paymentMethodCode)} (${countryName(c.countryCode)})`).join(', '));
 
-    // Integration: a credential reference is assigned (simulated) once an auth method is chosen.
+    // Integration details (nothing secret). An active host can't be left without a complete,
+    // production integration: the save is refused above (checkActiveStaysReady).
     if (integ) {
       let rec = db.integrations.find((i) => i.hostId === host.id);
-      const before = rec ? integrationFingerprint(rec) : null;
+      const before = rec ? JSON.stringify(integrationFields(rec)) : null;
       if (!rec) {
-        rec = { id: this.nextId(db, 'INT'), hostId: host.id, lastValidation: null, credentialReference: null, credentialUpdatedAt: null, credentialUpdatedBy: null, ...integ, updatedAt: now };
+        rec = { id: this.nextId(db, 'INT'), hostId: host.id, ...integ, updatedAt: now };
         db.integrations.push(rec);
       } else {
         Object.assign(rec, integ, { updatedAt: now });
       }
-      if (rec.authenticationType && !rec.credentialReference) {
-        rec.credentialReference = this.newReference(db);
-        rec.credentialUpdatedAt = now;
-        rec.credentialUpdatedBy = who.label;
-      }
-      if (!rec.authenticationType) rec.credentialReference = null;
-      if (before !== integrationFingerprint(rec) || !before) this.log(db, host, who, 'Integration configuration updated', `${rec.integrationName || 'Integration'} · ${rec.environment === 'production' ? 'Production' : 'Sandbox'} · ${integrationMissing(rec).length ? 'incomplete' : 'complete'}`);
+      if (before !== JSON.stringify(integrationFields(rec))) this.log(db, host, who, 'Integration details updated', `${rec.integrationName || 'Integration'} · ${rec.environment === 'production' ? 'Production' : 'Sandbox'} · ${integrationMissing(rec).length ? 'incomplete' : 'complete'}`);
     }
 
     this.saveDb(db);
@@ -368,18 +314,16 @@ export class HostServer {
     const hostType = (HOST_TYPES.some((t) => t.id === b.hostType) ? b.hostType : '') as HostType;
     const registrationCountry = registrationCountries().some((c) => c.code === b.registrationCountry) ? String(b.registrationCountry) : '';
     const ownerTeam = s(b.ownerTeam, 80);
-    const partnerId = b.associatedPartnerId ? String(b.associatedPartnerId) : null;
     if (!name) errors.push({ field: 'basic.name', message: 'Enter the host name.' });
     if (!hostCode) errors.push({ field: 'basic.hostCode', message: 'Enter a host code.' });
     else if (!HOST_CODE_RE.test(hostCode)) errors.push({ field: 'basic.hostCode', message: 'Use 2–20 letters, numbers, dashes or underscores, starting with a letter or number.' });
     else if (db.hosts.some((h) => h.hostCode === hostCode && h.id !== existing?.id)) errors.push({ field: 'basic.hostCode', message: `${hostCode} is already used by another host. Choose a unique code.` });
-    if (partnerId && !db.partners.some((p) => p.id === partnerId)) errors.push({ field: 'basic.associatedPartnerId', message: 'Choose a partner from the list.' });
     if (!draft) {
       if (!hostType) errors.push({ field: 'basic.hostType', message: 'Choose the host type.' });
       if (!registrationCountry) errors.push({ field: 'basic.registrationCountry', message: 'Choose the country of registration.' });
       if (!ownerTeam) errors.push({ field: 'basic.ownerTeam', message: 'Enter the responsible team.' });
     }
-    return { name, hostCode, description: s(b.description, 300), hostType: hostType || 'other', associatedPartnerId: partnerId, registrationCountry, ownerTeam, notes: s(b.notes, 1000) };
+    return { name, hostCode, description: s(b.description, 300), hostType: hostType || 'other', registrationCountry, ownerTeam, notes: s(b.notes, 1000) };
   }
 
   private readCapabilities(raw: unknown, draft: boolean, errors: HostFieldError[]) {
@@ -412,13 +356,19 @@ export class HostServer {
     let timeout: number | null = null;
     if (raw.timeoutSeconds !== null && raw.timeoutSeconds !== undefined && raw.timeoutSeconds !== '') {
       timeout = Number(raw.timeoutSeconds);
-      if (!Number.isInteger(timeout) || timeout < 1 || timeout > 600) {
-        errors.push({ field: 'integration.timeoutSeconds', message: 'Enter a whole number of seconds (1–600).' });
+      if (!Number.isInteger(timeout) || timeout < 5 || timeout > 120) {
+        errors.push({ field: 'integration.timeoutSeconds', message: 'Enter a whole number of seconds (5–120).' });
         timeout = null;
       }
     }
     // Secrets are never accepted: anything that looks like one is refused, not stored.
-    if (raw.secret || raw.apiKey || raw.password || raw.privateKey) errors.push({ field: 'integration', message: 'Secrets are not entered here. Mobi assigns a credential reference.' });
+    if (raw.secret || raw.apiKey || raw.password || raw.privateKey || raw.credentialReference) errors.push({ field: 'integration', message: 'Credentials and secrets are not entered or kept in Host Management.' });
+    const url = s(raw.apiBaseUrl, 300);
+    if (url && !URL_RE.test(url)) errors.push({ field: 'integration.apiBaseUrl', message: 'Enter a valid URL, starting with https://.' });
+    else if (url && environment === 'production' && !url.toLowerCase().startsWith('https://')) errors.push({ field: 'integration.apiBaseUrl', message: 'Production endpoints must use https.' });
+    else if (url && environment === 'production' && /sandbox|staging|test|uat/i.test(url)) errors.push({ field: 'integration.apiBaseUrl', message: 'This looks like a test URL (sandbox, staging, test or UAT). Use the production endpoint, or choose Sandbox.' });
+    const tokenUrl = authConfig.tokenUrl;
+    if (auth === 'oauth2' && tokenUrl && !URL_RE.test(tokenUrl)) errors.push({ field: 'integration.authConfig.tokenUrl', message: 'Enter a valid token URL.' });
     return {
       integrationName: s(raw.integrationName, 80),
       adapterType: adapter,
@@ -471,64 +421,6 @@ export class HostServer {
     return this.detail(who, id);
   }
 
-  // ------------------------------------------------------------- integration actions
-
-  private validate(who: Who, id: string): HostDetailResponse & { validation: { result: string; label: string; messages: string[] } } {
-    this.requireManage(who);
-    const db = this.load();
-    const host = this.find(db, id);
-    const integ = db.integrations.find((i) => i.hostId === host.id) ?? fail(409, 'INVALID_TRANSITION', 'Add the integration configuration first.');
-    const r = validateIntegration(integ);
-    integ.lastValidation = { result: r.result, at: this.now(), by: who.label, messages: r.messages, fingerprint: integrationFingerprint(integ) };
-    this.log(db, host, who, 'Configuration validated', `${VALIDATION_RESULT_LABEL[r.result]} (simulated)${r.result === 'valid' ? '' : ': ' + r.messages.join(' ')}`);
-    this.saveDb(db);
-    return { ...this.detail(who, id), validation: { result: r.result, label: VALIDATION_RESULT_LABEL[r.result], messages: r.messages } };
-  }
-
-  /** Simulated: a new opaque reference replaces the old one. No secret is entered or stored. */
-  private replaceCredential(who: Who, id: string): HostDetailResponse {
-    const db = this.load();
-    const host = this.find(db, id);
-    const integ = db.integrations.find((i) => i.hostId === host.id) ?? fail(409, 'INVALID_TRANSITION', 'Add the integration configuration first.');
-    if (!integ.authenticationType) fail(409, 'INVALID_TRANSITION', 'Choose an authentication method first.');
-    const old = maskReference(integ.credentialReference);
-    integ.credentialReference = this.newReference(db);
-    integ.credentialUpdatedAt = this.now();
-    integ.credentialUpdatedBy = who.label;
-    integ.updatedAt = this.now();
-    this.touch(host, who);
-    this.log(db, host, who, 'Credential reference replaced', `${old ?? 'None'} → ${maskReference(integ.credentialReference)} (simulated). Validate the configuration again.`);
-    this.saveDb(db);
-    return this.detail(who, id);
-  }
-
-  /** Simulated connection check. A host whose configuration is incomplete is not checked (Unknown). */
-  private healthCheck(who: Who, id: string): HostDetailResponse {
-    this.requireManage(who);
-    const db = this.load();
-    const host = this.find(db, id);
-    const integ = db.integrations.find((i) => i.hostId === host.id) ?? null;
-    const status = integrationStatusOf(integ);
-    const count = db.health.filter((x) => x.hostId === host.id).length;
-    let check: Omit<HostHealthCheck, 'id' | 'hostId' | 'checkedAt' | 'by' | 'simulated'>;
-    if (status === 'not_configured' || status === 'incomplete') {
-      check = { status: 'unknown', responseTimeMs: null, message: 'Not checked: the integration configuration is incomplete.' };
-    } else {
-      const roll = hash(`${host.id}:${count}`) % 10;
-      const timeout = (integ?.timeoutSeconds ?? 30) * 1000;
-      check =
-        roll === 0
-          ? { status: 'unreachable', responseTimeMs: null, message: `No response within ${timeout / 1000} s (simulated).` }
-          : roll <= 2
-            ? { status: 'degraded', responseTimeMs: 1500 + (hash(`${host.id}:${count}:t`) % 1100), message: 'Slow response, above 1,500 ms (simulated).' }
-            : { status: 'healthy', responseTimeMs: 150 + (hash(`${host.id}:${count}:t`) % 300), message: 'OK (simulated).' };
-    }
-    db.health.push({ id: this.nextId(db, 'HC'), hostId: host.id, checkedAt: this.now(), by: who.label, simulated: true, ...check });
-    this.log(db, host, who, 'Health check performed', `${HEALTH_STATUS_LABEL[check.status]}${check.responseTimeMs ? ` · ${check.responseTimeMs} ms` : ''} · simulated, not a live connection test`);
-    this.saveDb(db);
-    return this.detail(who, id);
-  }
-
   // ------------------------------------------------------------- operational controls
 
   /** All checks before the authenticator code is asked for. */
@@ -538,17 +430,17 @@ export class HostServer {
     const action = body?.action;
     const reason = String(body?.reason ?? '').trim();
     const view = this.view(db, host);
-    const caps = db.capabilities.filter((c) => c.hostId === host.id);
     if (action === 'enable') {
-      if (host.operationalState === 'active') fail(409, 'INVALID_TRANSITION', 'The host is already enabled.');
-      const blockers = enableBlockers(host, view.integrationStatus, caps);
+      if (host.operationalState === 'active' && !host.draft) fail(409, 'INVALID_TRANSITION', 'The host is already enabled.');
+      const blockers = enableBlockers(view.checklist);
       if (blockers.length) fail(409, 'INVALID_TRANSITION', blockers.join(' '));
     } else if (action === 'disable') {
+      if (host.draft) fail(409, 'INVALID_TRANSITION', 'A draft host is not in use; there is nothing to disable.');
       if (host.operationalState === 'disabled') fail(409, 'INVALID_TRANSITION', 'The host is already disabled.');
       if (reason.length < 5) fail(422, 'VALIDATION_FAILED', 'Enter a reason (at least 5 characters).');
       if (body?.confirm !== true) fail(422, 'VALIDATION_FAILED', 'Confirm that the host stops being eligible for routing.');
     } else if (action === 'maintenance') {
-      if (host.operationalState !== 'active') fail(409, 'INVALID_TRANSITION', 'Only an active host can be put under maintenance.');
+      if (host.draft || host.operationalState !== 'active') fail(409, 'INVALID_TRANSITION', 'Only an active host can be put under maintenance.');
       if (reason.length < 5) fail(422, 'VALIDATION_FAILED', 'Enter a reason (at least 5 characters).');
       if (body?.until !== null && body?.until !== undefined && body?.until !== '') {
         const until = Number(body.until);
@@ -603,12 +495,6 @@ export class HostServer {
     return { id: this.nextId(db, 'CAP'), hostId, countryCode: c.countryCode, paymentMethodCode: c.paymentMethodCode, paymentFlow: method.flow, supportedCurrencies: [currency], availabilityStatus: c.availabilityStatus, createdAt: now, updatedAt: now };
   }
 
-  private newReference(db: HostDb): string {
-    db.seq.any += 1;
-    const tail = hash(`${db.seq.any}:${this.now()}`).toString(36).toUpperCase().padStart(4, '0').slice(-4);
-    return `cred_ref_${tail}`;
-  }
-
   private nextId(db: HostDb, prefix: string) {
     db.seq.any += 1;
     return `${prefix}-${String(db.seq.any).padStart(5, '0')}`;
@@ -644,10 +530,13 @@ function capView(c: HostCapability): HostCapabilityView {
   return { ...c, countryName: countryName(c.countryCode), paymentMethodName: methodName(c.countryCode, c.paymentMethodCode) };
 }
 
-function integrationView(i: HostIntegration): HostIntegrationView {
-  const { credentialReference, ...rest } = i;
-  return { ...rest, credentialReferenceMasked: maskReference(credentialReference), configurationStatus: integrationStatusOf(i), missing: integrationMissing(i) };
+/** The integration details that matter for the activity log (not the timestamps). */
+function integrationFields(i: HostIntegration) {
+  const { id: _i, hostId: _h, updatedAt: _u, ...rest } = i;
+  return rest;
 }
+
+const URL_RE = /^https?:\/\/[a-z0-9.-]+(:\d+)?(\/\S*)?$/i;
 
 function capLabel(c: HostCapability) {
   return `${methodName(c.countryCode, c.paymentMethodCode)} · ${PAYMENT_FLOW_LABEL[c.paymentFlow]} · ${countryName(c.countryCode)}`;
@@ -660,95 +549,69 @@ const FIELD_LABEL: Record<string, string> = {
   hostCode: 'Host Code',
   description: 'Description',
   hostType: 'Host Type',
-  associatedPartnerId: 'Associated Partner',
   registrationCountry: 'Country of Registration',
   ownerTeam: 'Internal Owner',
   notes: 'Notes',
 };
 
-const TEAM_LABEL: Record<string, string> = { sales: 'Sales / Operations', risk: 'Risk', cs: 'Customer Success', finops: 'FinOps', support: 'Mobi Support', security: 'Security Admin', admin: 'Prototype admin' };
+const TEAM_LABEL: Record<string, string> = { techops: 'Tech Ops', sales: 'Sales / Operations', risk: 'Risk', cs: 'Customer Success', finops: 'FinOps', support: 'Mobi Support', security: 'Security Admin', admin: 'Prototype admin' };
 
 function ok(body: unknown, status = 200): Reply {
   return { status, body };
-}
-
-function hash(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
 }
 
 // ------------------------------------------------------------------ sample data (clearly labelled)
 
 const DAY = 86_400_000;
 const TECH = 'Wei Ling Tan (Tech Ops)';
-const SYSTEM = 'System (simulated)';
 
-/** Sample hosts and partners. Names identify demo records only; none is a live integration. */
+/** Sample hosts. Names identify demo records only; none is a live integration. */
 function seed(now: number): HostDb {
-  const db: HostDb = { version: DB_VERSION, seq: { host: {}, any: 0 }, partners: [], hosts: [], capabilities: [], integrations: [], health: [], activity: [] };
+  const db: HostDb = { version: DB_VERSION, seq: { host: {}, any: 0 }, hosts: [], capabilities: [], integrations: [], activity: [] };
   const id = (p: string) => `${p}-${String(++db.seq.any).padStart(5, '0')}`;
-  db.partners = [
-    { id: 'PTN-001', name: 'Nusa Payments Partnership', country: 'ID', sample: true },
-    { id: 'PTN-002', name: 'Public Bank Berhad', country: 'MY', sample: true },
-    { id: 'PTN-003', name: 'Saigon PayLink JSC', country: 'VN', sample: true },
-    { id: 'PTN-004', name: 'Mekong Commerce Partners', country: 'VN', sample: true },
-  ];
   type SeedHost = {
     code: string;
     name: string;
     type: HostType;
-    partner: string | null;
     country: string;
     state: Host['operationalState'];
     desc: string;
     caps: [string, string, AvailabilityStatus][];
     integ: Partial<HostIntegration> | null;
-    validated: boolean;
-    health: [number, HostHealthCheck['status'], number | null, string][];
     maintenance?: string;
     disabledReason?: string;
   };
   const rest = (url: string, env: HostEnvironment, auth: AuthMethod, cfg: HostAuthConfig, name: string): Partial<HostIntegration> => ({ integrationName: name, adapterType: 'mobi_rest_v1', apiBaseUrl: url, apiVersion: 'v1', environment: env, authenticationType: auth, authConfig: cfg, timeoutSeconds: 30, connectionConfig: 'Callback URL: https://pay.mobi.example/hooks · IP allowlist: 2 addresses', notes: '' });
   const hosts: SeedHost[] = [
     {
-      code: 'HARSYA', name: 'HARSYA', type: 'payment_aggregator', partner: 'PTN-001', country: 'ID', state: 'active', desc: 'Indonesian aggregator for virtual accounts, QRIS and e-wallets.',
+      code: 'HARSYA', name: 'HARSYA', type: 'payment_aggregator', country: 'ID', state: 'active', desc: 'Indonesian aggregator for virtual accounts, QRIS and e-wallets.',
       caps: [['ID', 'va', 'available'], ['ID', 'qris', 'available'], ['ID', 'ovo', 'available']],
-      integ: rest('https://api.harsya.example/v1', 'production', 'oauth2', { tokenUrl: 'https://api.harsya.example/oauth/token', clientId: 'mobi-collections', scope: 'payments' }, 'HARSYA Collections API'), validated: true,
-      health: [[3, 'healthy', 284, 'OK (simulated).'], [2, 'healthy', 301, 'OK (simulated).'], [1, 'healthy', 312, 'OK (simulated).']],
+      integ: rest('https://api.harsya.example/v1', 'production', 'oauth2', { tokenUrl: 'https://api.harsya.example/oauth/token', clientId: 'mobi-collections', scope: 'payments' }, 'HARSYA Collections API'),
     },
     {
-      code: 'WINPAY', name: 'WINPAY', type: 'payment_aggregator', partner: 'PTN-001', country: 'ID', state: 'active', desc: 'Virtual accounts and bank payouts in Indonesia.',
+      code: 'WINPAY', name: 'WINPAY', type: 'payment_aggregator', country: 'ID', state: 'active', desc: 'Virtual accounts and bank payouts in Indonesia.',
       caps: [['ID', 'va', 'available'], ['ID', 'bank_transfer_payout', 'available']],
-      integ: rest('https://api.winpay.example/v2', 'production', 'api_key_secret', { keyHeader: 'X-Api-Key', signature: 'HMAC-SHA256' }, 'WINPAY Gateway API'), validated: true,
-      health: [[3, 'healthy', 284, 'OK (simulated).'], [2, 'degraded', 2140, 'Slow response, above 1,500 ms (simulated).'], [1, 'unreachable', null, 'No response within 30 s (simulated).']],
+      integ: rest('https://api.winpay.example/v2', 'production', 'api_key_secret', { keyHeader: 'X-Api-Key', signature: 'HMAC-SHA256' }, 'WINPAY Gateway API'),
     },
     {
-      code: 'LINKQU', name: 'LINKQU', type: 'payment_aggregator', partner: null, country: 'ID', state: 'disabled', desc: 'Payout and e-wallet aggregator; sandbox testing in progress.',
+      code: 'LINKQU', name: 'LINKQU', type: 'payment_aggregator', country: 'ID', state: 'disabled', desc: 'Payout and e-wallet aggregator; sandbox testing in progress.',
       caps: [['ID', 'bank_transfer_payout', 'available'], ['ID', 'dana', 'available'], ['ID', 'va', 'unavailable']],
-      integ: rest('https://sandbox.linkqu.example/api', 'sandbox', 'api_key_secret', { keyHeader: 'X-Linkqu-Key', signature: 'HMAC-SHA256' }, 'LINKQU Payout API'), validated: true,
-      health: [[1, 'degraded', 1840, 'Slow response, above 1,500 ms (simulated).']], disabledReason: 'Sandbox testing; not ready for production.',
+      integ: rest('https://sandbox.linkqu.example/api', 'sandbox', 'api_key_secret', { keyHeader: 'X-Linkqu-Key', signature: 'HMAC-SHA256' }, 'LINKQU Payout API'), disabledReason: 'Sandbox testing; not ready for production.',
     },
     {
-      code: 'PBB', name: 'Public Bank', type: 'bank', partner: 'PTN-002', country: 'MY', state: 'active', desc: 'FPX, card acquiring and bank payouts in Malaysia.',
+      code: 'PBB', name: 'Public Bank', type: 'bank', country: 'MY', state: 'active', desc: 'FPX, card acquiring and bank payouts in Malaysia.',
       caps: [['MY', 'fpx', 'available'], ['MY', 'cards', 'available'], ['MY', 'bank_transfer_payout', 'available']],
-      integ: { ...rest('https://h2h.publicbank.example/gateway', 'production', 'mtls', {}, 'Public Bank Host-to-Host'), adapterType: 'mobi_iso8583' }, validated: true,
-      health: [[2, 'healthy', 198, 'OK (simulated).'], [1, 'healthy', 205, 'OK (simulated).']],
+      integ: { ...rest('https://h2h.publicbank.example/gateway', 'production', 'mtls', {}, 'Public Bank Host-to-Host'), adapterType: 'mobi_iso8583' },
     },
     {
-      code: 'SAIGONPAY', name: 'Saigon PayLink', type: 'payment_gateway', partner: 'PTN-003', country: 'VN', state: 'disabled', desc: 'Vietnam provider for VietQR and MoMo (sample).',
+      code: 'SAIGONPAY', name: 'Saigon PayLink', type: 'payment_gateway', country: 'VN', state: 'disabled', desc: 'Vietnam provider for VietQR and MoMo (sample).',
       caps: [['VN', 'vietqr', 'available'], ['VN', 'momo', 'available']],
-      integ: { ...rest('https://api.saigonpaylink.example', 'sandbox', 'oauth2', { clientId: 'mobi-vn' }, 'Saigon PayLink API') }, validated: false,
-      health: [], disabledReason: 'Integration not finished.',
+      integ: { ...rest('https://api.saigonpaylink.example', 'sandbox', 'oauth2', { clientId: 'mobi-vn' }, 'Saigon PayLink API') }, disabledReason: 'Integration not finished.',
     },
     {
-      code: 'CIMBCOLLECT', name: 'CIMB Collect', type: 'bank', partner: null, country: 'MY', state: 'maintenance', desc: 'DuitNow QR collections in Malaysia.',
+      code: 'CIMBCOLLECT', name: 'CIMB Collect', type: 'bank', country: 'MY', state: 'maintenance', desc: 'DuitNow QR collections in Malaysia.',
       caps: [['MY', 'duitnow_qr', 'available']],
-      integ: rest('https://collect.cimb.example/api', 'production', 'api_key', { keyHeader: 'X-Api-Key' }, 'CIMB Collect API'), validated: true,
-      health: [[1, 'healthy', 290, 'OK (simulated).']], maintenance: 'Provider certificate rotation announced for tonight.',
+      integ: rest('https://collect.cimb.example/api', 'production', 'api_key', { keyHeader: 'X-Api-Key' }, 'CIMB Collect API'), maintenance: 'Provider certificate rotation announced for tonight.',
     },
   ];
   let i = 0;
@@ -758,13 +621,13 @@ function seed(now: number): HostDb {
     const hostId = `HST-${s.country}-${String(db.seq.host[s.country]).padStart(3, '0')}`;
     const created = now - (40 - i * 3) * DAY;
     const host: Host = {
-      id: hostId, hostCode: s.code, name: s.name, description: s.desc, hostType: s.type, associatedPartnerId: s.partner, registrationCountry: s.country,
+      id: hostId, hostCode: s.code, name: s.name, description: s.desc, hostType: s.type, registrationCountry: s.country,
       ownerTeam: `Tech Ops – ${countryName(s.country)}`, notes: 'Sample record for the prototype; not a live integration.', draft: false,
       operationalState: s.state, maintenance: s.maintenance ? { reason: s.maintenance, until: now + 0.5 * DAY, since: now - 2 * 3600_000, by: TECH } : null,
       disabledReason: s.disabledReason ?? null, createdAt: created, updatedAt: now - i * 3600_000, createdBy: TECH, updatedBy: TECH, sample: true,
     };
     db.hosts.push(host);
-    const act = (at: number, action: string, details: string, by = TECH) => db.activity.push({ id: id('ACT'), hostId, hostName: s.name, action, performedBy: by, timestamp: at, details });
+    const act = (at: number, action: string, details: string) => db.activity.push({ id: id('ACT'), hostId, hostName: s.name, action, performedBy: TECH, timestamp: at, details });
     act(created, 'Host created', `${s.name} (${s.code}) · ${hostTypeName(s.type)}`);
     for (const [country, method, availability] of s.caps) {
       const m = hostMethods(country).find((x) => x.code === method)!;
@@ -774,27 +637,14 @@ function seed(now: number): HostDb {
     if (s.integ) {
       const integ: HostIntegration = {
         id: id('INT'), hostId, integrationName: '', adapterType: 'mobi_rest_v1', apiBaseUrl: '', apiVersion: '', environment: 'sandbox', authenticationType: null, authConfig: {},
-        credentialReference: null, credentialUpdatedAt: null, credentialUpdatedBy: null, timeoutSeconds: 30, connectionConfig: '', notes: '', lastValidation: null, updatedAt: created + 2 * DAY, ...s.integ,
+        timeoutSeconds: 30, connectionConfig: '', notes: '', updatedAt: created + 2 * DAY, ...s.integ,
       };
-      if (s.validated) {
-        integ.credentialReference = `cred_ref_${s.code.slice(0, 4)}`;
-        integ.credentialUpdatedAt = created + 2 * DAY;
-        integ.credentialUpdatedBy = TECH;
-        const r = validateIntegration(integ);
-        integ.lastValidation = { result: r.result, at: created + 3 * DAY, by: TECH, messages: r.messages, fingerprint: integrationFingerprint(integ) };
-      }
       db.integrations.push(integ);
-      act(created + 2 * DAY, 'Integration configuration updated', `${integ.integrationName} · ${integ.environment === 'production' ? 'Production' : 'Sandbox'}`);
-      if (integ.lastValidation) act(created + 3 * DAY, 'Configuration validated', `${VALIDATION_RESULT_LABEL[integ.lastValidation.result]} (simulated)`);
+      act(created + 2 * DAY, 'Integration details updated', `${integ.integrationName} · ${integ.environment === 'production' ? 'Production' : 'Sandbox'}`);
     }
     if (s.state === 'active' || s.state === 'maintenance') act(created + 4 * DAY, 'Host enabled', 'Eligible for routing once Routing Management exists; no routing rules were created.');
     if (s.state === 'maintenance') act(now - 2 * 3600_000, 'Maintenance started', `Reason: ${s.maintenance}`);
     if (s.state === 'disabled' && s.disabledReason) act(created + 4 * DAY, 'Host disabled', `Reason: ${s.disabledReason}`);
-    for (const [hoursAgo, status, ms, message] of s.health) {
-      const at = now - hoursAgo * 3600_000;
-      db.health.push({ id: id('HC'), hostId, status, responseTimeMs: ms, checkedAt: at, message, by: SYSTEM, simulated: true });
-      act(at, 'Health check performed', `${HEALTH_STATUS_LABEL[status]}${ms ? ` · ${ms} ms` : ''} · simulated`, SYSTEM);
-    }
   }
   return db;
 }

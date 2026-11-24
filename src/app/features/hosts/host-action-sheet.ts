@@ -5,12 +5,12 @@ import { CodePrompt, codeProblem } from '../../shared/code-prompt';
 import { Icon } from '../../shared/icon';
 import { SideSheet } from '../../shared/side-sheet';
 
-export type HostAction = 'enable' | 'disable' | 'maintenance' | 'credentials';
+export type HostAction = 'enable' | 'disable' | 'maintenance';
 
 /**
- * Operational controls in a side sheet: Enable / Re-enable, Disable (reason + confirmation),
- * Maintenance (reason + optional expected end) and Replace Credentials. Each asks for an
- * authenticator code (not asked again for 5 minutes). Nothing is rerouted automatically.
+ * Switching a host on and off, in a side sheet: Enable / Re-enable, Disable (reason +
+ * confirmation) and Maintenance (reason + optional expected end). Each asks for an authenticator
+ * code (not asked again for 5 minutes). Nothing is rerouted automatically.
  */
 @Component({
   selector: 'app-host-action-sheet',
@@ -22,7 +22,7 @@ export type HostAction = 'enable' | 'disable' | 'maintenance' | 'credentials';
 <app-side-sheet [label]="title()" (dismiss)="close()">
   <header class="sheet-head">
     <div class="sheet-titles">
-      <p class="sheet-eyebrow">{{ action() === 'credentials' ? 'Integration' : 'Operational control' }}</p>
+      <p class="sheet-eyebrow">Host status</p>
       <h2 class="sheet-title">{{ title() }}</h2>
       <p class="sheet-sub">{{ h.name }} · {{ h.id }}</p>
     </div>
@@ -32,7 +32,7 @@ export type HostAction = 'enable' | 'disable' | 'maintenance' | 'credentials';
     @switch (action()) {
       @case ('enable') {
         @if (detail().enableBlockers.length) {
-          <div class="host-banner bad" role="alert"><app-icon name="alert-circle" /><div><strong>Can't enable yet</strong><ul>@for (b of detail().enableBlockers; track b) {<li>{{ b }}</li>}</ul></div></div>
+          <div class="host-banner bad" role="alert"><app-icon name="alert-circle" /><div><strong>Can't enable yet: finish the setup checklist</strong><ul>@for (b of detail().enableBlockers; track b) {<li>{{ b }}</li>}</ul></div></div>
         } @else {
           <p class="f-hint">{{ reenable() ? 'Ends maintenance and makes the host Active again.' : 'Makes the host Active.' }} An active host becomes eligible for routing once Routing Management exists. No routing rules are created now.</p>
           @if (h.maintenance; as m) {<dl class="sheet-dl"><div class="wide"><dt>Maintenance reason</dt><dd>{{ m.reason }}</dd></div></dl>}
@@ -47,10 +47,6 @@ export type HostAction = 'enable' | 'disable' | 'maintenance' | 'credentials';
         <p class="f-hint">The host shows as under maintenance and is not eligible for routing until you re-enable it.</p>
         <div class="f-field"><label for="ha-reason">Reason <span class="req">*</span></label><textarea id="ha-reason" class="f-input" rows="3" maxlength="500" [class.invalid]="reasonError()" [value]="reason()" (input)="reason.set(v($event))"></textarea>@if (reasonError(); as m) {<p class="f-error">{{ m }}</p>}</div>
         <div class="f-field"><label for="ha-until">Expected end (optional)</label><input id="ha-until" type="datetime-local" class="f-input" [value]="until()" (input)="until.set(v($event))" />@if (untilError(); as m) {<p class="f-error">{{ m }}</p>} @else {<p class="f-hint">For information only: ending maintenance is done with Re-enable.</p>}</div>
-      }
-      @case ('credentials') {
-        <dl class="sheet-dl"><div><dt>Current reference</dt><dd class="mono">{{ detail().integration?.credentialReferenceMasked ?? 'None' }}</dd></div><div><dt>Authentication</dt><dd>{{ detail().integration?.authenticationType ? authText() : '—' }}</dd></div></dl>
-        <div class="host-banner warn" role="note"><app-icon name="info" /><div>Simulated: Mobi assigns a new masked credential reference. No key or secret is entered or stored in this prototype. Validate the configuration again afterwards.</div></div>
       }
     }
     @if (error(); as e) {<div class="alert danger compact" role="alert"><app-icon name="alert-circle" /><div>{{ e }}</div></div>}
@@ -93,20 +89,13 @@ export class HostActionSheet {
         return this.reenable() ? `Re-enable ${n}?` : `Enable ${n}?`;
       case 'disable':
         return `Disable ${n}?`;
-      case 'maintenance':
-        return `Put ${n} under maintenance`;
       default:
-        return 'Replace credentials';
+        return `Put ${n} under maintenance`;
     }
   });
-  protected readonly confirmLabel = computed(() => ({ enable: this.reenable() ? 'Re-enable host' : 'Enable host', disable: 'Disable host', maintenance: 'Start maintenance', credentials: 'Replace credential reference' })[this.action()]);
+  protected readonly confirmLabel = computed(() => ({ enable: this.reenable() ? 'Re-enable host' : 'Enable host', disable: 'Disable host', maintenance: 'Start maintenance' })[this.action()]);
   protected readonly reasonError = computed(() => (this.tried() && (this.action() === 'disable' || this.action() === 'maintenance') && this.reason().trim().length < 5 ? 'Enter a reason (at least 5 characters).' : null));
   protected readonly untilError = computed(() => (this.until() && new Date(this.until()).getTime() <= Date.now() ? 'The expected end must be in the future.' : null));
-  protected readonly authText = computed(() => {
-    const t = this.detail().integration?.authenticationType;
-    return t ? ({ api_key: 'API Key', api_key_secret: 'API Key + Secret', oauth2: 'OAuth 2.0', mtls: 'Mutual TLS', other: 'Other' } as const)[t] : '—';
-  });
-
   protected v(e: Event) {
     return (e.target as HTMLInputElement).value;
   }
@@ -127,12 +116,9 @@ export class HostActionSheet {
     this.error.set(null);
     this.codeError.set(null);
     try {
-      const res =
-        this.action() === 'credentials'
-          ? await this.api.replaceCredential(id, code)
-          : await this.api.changeStatus(id, { action: this.action() as 'enable' | 'disable' | 'maintenance', reason: this.reason().trim(), until: this.until() ? new Date(this.until()).getTime() : null, confirm: this.confirmed(), ...c });
+      const res = await this.api.changeStatus(id, { action: this.action(), reason: this.reason().trim(), until: this.until() ? new Date(this.until()).getTime() : null, confirm: this.confirmed(), ...c });
       this.codeAsk.set(false);
-      const message = { enable: this.reenable() ? 'Host re-enabled' : 'Host enabled', disable: 'Host disabled', maintenance: 'Maintenance started', credentials: 'Credential reference replaced' }[this.action()];
+      const message = { enable: this.reenable() ? 'Host re-enabled' : 'Host enabled', disable: 'Host disabled', maintenance: 'Maintenance started' }[this.action()];
       this.done.emit({ detail: res, message });
     } catch (e) {
       const err = toHostError(e);

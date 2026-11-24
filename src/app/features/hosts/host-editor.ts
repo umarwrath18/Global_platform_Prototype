@@ -18,7 +18,6 @@ import {
   hostMethods,
   hostTypeLabel,
   methodName,
-  Partner,
   PAYMENT_FLOW_LABEL,
   registrationCountries,
 } from '../../core/hosts/hosts';
@@ -35,8 +34,8 @@ interface CapRow {
 
 /**
  * Add Host / Edit Host in a side sheet, in four steps (the same pattern as the pricing editor):
- * Basic information → Markets & capabilities → Integration → Review. Save as Draft keeps an
- * unfinished host; Save Host saves it as Disabled (a new host is never operational).
+ * Basic information → Payment methods → Integration → Review. Save as Draft keeps an unfinished
+ * host; Save Host saves it as Disabled (a new host is never in use until enabled).
  */
 @Component({
   selector: 'app-host-editor',
@@ -70,18 +69,11 @@ interface CapRow {
       @case (0) {
         <section class="sheet-section">
           <h3>Basic information</h3>
-          <p class="f-hint">Who the provider is and who owns it at Mobi. The commercial relationship (partner) is optional.</p>
+          <p class="f-hint">Who the provider is and who owns it at Mobi.</p>
           <div class="f-grid">
             <div class="f-field"><label for="h-name">Host Name <span class="req">*</span></label><input id="h-name" class="f-input" maxlength="80" [class.invalid]="err('basic.name')" [value]="name()" (input)="name.set(v($event))" />@if (err('basic.name'); as m) {<p class="f-error">{{ m }}</p>}</div>
             <div class="f-field"><label for="h-code">Host Code <span class="req">*</span></label><input id="h-code" class="f-input mono" maxlength="20" [class.invalid]="err('basic.hostCode')" [value]="hostCode()" (input)="hostCode.set(v($event).toUpperCase())" />@if (err('basic.hostCode'); as m) {<p class="f-error">{{ m }}</p>} @else {<p class="f-hint">Unique short code, e.g. HARSYA. Letters, numbers, - and _.</p>}</div>
             <div class="f-field full"><label for="h-desc">Description</label><input id="h-desc" class="f-input" maxlength="300" [value]="description()" (input)="description.set(v($event))" /></div>
-            <div class="f-field"><label for="h-partner">Associated Partner</label>
-              <select id="h-partner" class="f-input" (change)="partnerId.set(v($event))">
-                <option value="" [selected]="!partnerId()">None</option>
-                @for (p of partners(); track p.id) {<option [value]="p.id" [selected]="p.id === partnerId()">{{ p.name }} · {{ cname(p.country) }}</option>}
-              </select>
-              <p class="f-hint">Optional. Sample partner list until the Partner module is built.</p>
-            </div>
             <div class="f-field"><label for="h-type">Host Type <span class="req">*</span></label>
               <select id="h-type" class="f-input" [class.invalid]="err('basic.hostType')" (change)="hostType.set(v($event))">
                 <option value="" [selected]="!hostType()">Select host type</option>
@@ -103,7 +95,7 @@ interface CapRow {
       }
       @case (1) {
         <section class="sheet-section">
-          <h3>Markets &amp; capabilities</h3>
+          <h3>Payment methods</h3>
           <p class="f-hint">One row per country and payment method, from each country's configured catalogue. The flow and currency follow the method and country.</p>
           @if (caps().length) {
             <div class="table-wrap">
@@ -152,7 +144,7 @@ interface CapRow {
       @case (2) {
         <section class="sheet-section">
           <h3>Integration</h3>
-          <p class="f-hint">How Mobi's integration layer reaches this host. Provider-specific handling lives in the adapter, not here. You can save now and finish later.</p>
+          <p class="f-hint">How Mobi's integration layer reaches this host. Provider-specific handling lives in the adapter, not here. No credentials are entered here. You can save now and finish later.</p>
           <div class="f-grid">
             <div class="f-field"><label for="i-name">Integration Name</label><input id="i-name" class="f-input" maxlength="80" [value]="iName()" (input)="iName.set(v($event))" /></div>
             <div class="f-field"><label for="i-adapter">Integration Adapter</label>
@@ -162,12 +154,12 @@ interface CapRow {
               </select>
               @if (adapterHint(); as h) {<p class="f-hint">{{ h }}</p>}
             </div>
-            <div class="f-field full"><label for="i-url">API Base URL</label><input id="i-url" class="f-input mono" maxlength="300" [class.invalid]="urlError()" [value]="iUrl()" (input)="iUrl.set(v($event))" placeholder="https://api.provider.example/v1" />@if (urlError(); as m) {<p class="f-error">{{ m }}</p>}</div>
+            <div class="f-field full"><label for="i-url">API Base URL</label><input id="i-url" class="f-input mono" maxlength="300" [class.invalid]="err('integration.apiBaseUrl')" [value]="iUrl()" (input)="iUrl.set(v($event))" placeholder="https://api.provider.example/v1" />@if (err('integration.apiBaseUrl'); as m) {<p class="f-error">{{ m }}</p>}</div>
             <div class="f-field"><label for="i-version">API Version (optional)</label><input id="i-version" class="f-input" maxlength="20" [value]="iVersion()" (input)="iVersion.set(v($event))" /></div>
             <div class="f-field"><label for="i-env">Environment</label>
               <select id="i-env" class="f-input" (change)="iEnv.set($any(v($event)))">
                 @for (e of envs; track e) {<option [value]="e" [selected]="e === iEnv()">{{ envLabel[e] }}</option>}
-              </select></div>
+              </select><p class="f-hint">A host can be enabled only with a Production endpoint.</p></div>
             <div class="f-field"><label for="i-timeout">Request Timeout (seconds)</label><input id="i-timeout" class="f-input" inputmode="numeric" maxlength="3" [class.invalid]="err('integration.timeoutSeconds')" [value]="iTimeout()" (input)="iTimeout.set(v($event))" />@if (err('integration.timeoutSeconds'); as m) {<p class="f-error">{{ m }}</p>}</div>
             <div class="f-field"><label for="i-auth">Authentication Method</label>
               <select id="i-auth" class="f-input" (change)="iAuth.set($any(v($event)) || null)">
@@ -183,19 +175,16 @@ interface CapRow {
                 <div class="f-field"><label for="a-sig">Signature method</label><input id="a-sig" class="f-input" maxlength="40" [value]="cfg().signature ?? ''" (input)="setCfg('signature', v($event))" placeholder="HMAC-SHA256" /></div>
               }
               @case ('oauth2') {
-                <div class="f-field full"><label for="a-token">Token URL</label><input id="a-token" class="f-input mono" maxlength="200" [value]="cfg().tokenUrl ?? ''" (input)="setCfg('tokenUrl', v($event))" /></div>
+                <div class="f-field full"><label for="a-token">Token URL</label><input id="a-token" class="f-input mono" maxlength="200" [class.invalid]="err('integration.authConfig.tokenUrl')" [value]="cfg().tokenUrl ?? ''" (input)="setCfg('tokenUrl', v($event))" />@if (err('integration.authConfig.tokenUrl'); as m) {<p class="f-error">{{ m }}</p>}</div>
                 <div class="f-field"><label for="a-client">Client ID</label><input id="a-client" class="f-input" maxlength="100" [value]="cfg().clientId ?? ''" (input)="setCfg('clientId', v($event))" /></div>
                 <div class="f-field"><label for="a-scope">Scope</label><input id="a-scope" class="f-input" maxlength="100" [value]="cfg().scope ?? ''" (input)="setCfg('scope', v($event))" /></div>
               }
               @case ('mtls') {
-                <p class="f-hint full">Mutual TLS: the client certificate is held with the credential reference. Nothing to enter here.</p>
+                <p class="f-hint full">Mutual TLS: certificates are managed outside Host Management. Nothing to enter here.</p>
               }
               @case ('other') {
                 <div class="f-field full"><label for="a-desc">Authentication details</label><input id="a-desc" class="f-input" maxlength="200" [value]="cfg().description ?? ''" (input)="setCfg('description', v($event))" /></div>
               }
-            }
-            @if (iAuth()) {
-              <div class="f-field full"><span class="f-label">Credential reference</span><p class="f-static mono">{{ credentialText() }}</p><p class="f-hint">Prototype: no key, secret or certificate is entered or stored here. Mobi assigns a masked reference; replace it from the host's Integration tab.</p></div>
             }
             <div class="f-field full"><label for="i-conn">Connection Configuration</label><input id="i-conn" class="f-input" maxlength="500" [value]="iConn()" (input)="iConn.set(v($event))" placeholder="Callback URL, IP allowlist, ports…" /></div>
             <div class="f-field full"><label for="i-notes">Integration Notes</label><textarea id="i-notes" class="f-input" rows="2" maxlength="1000" [value]="iNotes()" (input)="iNotes.set(v($event))"></textarea></div>
@@ -211,7 +200,6 @@ interface CapRow {
             <div><dt>Host Type</dt><dd>{{ hostType() ? typeLabel($any(hostType())) : '—' }}</dd></div>
             <div><dt>Country of Registration</dt><dd>{{ regCountry() ? cname(regCountry()) : '—' }}</dd></div>
             <div><dt>Owner</dt><dd>{{ ownerTeam() || '—' }}</dd></div>
-            <div><dt>Associated Partner</dt><dd>{{ partnerName() }}</dd></div>
             @if (description()) {<div class="wide"><dt>Description</dt><dd>{{ description() }}</dd></div>}
           </dl>
         </section>
@@ -233,7 +221,9 @@ interface CapRow {
             <div class="wide"><dt>Endpoint</dt><dd class="mono">{{ iUrl() || '—' }}@if (iVersion()) { · {{ iVersion() }}}</dd></div>
           </dl>
         </section>
-        <div class="alert info compact" role="note"><app-icon name="info" /><div>After saving, the host is <strong>Disabled</strong>. Validate its configuration, then enable it on the host page. Enabling makes it eligible for routing later; it creates no routing rules.</div></div>
+        @if (!existing() || existing()!.host.status === 'draft') {
+          <div class="alert info compact" role="note"><app-icon name="info" /><div>After saving, the host is <strong>Disabled</strong>. Enable it on the host page once its setup checklist is complete. Enabling makes it eligible for routing later; it creates no routing rules.</div></div>
+        }
       }
     }
   </div>
@@ -267,13 +257,12 @@ export class HostEditor implements OnInit {
 
   /** The host to edit; null adds a new one. */
   readonly existing = input<HostDetailResponse | null>(null);
-  readonly partners = input<Partner[]>([]);
   /** Opens on this step (e.g. Integration from the host page). */
   readonly startStep = input<Step>(0);
   readonly saved = output<HostDetailResponse>();
   readonly closed = output<void>();
 
-  protected readonly steps = ['Basic information', 'Markets & capabilities', 'Integration', 'Review'];
+  protected readonly steps = ['Basic information', 'Payment methods', 'Integration', 'Review'];
   protected readonly hostTypes = HOST_TYPES;
   protected readonly regCountries = registrationCountries();
   protected readonly countries = hostCountries();
@@ -300,7 +289,6 @@ export class HostEditor implements OnInit {
   protected readonly name = signal('');
   protected readonly hostCode = signal('');
   protected readonly description = signal('');
-  protected readonly partnerId = signal('');
   protected readonly hostType = signal('');
   protected readonly regCountry = signal('');
   protected readonly ownerTeam = signal('');
@@ -328,7 +316,7 @@ export class HostEditor implements OnInit {
       const s = this.step();
       if (!this.attempted().has(s) || s === 3) return;
       // Re-check the step whenever one of its fields changes (reads below are tracked).
-      void [this.name(), this.hostCode(), this.hostType(), this.regCountry(), this.ownerTeam(), this.caps(), this.iTimeout(), this.iUrl()];
+      void [this.name(), this.hostCode(), this.hostType(), this.regCountry(), this.ownerTeam(), this.caps(), this.iTimeout(), this.iUrl(), this.iEnv()];
       untracked(() => this.checkStep(s, true));
     });
   }
@@ -338,13 +326,15 @@ export class HostEditor implements OnInit {
   protected readonly canDraft = computed(() => !this.existing() || this.existing()!.host.draft);
   protected readonly newMethods = computed(() => hostMethods(this.newCountry()).filter((m) => !this.caps().some((c) => c.countryCode === this.newCountry() && c.paymentMethodCode === m.code)));
   protected readonly adapterHint = computed(() => HOST_ADAPTERS.find((a) => a.id === this.iAdapter())?.description ?? null);
+  /** Same endpoint rules as the server: a valid URL; for Production, https and not a test URL. */
   protected readonly urlError = computed(() => {
     const u = this.iUrl().trim();
     if (!u) return null;
-    return /^https?:\/\/[a-z0-9.-]+(:\d+)?(\/\S*)?$/i.test(u) ? null : 'Enter a valid URL, e.g. https://api.provider.example/v1';
+    if (!/^https?:\/\/[a-z0-9.-]+(:\d+)?(\/\S*)?$/i.test(u)) return 'Enter a valid URL, starting with https://.';
+    if (this.iEnv() === 'production' && !u.toLowerCase().startsWith('https://')) return 'Production endpoints must use https.';
+    if (this.iEnv() === 'production' && /sandbox|staging|test|uat/i.test(u)) return 'This looks like a test URL (sandbox, staging, test or UAT). Use the production endpoint, or choose Sandbox.';
+    return null;
   });
-  protected readonly credentialText = computed(() => this.existing()?.integration?.credentialReferenceMasked ?? 'Assigned when you save (simulated)');
-  protected readonly partnerName = computed(() => this.partners().find((p) => p.id === this.partnerId())?.name ?? 'None');
   protected readonly byCountry = computed(() => {
     const out = new Map<string, string[]>();
     for (const c of this.caps()) out.set(c.countryCode, [...(out.get(c.countryCode) ?? []), `${methodName(c.countryCode, c.paymentMethodCode)} (${this.flowOf(c)}${c.availabilityStatus !== 'available' ? ', ' + AVAILABILITY_LABEL[c.availabilityStatus] : ''})`]);
@@ -358,7 +348,6 @@ export class HostEditor implements OnInit {
       this.name.set(h.name);
       this.hostCode.set(h.hostCode);
       this.description.set(h.description);
-      this.partnerId.set(h.associatedPartnerId ?? '');
       this.hostType.set(h.hostType);
       this.regCountry.set(h.registrationCountry);
       this.ownerTeam.set(h.ownerTeam);
@@ -399,8 +388,9 @@ export class HostEditor implements OnInit {
       'basic.hostType': this.hostType,
       'basic.registrationCountry': this.regCountry,
       'basic.ownerTeam': this.ownerTeam,
-      'basic.associatedPartnerId': this.partnerId,
       'integration.timeoutSeconds': this.iTimeout,
+      'integration.apiBaseUrl': () => `${this.iEnv()}|${this.iUrl()}`,
+      'integration.authConfig.tokenUrl': () => this.cfg().tokenUrl ?? '',
       capabilities: () => JSON.stringify(this.caps()),
     };
     return map[field]?.() ?? '';
@@ -497,7 +487,6 @@ export class HostEditor implements OnInit {
         hostCode: this.hostCode().trim(),
         description: this.description().trim(),
         hostType: this.hostType() as never,
-        associatedPartnerId: this.partnerId() || null,
         registrationCountry: this.regCountry(),
         ownerTeam: this.ownerTeam().trim(),
         notes: this.notes().trim(),
@@ -552,7 +541,7 @@ export class HostEditor implements OnInit {
       if (!this.caps().length) e['capabilities'] = 'Add at least one country and payment method.';
     } else if (s === 2) {
       const t = this.iTimeout().trim();
-      if (t && (!/^\d+$/.test(t) || +t < 1 || +t > 600)) e['integration.timeoutSeconds'] = 'Enter a whole number of seconds (1–600).';
+      if (t && (!/^\d+$/.test(t) || +t < 5 || +t > 120)) e['integration.timeoutSeconds'] = 'Enter a whole number of seconds (5–120).';
       if (this.urlError()) e['integration.apiBaseUrl'] = this.urlError()!;
     }
     this.errors.set(e);

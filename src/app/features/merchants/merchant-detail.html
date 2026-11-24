@@ -380,7 +380,7 @@
           </div>
           <div class="f-field full">
             <label for="pc-reason">Reason <span class="req">*</span></label>
-            <textarea id="pc-reason" class="f-input" rows="3" maxlength="500" [class.invalid]="pcIssue('reason')" [value]="pcReason()" (input)="pcReason.set($any($event.target).value)"></textarea>
+            <textarea id="pc-reason" class="f-input" rows="3" maxlength="500" [class.invalid]="pcIssue('reason')" [value]="pcReason()" (input)="pcReason.set($any($event.target).value); clearReasonIssue()"></textarea>
             @if (pcIssue('reason'); as m) {<p class="f-error">{{ m }}</p>} @else {<p class="f-hint">At least 10 characters. Risk sees this, and it's kept in Profile history.</p>}
           </div>
         </div>

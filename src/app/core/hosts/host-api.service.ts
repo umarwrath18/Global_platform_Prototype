@@ -2,7 +2,7 @@ import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { StaffRoleService } from '../merchants/staff-role.service';
-import { AvailabilityStatus, HostActivity, HostDetailResponse, HostDraftInput, HostFieldError, HostHealthRow, HostListResponse } from './hosts';
+import { AvailabilityStatus, HostActivity, HostDetailResponse, HostDraftInput, HostFieldError, HostListResponse } from './hosts';
 
 export interface HostApiError {
   code: string;
@@ -36,10 +36,6 @@ export class HostApi {
     return firstValueFrom(this.http.get<HostListResponse>('/api/hosts', { headers: this.headers }));
   }
 
-  health() {
-    return firstValueFrom(this.http.get<HostHealthRow[]>('/api/hosts/health', { headers: this.headers }));
-  }
-
   activity(hostId?: string) {
     return firstValueFrom(this.http.get<HostActivity[]>('/api/hosts/activity', { headers: this.headers, params: hostId ? { host: hostId } : {} }));
   }
@@ -62,18 +58,6 @@ export class HostApi {
 
   setAvailability(id: string, capabilityId: string, availabilityStatus: AvailabilityStatus) {
     return firstValueFrom(this.http.put<HostDetailResponse>(`/api/hosts/${encodeURIComponent(id)}/capabilities/${encodeURIComponent(capabilityId)}`, { availabilityStatus }, { headers: this.headers }));
-  }
-
-  validate(id: string) {
-    return firstValueFrom(this.http.post<HostDetailResponse & { validation: { result: string; label: string; messages: string[] } }>(`/api/hosts/${encodeURIComponent(id)}/validate`, {}, { headers: this.headers }));
-  }
-
-  healthCheck(id: string) {
-    return firstValueFrom(this.http.post<HostDetailResponse>(`/api/hosts/${encodeURIComponent(id)}/health-check`, {}, { headers: this.headers }));
-  }
-
-  replaceCredential(id: string, code?: string) {
-    return firstValueFrom(this.http.post<HostDetailResponse>(`/api/hosts/${encodeURIComponent(id)}/credentials`, code ? { code } : {}, { headers: this.headers }));
   }
 
   changeStatus(id: string, body: { action: 'enable' | 'disable' | 'maintenance'; reason?: string; until?: number | null; confirm?: boolean; code?: string }) {
