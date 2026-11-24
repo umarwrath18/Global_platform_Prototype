@@ -438,3 +438,46 @@
   align-items: center;
   margin-top: 8px;
 }
+
+.check-line {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 14px;
+  cursor: pointer;
+
+  input {
+    margin-top: 3px;
+  }
+}
+
+.sub-line {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+ul.plain {
+  margin: 0;
+  padding-left: 18px;
+  font-weight: 400;
+}
+
+.host-kpi strong.small {
+  font-size: 15px;
+}
+
+.crumbs {
+  font-size: 13px;
+  color: var(--text-muted);
+
+  a {
+    color: inherit;
+  }
+}
+
+.muted {
+  color: var(--text-muted);
+}
