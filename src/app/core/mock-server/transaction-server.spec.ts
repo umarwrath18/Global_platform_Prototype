@@ -161,10 +161,18 @@ describe('Transactions', () => {
     it('fees only for Sales / Ops, CS and FinOps; IP and device only for Risk and Mobi Support', async () => {
       const id = (await list('123', 'payin', 'range=7d&status=successful')).body.items[0].transactionId;
       const fieldsOf = async (login: string) => (await call<TxnDetail>(login, 'GET', `/api/transactions/payin/${id}`)).body.sections.flatMap((s) => s.fields.map((f) => f.label));
-      expect(await fieldsOf('123')).toContain('Fee (MDR)');
+      const detailOf = async (login: string) => (await call<TxnDetail>(login, 'GET', `/api/transactions/payin/${id}`)).body;
+      // The breakdown (fee, net, rate) and the sales slip: fee teams only; the slip for Sales / Ops and CS.
+      const sales = await detailOf('123');
+      expect(sales.fee).not.toBeUndefined();
+      expect(sales.document).toBe('sales_slip');
+      expect((await detailOf('TANJUNG-ADMIN')).document).toBeNull();
       expect(await fieldsOf('TANJUNG-ADMIN')).toContain('Pricing version');
+      const riskDetail = await detailOf('MOBI-RISK');
+      expect(riskDetail).not.toHaveProperty('fee');
+      expect(riskDetail).not.toHaveProperty('net');
+      expect(riskDetail.document).toBeNull();
       const risk = await fieldsOf('MOBI-RISK');
-      expect(risk).not.toContain('Fee (MDR)');
       expect(risk).not.toContain('Pricing version');
       expect((await list('MOBI-RISK', 'payin', 'range=7d')).body.items[0].fee).toBeUndefined();
       expect(await fieldsOf('123')).not.toContain('IP address');

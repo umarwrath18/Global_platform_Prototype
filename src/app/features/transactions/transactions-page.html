@@ -169,6 +169,7 @@
                 <th scope="col">Merchant Ref ID</th>
                 <th scope="col">Mobi Ref ID</th>
                 <th scope="col">Merchant</th>
+                <th scope="col">{{ flow() === 'payin' ? 'Customer' : 'Beneficiary' }}</th>
                 <th scope="col">Country</th>
                 <th scope="col">Payment method</th>
                 <th scope="col">Provider</th>
@@ -187,8 +188,13 @@
                   <td class="mono">{{ t.invoiceId }}</td>
                   <td><a class="txn-id" href="" (click)="$event.preventDefault(); $event.stopPropagation(); open(t)">{{ t.transactionId }}</a></td>
                   <td class="merchant" [title]="t.merchantName">{{ t.merchantName }}@if (t.subMerchantName) {<div class="sub-line">{{ t.subMerchantName }}</div>}</td>
+                  @if (flow() === 'payin') {
+                    <td [class.muted]="!t.customerName">{{ t.customerName ?? '—' }}</td>
+                  } @else {
+                    <td>{{ t.beneficiary?.name ?? '—' }}@if (t.beneficiary?.account; as acc) {<div class="sub-line">{{ acc }}</div>}</td>
+                  }
                   <td>{{ t.countryName }}</td>
-                  <td>{{ t.methodName }}</td>
+                  <td>{{ t.methodName }}@if (t.methodDetail; as m) {<div class="sub-line">{{ m }}</div>}</td>
                   <td>{{ t.providerName }}</td>
                   @for (c of d.typeColumns; track c.key) {<td class="mono">{{ t.typeValues?.[c.key] ?? '—' }}</td>}
                   <td class="num mono">{{ amount(t.amount, t.currency) }}</td>

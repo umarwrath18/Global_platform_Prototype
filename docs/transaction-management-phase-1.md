@@ -118,3 +118,5 @@ on 24 Nov 2026.
 | Settlement (sample) | Successful pay-ins settle on the product's cycle (T+n business days). Held settlement (suspension) shows **Paused** to the merchant and **On hold** internally. The Settlements module replaces this later. |
 | Internal | Same names; the list adds Fee (MDR) for teams that see fees and a Settlement column on PayIn. Internal-only detail (provider, path, pricing version, IP / device) is unchanged. |
 | Not included | Transaction Sub Type (needs a definition first). |
+| Internal (added) | Details: the same Amount / Fee (MDR) / Net breakdown for teams that see fees, References at the top, Settlement as its own section (Due / Settled / On hold). List: Customer (pay-in) or Beneficiary (payout) column, and the bank / wallet / card under the method. Sales / Ops and CS can download the sales slip or payment advice to resend to a merchant. |
+| Release | Merchant Portal production deploys are no longer on hold (released 24 Nov 2026). |

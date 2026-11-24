@@ -19,8 +19,6 @@ same way real staff will. To see another team's view, sign in with that team's l
 - **Demo data:** it lives in your browser and resets when a new build changes the data. Run
   `mobiDemo.reset()` in the browser console to start again.
 
-Journeys for every admin feature, by team: see `user-journeys.md`.
-
 ## Internal app (Global Platform)
 
 | Login            | Team                       | Use it to                                                               |

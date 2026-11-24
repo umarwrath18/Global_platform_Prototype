@@ -175,6 +175,10 @@ export interface TxnListRow {
   typeValues?: Record<string, string>;
   /** Successful pay-ins only. */
   settlement?: SettlementView | null;
+  /** Pay-in customer name (when sent), the bank / wallet / card, and the payout beneficiary. */
+  customerName?: string | null;
+  methodDetail?: string | null;
+  beneficiary?: { name: string | null; account: string | null; bank: string | null } | null;
 }
 
 export interface CurrencyAmount {
@@ -307,6 +311,18 @@ export interface TxnDetail {
   flags: TxnFlagView[];
   audit: TxnAuditEntry[];
   can: { addNote: boolean; flag: boolean };
+  /** Breakdown, only for teams that see fees (Sales / Ops, CS, FinOps); absent otherwise. */
+  fee?: number | null;
+  net?: number | null;
+  feeRate?: string | null;
+  paidAt: number | null;
+  merchantName: string;
+  methodDetail: string | null;
+  bankReference: string | null;
+  customerName: string | null;
+  beneficiary: { name: string | null; account: string | null; bank: string | null } | null;
+  /** Sales slip / payment advice staff can download for a merchant (Sales / Ops, CS; successful only). */
+  document: 'sales_slip' | 'payment_advice' | null;
   sampleData: true;
 }
 

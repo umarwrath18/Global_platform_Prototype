@@ -2,9 +2,9 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, input, ou
 import { toClientError } from '@gp/core/api/api-error';
 import { TransactionDetail } from '@gp/core/merchants/merchant-portal';
 import { MerchantPortalApi } from '@gp/core/merchants/merchant-portal-api.service';
-import { buildReceiptPdf, loadLogoAsJpeg } from '@gp/core/transactions/receipt-pdf';
-import { fmtDateTime, fmtMoney, TXN_FLOW_LABEL, TXN_STATUS_LABEL, TxnFlow } from '@gp/core/transactions/transactions';
+import { fmtDateTime, fmtMoney, TXN_FLOW_LABEL, TxnFlow } from '@gp/core/transactions/transactions';
 import { Icon } from '@gp/shared/icon';
+import { downloadReceipt } from '@gp/shared/receipt-download';
 import { SideSheet } from '@gp/shared/side-sheet';
 import { TxnIpn, TxnSections, TxnStatusBadge, TxnTimeline } from '@gp/shared/txn-ui';
 
@@ -138,45 +138,7 @@ export class MerchantTransactionSheet {
     this.busy.set(true);
     this.slipError.set(null);
     try {
-      const logo = await loadLogoAsJpeg('brand/mobi-wordmark-blue.png');
-      const payin = t.flow === 'payin';
-      const rows: [string, string][] = payin
-        ? [
-            ['Merchant', t.merchantName],
-            ['Merchant Ref ID', t.invoiceId],
-            ['Mobi Ref ID', t.transactionId],
-            ['Payment method', [t.methodName, t.methodDetail].filter(Boolean).join(' · ')],
-            ['Bank reference', t.bankReference ?? '—'],
-            ['Customer', t.customerName ?? '—'],
-          ]
-        : [
-            ['From', t.merchantName],
-            ['Merchant Ref ID', t.invoiceId],
-            ['Mobi Ref ID', t.transactionId],
-            ['Beneficiary', t.beneficiary?.name ?? '—'],
-            ['Bank / wallet', t.beneficiary?.bank ?? t.methodName],
-            ['Account', t.beneficiary?.account ?? '—'],
-            ['Bank reference', t.bankReference ?? '—'],
-          ];
-      const pdf = buildReceiptPdf(
-        {
-          title: payin ? 'Sales slip' : 'Payment advice',
-          amount: fmtMoney(t.amount, t.currency),
-          status: TXN_STATUS_LABEL[t.status],
-          subtitle: `${payin ? 'Paid' : 'Paid out'} ${t.paidAt ? fmtDateTime(t.paidAt) : ''}`.trim(),
-          rows,
-          note: payin
-            ? 'This slip confirms the payment to the merchant. It shows what the customer paid and its references; Mobi fees are not shown. Sample document from the Mobi prototype.'
-            : 'This advice confirms the payout to the beneficiary. Sample document from the Mobi prototype.',
-        },
-        logo,
-      );
-      const url = URL.createObjectURL(new Blob([pdf as BlobPart], { type: 'application/pdf' }));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${payin ? 'sales-slip' : 'payment-advice'}-${t.transactionId}.pdf`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      await downloadReceipt(t);
     } catch {
       this.slipError.set("We couldn't create the document. Please try again.");
     } finally {

@@ -56,6 +56,8 @@ type TxnTeam = 'sales' | 'risk' | 'cs' | 'finops' | 'support';
 const VIEW_TEAMS: TxnTeam[] = ['sales', 'risk', 'cs', 'finops', 'support'];
 /** Proposed §4 matrix (decision: as proposed). */
 const FEE_TEAMS: TxnTeam[] = ['sales', 'cs', 'finops'];
+/** Teams that can download a sales slip or payment advice to resend to a merchant. */
+const DOCUMENT_TEAMS: TxnTeam[] = ['sales', 'cs'];
 const DEVICE_TEAMS: TxnTeam[] = ['risk', 'support'];
 const EXPORT_TEAMS: TxnTeam[] = ['sales', 'risk', 'cs', 'finops'];
 const TEAM_LABEL: Record<TxnTeam, string> = { sales: 'Sales / Ops', risk: 'Risk', cs: 'CS', finops: 'FinOps', support: 'Mobi Support' };
@@ -448,6 +450,10 @@ export class TransactionServer {
     }
     if (type) row.typeValues = typeValues(this.detailRec(t));
     if (t.flow === 'payin') row.settlement = settlementView(t, status, now);
+    const d = this.detailRec(t);
+    row.methodDetail = methodDetail(d);
+    if (t.flow === 'payin') row.customerName = t.customer.name ?? null;
+    else row.beneficiary = beneficiaryOf(d);
     return row;
   }
 
@@ -549,8 +555,21 @@ export class TransactionServer {
     const d = this.detailRec(t);
     const seeFees = FEE_TEAMS.includes(who.team);
     const seeDevice = DEVICE_TEAMS.includes(who.team);
-    const sections: DetailSection[] = [];
     const final = status === 'successful' || status === 'failed' || status === 'expired';
+    const ref = bankReference(t, d, status);
+    const sections: DetailSection[] = [
+      {
+        key: 'references',
+        title: 'References',
+        fields: compact([
+          { label: 'Mobi Ref ID', value: t.id },
+          { label: 'Merchant Ref ID', value: t.invoiceId },
+          { label: bankReferenceLabel(d), value: ref ?? (final ? '—' : 'Not yet issued') },
+          t.subMerchantMid ? { label: 'Sub MID', value: `${t.subMerchantMid} · ${t.subMerchantName}` } : { label: 'MID', value: t.masterMid },
+          { label: 'Paid at', value: status === 'successful' ? fmtDateTime(t.finalAt) : '—' },
+        ]),
+      },
+    ];
 
     if (flow === 'payin') {
       const c = t.customer;
@@ -577,18 +596,15 @@ export class TransactionServer {
         t.subMerchantMid ? { label: 'Master MID', value: t.masterMid } : null,
         { label: 'Country', value: t.countryName },
         { label: 'Channel', value: t.channel },
-        { label: 'Merchant Ref ID', value: t.invoiceId },
         t.description ? { label: 'Description', value: t.description } : null,
         { label: 'IPN status', value: ipnStatus.text, tone: ipnStatus.tone },
         { label: 'IPN callback URL', value: this.ipnUrl(t) || '—' },
       ]),
     });
 
-    const mobi: (DetailField | null)[] = [{ label: 'Amount', value: fmtMoney(t.amount, t.currency) }];
+    // Amount, Fee (MDR) and Net / Total debited are in the summary block at the top of the sheet.
+    const mobi: (DetailField | null)[] = [];
     if (seeFees) {
-      const fee = status === 'successful' ? t.fee : null;
-      mobi.push({ label: 'Fee (MDR)', value: fee === null ? '—' : fmtMoney(fee, t.currency) });
-      mobi.push({ label: flow === 'payin' ? 'Net amount' : 'Total debited', value: fee === null ? '—' : fmtMoney(netOf(t), t.currency) });
       if (t.pricing) {
         const v = t.pricing.summary;
         mobi.push({ label: 'Pricing version', value: `v${t.pricing.version} · ${t.pricing.level === 'sub_merchant' ? t.subMerchantName : 'Master Merchant'}`, link: { kind: 'pricing', id: t.applicationId } });
@@ -604,14 +620,23 @@ export class TransactionServer {
         mobi.push({ label: 'Pricing version', value: 'No pricing in effect' });
       }
     }
-    if (flow === 'payin') {
-      const settle = settlementOf(t, status);
-      mobi.push({ label: 'Settlement cycle', value: t.settlementCycle ?? '—' }, { label: 'Expected settlement date', value: settle.expected }, { label: 'Settlement status', value: settle.status }, { label: 'Settlement reference', value: '—' });
-    }
     if (final && t.reasonText) mobi.push({ label: 'Status reason', value: t.reasonCode ? `${t.reasonCode} · ${t.reasonText}` : t.reasonText, tone: status === 'expired' ? 'warning' : 'danger' });
     if (t.expiresAt) mobi.push({ label: 'Expires', value: fmtDateTime(t.expiresAt) });
     mobi.push({ label: 'Mobi request ID', value: t.mobiRequestId }, { label: 'Last updated', value: fmtDateTime(updatedAt(t, now)) });
     sections.push({ key: 'mobi', title: 'Mobi', fields: compact(mobi) });
+    if (flow === 'payin') {
+      const st = settlementView(t, status, now);
+      sections.push({
+        key: 'settlement',
+        title: 'Settlement',
+        fields: [
+          { label: 'Status', value: st ? SETTLEMENT_STATE_LABEL[st.state] + (st.state === 'on_hold' ? ' (merchant suspended)' : '') : status === 'successful' ? 'Not settled yet' : 'Not applicable', tone: st?.state === 'on_hold' ? 'warning' : undefined },
+          { label: st?.state === 'settled' ? 'Settled on' : 'Settlement date', value: st?.date ? fmtDate(st.date) : '—' },
+          { label: 'Settlement cycle', value: t.settlementCycle ?? '—' },
+          { label: 'Settlement reference', value: '—' },
+        ],
+      });
+    }
 
     const sent = t.sentAt !== null && t.sentAt <= now;
     sections.push({
@@ -659,6 +684,14 @@ export class TransactionServer {
       flags,
       audit: db.audit.filter((a) => a.transactionId === t.id).reverse(),
       can: { addNote: writable, flag: writable },
+      ...(seeFees ? { fee: status === 'successful' ? t.fee : null, net: status === 'successful' && t.fee !== null ? netOf(t) : null, feeRate: status === 'successful' && t.fee !== null && t.pricing ? pricingShort(t.pricing.summary) : null } : {}),
+      paidAt: status === 'successful' ? t.finalAt : null,
+      merchantName: t.merchantName,
+      methodDetail: methodDetail(d),
+      bankReference: ref,
+      customerName: flow === 'payin' ? (t.customer.name ?? null) : null,
+      beneficiary: flow === 'payout' ? beneficiaryOf(d) : null,
+      document: status === 'successful' && DOCUMENT_TEAMS.includes(who.team) ? (flow === 'payin' ? 'sales_slip' : 'payment_advice') : null,
       sampleData: true,
     };
   }
@@ -1222,19 +1255,6 @@ function methodDetailFields(d: TxnDetailRecord | undefined): DetailField[] {
         { label: 'Bank transfer reference', value: d.transferReference },
       ];
   }
-}
-
-function settlementOf(t: TxnRecord, status: TxnStatus, merchant = false): { expected: string; status: string } {
-  if (status === 'successful' && t.settlementHeld && !merchant) return { expected: '—', status: 'On hold (merchant suspended)' };
-  if (status !== 'successful' || !t.settlementCycle) return { expected: '—', status: status === 'successful' ? 'Not settled yet' : 'Not applicable' };
-  const days = Number(t.settlementCycle.replace('T+', '')) || 0;
-  const d = new Date(t.finalAt);
-  let added = 0;
-  while (added < days) {
-    d.setDate(d.getDate() + 1);
-    if (d.getDay() !== 0 && d.getDay() !== 6) added++;
-  }
-  return { expected: fmtDate(d.getTime()), status: 'Not settled yet' };
 }
 
 function ipnAttempts(t: TxnRecord, now: number): IpnAttempt[] {
