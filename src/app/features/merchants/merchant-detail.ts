@@ -269,6 +269,15 @@ export class MerchantDetailPage {
     this.mccError.set(null);
   }
 
+  protected closeMccForm() {
+    if (this.mccBusy()) return;
+    this.mccForm.set(false);
+    this.mccError.set(null);
+  }
+
+  /** Countries the MCC applies in (every application that isn't rejected). */
+  protected readonly mccCountryNames = computed(() => [...new Set(this.mccCountries())].map((c) => countryName(c)).join(', ') || 'no countries yet');
+
   protected async requestMcc() {
     if (!this.mccCode() || this.mccReason().trim().length < 10) {
       this.mccError.set('Choose the new MCC and explain why it should change (at least 10 characters).');

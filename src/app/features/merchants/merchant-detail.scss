@@ -137,44 +137,126 @@
 .lifecycle-reason textarea { resize: vertical; min-height: 100px; }
 @media (max-width: 640px) { .header-actions { width: 100%; } .lifecycle-modal { padding: 0; } }
 
-.mcc-current {
-  margin: 0 0 8px;
-
-  strong {
-    margin-right: 6px;
-  }
+.mcc-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 5px;
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: 1px;
 }
 
-.mcc-request,
-.mcc-form {
-  margin-top: 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--warning);
+.mcc-meta {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+/* A pending MCC change, inside Profile while it waits for Risk. */
+.mcc-request {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 16px 18px;
+  border: 1px solid var(--warning-border);
   border-radius: var(--r-card);
-  background: var(--surface);
-}
+  background: var(--warning-bg);
 
-.mcc-form {
-  border-left-color: var(--mobi-blue);
+  .f-field {
+    margin: 0;
+  }
+
+  .edit-actions {
+    margin: 0;
+  }
 }
 
 .mcc-request-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin: 0 0 8px;
+  justify-content: space-between;
+  gap: 8px 12px;
   font-size: 13px;
   color: var(--text-muted);
+
+  strong {
+    color: var(--text);
+  }
+}
+
+.mcc-compare {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+
+  @media (max-width: 560px) {
+    grid-template-columns: minmax(0, 1fr);
+
+    .mcc-arrow {
+      transform: rotate(90deg);
+    }
+  }
+}
+
+.mcc-box {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+
+  &.new {
+    border-color: var(--mobi-blue);
+  }
+
+  span {
+    display: block;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  strong {
+    font-size: 14px;
+    overflow-wrap: anywhere;
+  }
+}
+
+.mcc-arrow {
+  display: flex;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.mcc-reason {
+  span {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  p {
+    margin: 2px 0 0;
+  }
+}
+
+.mcc-flag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--warning);
 }
 
 .mcc-history {
   margin-top: 16px;
-}
-
-.mcc-request .f-field {
-  margin-top: 12px;
 }
 
 .mini-link {
