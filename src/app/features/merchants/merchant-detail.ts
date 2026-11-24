@@ -2,10 +2,10 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, input, si
 import { Router, RouterLink } from '@angular/router';
 import { isEmail, isPhone, validateRegistrationNumber } from '../../core/merchants/application-rules';
 import { MerchantApi, MerchantClientError, toMerchantError } from '../../core/merchants/merchant-api.service';
-import { MCC_OUTCOME_LABEL, mccCountryCheck, mccLabel } from '../../core/merchants/mcc';
+import { mccCountryCheck, mccLabel } from '../../core/merchants/mcc';
 import { MccService } from '../../core/merchants/mcc.service';
 import { productPhase } from '../../core/merchants/products';
-import { IdentityValue, PROFILE_ACTION_LABEL } from '../../core/merchants/change-requests';
+import { ChangeRequest, FieldChange, PROFILE_ACTION_LABEL, ProfileEvent } from '../../core/merchants/change-requests';
 import { FieldIssue } from '../../core/merchants/merchant-models';
 import { PendingChanges } from '../changes/pending-changes';
 import { SubMerchantsPanel } from '../sub-merchants/sub-merchants-panel';
@@ -28,6 +28,13 @@ interface ProfileDraft {
   name: string;
   email: string;
   phone: string;
+}
+
+interface ProfileRequestDraft {
+  legalName: string;
+  registrationCountry: string;
+  registrationNumber: string;
+  mccCode: string;
 }
 
 const STAGES = ['draft', 'pending_risk_review', ...READINESS_STATUSES];
@@ -75,25 +82,24 @@ export class MerchantDetailPage {
   protected readonly mccLabel = mccLabel;
   protected readonly profileActionLabel = PROFILE_ACTION_LABEL;
 
-  // Legal identity change request (after Risk approval).
-  protected readonly identityForm = signal(false);
-  protected readonly idDraft = signal<IdentityValue>({ legalName: '', registrationCountry: '', registrationNumber: '' });
-  protected readonly idReason = signal('');
-  protected readonly idBusy = signal(false);
-  protected readonly idError = signal<string | null>(null);
-  protected readonly idIssues = signal<FieldIssue[]>([]);
-  protected readonly identityPending = computed(() => (this.detail()?.pendingChanges ?? []).some((c) => c.scope === 'merchant_profile'));
   protected readonly handedOff = (status: Parameters<typeof productPhase>[0]) => productPhase(status) === 'post_handoff';
-  protected readonly mccOutcomeLabel = MCC_OUTCOME_LABEL;
   protected readonly teamLabel = (role: string | null) => (role ? (STAFF_ROLE_LABEL as Record<string, string>)[role] ?? role : '');
 
-  // MCC: Sales / Operations request a change once Risk has approved the merchant; Risk decides.
-  protected readonly mccForm = signal(false);
-  protected readonly mccCode = signal('');
-  protected readonly mccReason = signal('');
-  protected readonly mccComment = signal('');
-  protected readonly mccBusy = signal<string | null>(null);
-  protected readonly mccError = signal<string | null>(null);
+  // Profile change request (after Risk approval): legal name, registration country, registration
+  // number and MCC in one request. Sales / Operations request; Risk decides in the Profile card.
+  protected readonly profileForm = signal(false);
+  protected readonly pcDraft = signal<ProfileRequestDraft>({ legalName: '', registrationCountry: '', registrationNumber: '', mccCode: '' });
+  protected readonly pcReason = signal('');
+  protected readonly pcBusy = signal<'request' | 'approve' | 'reject' | null>(null);
+  protected readonly pcError = signal<string | null>(null);
+  protected readonly pcIssues = signal<FieldIssue[]>([]);
+  protected readonly pcDiscardAsk = signal(false);
+  protected readonly pcComment = signal('');
+  protected readonly pcDecideError = signal<string | null>(null);
+  /** The pending profile change, if any. */
+  protected readonly profileRequest = computed(() => (this.detail()?.pendingChanges ?? []).find((c) => c.scope === 'merchant_profile') ?? null);
+  /** Country-level change requests (profile changes show in the Profile card). */
+  protected readonly countryChanges = computed(() => (this.detail()?.pendingChanges ?? []).filter((c) => c.scope !== 'merchant_profile'));
   /** Countries the MCC must work in: every application that isn't rejected. */
   private readonly mccCountries = computed(() => (this.detail()?.applications ?? []).filter((a) => a.status !== 'rejected').map((a) => a.country));
   /** Catalogue codes available in all of the merchant's countries (restricted ones included, marked). */
@@ -101,10 +107,13 @@ export class MerchantDetailPage {
     this.mccService
       .catalogue()
       .entries.map((e) => ({ ...e, check: mccCountryCheck(this.mccService.catalogue(), e.code, this.mccCountries()) }))
-      .filter((e) => !e.check.unavailable.length && e.code !== this.detail()?.merchant.mcc?.code)
+      .filter((e) => !e.check.unavailable.length)
       .sort((a, b) => a.code.localeCompare(b.code)),
   );
-  protected readonly canRequestMcc = computed(() => this.roles.role() === 'sales' && !!this.detail()?.mccChangeNeedsRisk && !this.detail()?.mccRequest && this.mccService.catalogue().entries.length > 0);
+  protected readonly mccCountryNames = computed(() => {
+    const names = [...new Set(this.mccCountries())].map((c) => countryName(c));
+    return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : (names[0] ?? 'its countries');
+  });
 
   // ------------------------------------------------------------- suspension
   protected readonly viaLabel = VIA_LABEL;
@@ -262,109 +271,124 @@ export class MerchantDetailPage {
 
   protected readonly stageCount = STAGES.length - 1;
 
-  protected openMccForm() {
-    this.mccForm.set(true);
-    this.mccCode.set('');
-    this.mccReason.set('');
-    this.mccError.set(null);
+  /** A field has a change waiting for Risk (shown as "Change requested"). */
+  protected requested(field: string) {
+    return !!this.profileRequest()?.changes.some((c) => c.field === field);
   }
 
-  protected closeMccForm() {
-    if (this.mccBusy()) return;
-    this.mccForm.set(false);
-    this.mccError.set(null);
+  protected proposedMccCode(r: ChangeRequest) {
+    return r.changes.find((c) => c.field === 'mcc')?.to.split(' ')[0] ?? '';
   }
 
-  /** Countries the MCC applies in (every application that isn't rejected). */
-  protected readonly mccCountryNames = computed(() => [...new Set(this.mccCountries())].map((c) => countryName(c)).join(', ') || 'no countries yet');
-
-  protected async requestMcc() {
-    if (!this.mccCode() || this.mccReason().trim().length < 10) {
-      this.mccError.set('Choose the new MCC and explain why it should change (at least 10 characters).');
-      return;
-    }
-    this.mccBusy.set('request');
-    this.mccError.set(null);
-    try {
-      await this.api.requestMccChange(this.id(), this.mccCode(), this.mccReason().trim());
-      this.mccForm.set(false);
-      await this.load();
-      this.flash('MCC change sent to Risk');
-    } catch (e) {
-      this.mccError.set(toMerchantError(e).message ?? "We couldn't send the MCC change request.");
-    } finally {
-      this.mccBusy.set(null);
-    }
+  protected fieldNames(e: ProfileEvent) {
+    return e.changes.map((c) => c.label).join(', ');
   }
 
-  protected async decideMcc(decision: 'approve' | 'reject') {
-    const request = this.detail()?.mccRequest;
-    if (!request) return;
-    if (decision === 'reject' && this.mccComment().trim().length < 10) {
-      this.mccError.set('Give the reason for rejecting (at least 10 characters).');
-      return;
-    }
-    this.mccBusy.set(decision);
-    this.mccError.set(null);
-    try {
-      await this.api.decideMccChange(this.id(), request.id, decision, this.mccComment().trim());
-      this.mccComment.set('');
-      await this.load();
-      this.flash(decision === 'approve' ? 'MCC change approved' : 'MCC change rejected');
-    } catch (e) {
-      this.mccError.set(toMerchantError(e).message ?? "We couldn't record the decision.");
-    } finally {
-      this.mccBusy.set(null);
-    }
+  protected mccTo(e: ProfileEvent) {
+    return (e.changes[0]?.to ?? '').replace(' – ', ' ');
   }
 
-  protected openIdentityForm() {
+  /** History values: the MCC shows as its code only. */
+  protected histValue(c: FieldChange, side: 'from' | 'to') {
+    return c.field === 'mcc' ? c[side].split(' ')[0] : c[side];
+  }
+
+  protected openProfileForm() {
     const m = this.detail()!.merchant;
-    this.idDraft.set({ legalName: m.legalName, registrationCountry: m.registrationCountry, registrationNumber: m.registrationNumber });
-    this.idReason.set('');
-    this.idError.set(null);
-    this.idIssues.set([]);
-    this.idDiscardAsk.set(false);
-    this.identityForm.set(true);
+    this.pcDraft.set({ legalName: m.legalName, registrationCountry: m.registrationCountry, registrationNumber: m.registrationNumber, mccCode: m.mcc?.code ?? '' });
+    this.pcReason.set('');
+    this.pcError.set(null);
+    this.pcIssues.set([]);
+    this.pcDiscardAsk.set(false);
+    this.profileForm.set(true);
   }
 
-  /** Inline "Discard this change request?" in the sheet footer. */
-  protected readonly idDiscardAsk = signal(false);
-
-  protected closeIdentityForm() {
-    const m = this.detail()!.merchant;
-    const d = this.idDraft();
-    const dirty = d.legalName !== m.legalName || d.registrationCountry !== m.registrationCountry || d.registrationNumber !== m.registrationNumber || this.idReason().trim() !== '';
-    if (this.idDiscardAsk()) return this.idDiscardAsk.set(false);
-    if (dirty) return this.idDiscardAsk.set(true);
-    this.identityForm.set(false);
+  protected pcChanged(key: keyof ProfileRequestDraft) {
+    const m = this.detail()?.merchant;
+    if (!m) return false;
+    const current = key === 'mccCode' ? (m.mcc?.code ?? '') : m[key];
+    return this.pcDraft()[key].trim() !== current;
   }
 
-  protected setId(key: keyof IdentityValue, value: string) {
-    this.idDraft.update((d) => ({ ...d, [key]: value }));
+  /** "1 change: MCC 5712 → 5719" */
+  protected readonly pcSummary = computed(() => {
+    const m = this.detail()?.merchant;
+    if (!m) return null;
+    const d = this.pcDraft();
+    const parts: string[] = [];
+    if (d.legalName.trim() !== m.legalName) parts.push(`Legal name ${m.legalName} → ${d.legalName.trim()}`);
+    if (d.registrationCountry !== m.registrationCountry) parts.push(`Registration country ${countryName(m.registrationCountry)} → ${countryName(d.registrationCountry)}`);
+    if (d.registrationNumber.trim() !== m.registrationNumber) parts.push(`Registration number ${m.registrationNumber} → ${d.registrationNumber.trim()}`);
+    if (d.mccCode !== (m.mcc?.code ?? '')) parts.push(`MCC ${m.mcc?.code ?? 'none'} → ${d.mccCode}`);
+    return parts.length ? { count: parts.length, text: parts.join('; ') } : null;
+  });
+
+  protected readonly pcRestricted = computed(() => {
+    const code = this.pcDraft().mccCode;
+    if (!code || code === this.detail()?.merchant.mcc?.code) return [];
+    return this.mccCandidates().find((e) => e.code === code)?.check.restricted ?? [];
+  });
+
+  protected closeProfileForm() {
+    if (this.pcBusy()) return;
+    if (this.pcDiscardAsk()) return this.pcDiscardAsk.set(false);
+    if (this.pcSummary() || this.pcReason().trim()) return this.pcDiscardAsk.set(true);
+    this.profileForm.set(false);
   }
 
-  protected idIssue(field: string) {
-    return this.idIssues().find((i) => i.field === field)?.message ?? null;
+  protected setPc(key: keyof ProfileRequestDraft, value: string) {
+    this.pcDraft.update((d) => ({ ...d, [key]: value }));
+    this.pcIssues.update((list) => list.filter((i) => i.field !== `identity.${key}`));
   }
 
-  protected async requestIdentity() {
-    this.idBusy.set(true);
-    this.idError.set(null);
-    this.idIssues.set([]);
+  protected pcIssue(field: string) {
+    return this.pcIssues().find((i) => i.field === field)?.message ?? null;
+  }
+
+  protected async requestProfile() {
+    if (!this.pcSummary()) return this.pcError.set('Change at least one field before sending to Risk.');
+    if (this.pcReason().trim().length < 10) {
+      this.pcIssues.set([{ section: 'business', field: 'reason', message: 'Explain why this should change (at least 10 characters).' }]);
+      return this.pcError.set(null);
+    }
+    this.pcBusy.set('request');
+    this.pcError.set(null);
+    this.pcIssues.set([]);
     try {
-      const r = await this.api.requestProfileChange(this.id(), { section: 'identity', value: this.idDraft(), reason: this.idReason().trim() });
-      this.identityForm.set(false);
+      const d = this.pcDraft();
+      const mccCode = d.mccCode !== (this.detail()?.merchant.mcc?.code ?? '') ? d.mccCode : undefined;
+      const value = { legalName: d.legalName.trim(), registrationCountry: d.registrationCountry, registrationNumber: d.registrationNumber.trim(), ...(mccCode ? { mccCode } : {}) };
+      const r = await this.api.requestProfileChange(this.id(), { section: 'identity', value, reason: this.pcReason().trim() });
+      this.profileForm.set(false);
       await this.load();
       this.flash(`${r.id} sent to Risk`);
     } catch (e) {
       const err = toMerchantError(e);
       if ('errors' in err && err.errors?.length) {
-        this.idIssues.set(err.errors);
-        this.idError.set(err.errors.find((i) => i.field === 'reason')?.message ?? `${err.errors.length} item${err.errors.length === 1 ? '' : 's'} must be fixed.`);
-      } else this.idError.set(err.message ?? "We couldn't send the change request.");
+        this.pcIssues.set(err.errors);
+        if (!err.errors.some((i) => ['reason', 'identity.legalName', 'identity.registrationNumber'].includes(i.field))) this.pcError.set(err.errors[0].message);
+      } else this.pcError.set(err.message ?? "We couldn't send the change request.");
     } finally {
-      this.idBusy.set(false);
+      this.pcBusy.set(null);
+    }
+  }
+
+  protected async decideProfile(decision: 'approve' | 'reject') {
+    const r = this.profileRequest();
+    if (!r) return;
+    const comment = this.pcComment().trim();
+    if (decision === 'reject' && comment.length < 10) return this.pcDecideError.set('Give the reason for rejecting (at least 10 characters).');
+    this.pcBusy.set(decision);
+    this.pcDecideError.set(null);
+    try {
+      await this.api.decideChange(r.id, decision, comment);
+      this.pcComment.set('');
+      await this.load();
+      this.flash(decision === 'approve' ? `${r.id} approved and applied` : `${r.id} rejected; nothing changed`);
+    } catch (e) {
+      this.pcDecideError.set(toMerchantError(e).message ?? "We couldn't record the decision.");
+    } finally {
+      this.pcBusy.set(null);
     }
   }
 

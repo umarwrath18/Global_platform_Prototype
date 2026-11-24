@@ -11,9 +11,10 @@ import {
   describeChange,
   IdentityValue,
   ProfileEvent,
+  ProfileValue,
   SectionValue,
 } from '../merchants/change-requests';
-import { mccLabel } from '../merchants/mcc';
+import { MccRef } from '../merchants/mcc';
 import { ApplicationData, CountryApplication, DocumentRecord, FieldIssue, READINESS_STATUSES, StaffRole } from '../merchants/merchant-models';
 import { countryName, ONBOARDING_COUNTRIES, REGISTRATION_COUNTRIES } from '../merchants/onboarding-config';
 import { fmtDay, pricingSummary } from '../merchants/products';
@@ -34,6 +35,11 @@ export interface ChangeContext {
   /** Adds an entry to a country application's history. */
   recordApp: (app: CountryApplication, text: string, comment?: string) => void;
   notify: (event: 'change_requested' | 'change_decided', merchant: MerchantRecord, app: CountryApplication | null, audience: StaffRole[], title: string, body: string) => void;
+  /**
+   * MCC rules for profile changes: `check` validates a catalogue code against every country the
+   * merchant applied in (returns where it is restricted); `assign` sets it on the merchant.
+   */
+  mcc?: { check: (merchantId: string, code: string) => { mcc: MccRef; restrictedIn: string[] }; assign: (merchant: MerchantRecord, code: string, requestId: string) => void; legacyPending: (merchantId: string) => string | null };
 }
 
 const COUNTRY_SECTIONS: ChangeSection[] = ['business', 'bank', 'transaction', 'directors', 'documents'];
@@ -96,7 +102,7 @@ export function readIdentity(db: MerchantDb, merchantId: string, raw: any): Iden
   return { legalName, registrationCountry, registrationNumber };
 }
 
-const identityOf = (m: MerchantRecord): IdentityValue => ({ legalName: m.legalName, registrationCountry: m.registrationCountry, registrationNumber: m.registrationNumber });
+const profileOf = (m: MerchantRecord): ProfileValue => ({ legalName: m.legalName, registrationCountry: m.registrationCountry, registrationNumber: m.registrationNumber, mcc: m.mcc ? { code: m.mcc.code, description: m.mcc.description } : null });
 
 export function profileEvent(db: MerchantDb, e: ProfileEvent) {
   db.profileEvents ??= [];
@@ -104,20 +110,35 @@ export function profileEvent(db: MerchantDb, e: ProfileEvent) {
   db.profileEvents = db.profileEvents.slice(0, 1000);
 }
 
-/** Requests a change to an approved merchant's legal identity (Sales / Operations). */
+/**
+ * Requests a change to an approved merchant's Risk-controlled profile (Sales / Operations): legal
+ * name, registration country, registration number and MCC, in one request. `value.mccCode` is
+ * optional; when it differs from the current MCC it must be available in every country applied for.
+ */
 export function requestProfileChange(ctx: ChangeContext, merchantId: string, body: any): ChangeRequest {
   requireRole(ctx, 'sales', 'Only Sales / Operations can request profile changes.');
   const m = findMerchant(ctx.db, merchantId);
   if (!merchantRiskApproved(ctx.db, m.id)) fail(409, 'INVALID_TRANSITION', { message: `${m.legalName} hasn't been approved by Risk yet, so its profile can be edited directly.` });
-  if (body?.section !== 'identity') fail(422, 'VALIDATION_FAILED', { message: 'Profile change requests cover the legal identity. Contact details can be edited directly.' });
-  const proposed = readIdentity(ctx.db, m.id, body?.value);
-  const changes = describeChange('identity', identityOf(m), proposed);
+  if (body?.section !== 'identity') fail(422, 'VALIDATION_FAILED', { message: 'Profile change requests cover the legal identity and MCC. Contact details can be edited directly.' });
+  const proposed: ProfileValue = readIdentity(ctx.db, m.id, body?.value);
+  const code = str(body?.value?.mccCode, 8).trim();
+  let restrictedIn: string[] = [];
+  if (code && code !== m.mcc?.code) {
+    const checked = (ctx.mcc ?? fail(422, 'MCC_NOT_AVAILABLE', { message: 'MCC changes are not available.' })).check(m.id, code);
+    proposed.mcc = checked.mcc;
+    restrictedIn = checked.restrictedIn;
+  }
+  const changes = describeChange('identity', profileOf(m), proposed);
   if (!changes.length) fail(422, 'VALIDATION_FAILED', { message: 'There are no changes to request.' });
-  requireNoPending(ctx.db, (r) => r.scope === 'merchant_profile' && r.merchantId === m.id, 'The legal identity');
+  requireNoPending(ctx.db, (r) => r.scope === 'merchant_profile' && r.merchantId === m.id, 'The profile');
+  const legacy = ctx.mcc?.legacyPending(m.id);
+  if (legacy) fail(409, 'CHANGE_PENDING', { message: `The profile already has a change waiting for Risk (${legacy}). Wait for that decision first.` });
   const reason = readReason(body);
   const r = create(ctx, { scope: 'merchant_profile', section: 'identity', merchantId: m.id, applicationId: null, country: null, changes, proposed, reason });
-  profileEvent(ctx.db, { at: ctx.now, merchantId: m.id, action: 'change_requested', changes, reason, by: ctx.caller.name, role: ctx.role, requestId: r.id, comment: null });
-  ctx.notify('change_requested', m, null, ['risk'], `Change to review: ${m.legalName} · Legal identity`, `${ctx.caller.name} asked to change the legal identity (${r.id}): ${summary(r)}. Reason: ${reason}`);
+  if (restrictedIn.length) r.restrictedIn = restrictedIn;
+  profileEvent(ctx.db, { at: ctx.now, merchantId: m.id, action: 'change_requested', changes, reason, by: ctx.caller.name, role: ctx.role, requestId: r.id, comment: null, ...(restrictedIn.length ? { restrictedIn } : {}) });
+  const flag = restrictedIn.length ? ` The new MCC is restricted in ${restrictedIn.map(countryName).join(', ')}.` : '';
+  ctx.notify('change_requested', m, null, ['risk'], `Change to review: ${m.legalName} · Profile change`, `${ctx.caller.name} asked to change the profile (${r.id}): ${summary(r)}.${flag} Reason: ${reason}`);
   return toChangeView(r);
 }
 
@@ -180,7 +201,13 @@ export function decideChange(ctx: ChangeContext, id: string, body: any): ChangeR
   if (decision === 'approve') {
     // Re-check: other merchants or the country rules may have changed since the request.
     if (r.scope === 'merchant_profile') {
-      const value = readIdentity(ctx.db, m.id, r.proposed);
+      const proposed = r.proposed as ProfileValue;
+      const value = readIdentity(ctx.db, m.id, proposed);
+      if (proposed.mcc) {
+        const checked = ctx.mcc?.check(m.id, proposed.mcc.code) ?? fail(422, 'MCC_NOT_AVAILABLE', { message: 'MCC changes are not available.' });
+        r.restrictedIn = checked.restrictedIn.length ? checked.restrictedIn : undefined;
+        ctx.mcc!.assign(m, proposed.mcc.code, r.id);
+      }
       Object.assign(m, value, { updatedAt: ctx.now });
     } else {
       // Files keep the uploader recorded when the request was made.
@@ -192,7 +219,7 @@ export function decideChange(ctx: ChangeContext, id: string, body: any): ChangeR
   Object.assign(r, { status: decision === 'approve' ? 'approved' : 'rejected', decidedBy: ctx.caller.name, decidedRole: ctx.role, decidedAt: ctx.now, decisionComment: comment || null });
   const verb = decision === 'approve' ? 'approved' : 'rejected';
   if (r.scope === 'merchant_profile') {
-    profileEvent(ctx.db, { at: ctx.now, merchantId: m.id, action: decision === 'approve' ? 'change_approved' : 'change_rejected', changes: r.changes, reason: r.reason, by: ctx.caller.name, role: ctx.role, requestId: r.id, comment: comment || null });
+    profileEvent(ctx.db, { at: ctx.now, merchantId: m.id, action: decision === 'approve' ? 'change_approved' : 'change_rejected', changes: r.changes, reason: r.reason, by: ctx.caller.name, role: ctx.role, requestId: r.id, comment: comment || null, ...(r.restrictedIn?.length ? { restrictedIn: r.restrictedIn } : {}) });
   } else {
     ctx.recordApp(app!, decision === 'approve' ? `${CHANGE_SECTION_LABEL[r.section]} changed – ${r.id} approved by Risk` : `Change rejected by Risk – ${CHANGE_SECTION_LABEL[r.section]} (${r.id})`, comment || undefined);
   }
@@ -247,14 +274,14 @@ export function approvalsFor(db: MerchantDb, role: StaffRole): ApprovalsView {
   for (const r of db.changeRequests ?? []) {
     items.push({
       kind: 'change', id: r.id, title: `${CHANGE_SECTION_LABEL[r.section]}${r.country ? ` · ${countryName(r.country)}` : ''}`, merchantId: r.merchantId, merchantName: name(r.merchantId),
-      applicationId: r.applicationId, country: r.country, summary: summary(r), requestedBy: r.requestedBy, requestedRole: r.requestedRole, requestedAt: r.requestedAt,
+      applicationId: r.applicationId, country: r.country, summary: r.scope === 'merchant_profile' ? r.changes.map((c) => c.label).join(', ') : summary(r), requestedBy: r.requestedBy, requestedRole: r.requestedRole, requestedAt: r.requestedAt,
       status: r.status, approverTeam: 'risk', decidedAt: r.decidedAt, link: r.applicationId ? ['/applications', r.applicationId] : ['/merchants', r.merchantId],
     });
   }
   for (const r of db.mccRequests ?? []) {
     items.push({
-      kind: 'mcc', id: r.id, title: 'MCC change', merchantId: r.merchantId, merchantName: name(r.merchantId), applicationId: null, country: null,
-      summary: `${mccLabel(r.previous)} → ${mccLabel(r.proposed)}`, requestedBy: r.requestedBy, requestedRole: r.requestedRole, requestedAt: r.requestedAt,
+      kind: 'mcc', id: r.id, title: 'Profile change', merchantId: r.merchantId, merchantName: name(r.merchantId), applicationId: null, country: null,
+      summary: 'MCC', requestedBy: r.requestedBy, requestedRole: r.requestedRole, requestedAt: r.requestedAt,
       status: r.status, approverTeam: 'risk', decidedAt: r.decidedAt, link: ['/merchants', r.merchantId],
     });
   }

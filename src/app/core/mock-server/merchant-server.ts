@@ -34,8 +34,8 @@ import {
 import { ONBOARDING_COUNTRIES, READINESS_CHECKLISTS, REGISTRATION_COUNTRIES } from '../merchants/onboarding-config';
 import { fmtDay, periodText, PricingAuditEvent, pricingInEffect, pricingSummary, PricingVersion, ProductConfig, secondarySummary, todayIso } from '../merchants/products';
 import type { MerchantSettingsView } from '../merchants/merchant-portal';
-import { ChangeRequestRecord, describeChange, FieldChange, ProfileEvent } from '../merchants/change-requests';
-import { EMPTY_MCC_CATALOGUE, MccAuditEvent, MccCatalogue, MccCatalogueEntry, MccChangeRequest, mccCountryCheck, mccIssue, MccRef } from '../merchants/mcc';
+import { ChangeRequest, ChangeRequestRecord, describeChange, FieldChange, ProfileEvent } from '../merchants/change-requests';
+import { EMPTY_MCC_CATALOGUE, MccAuditEvent, MccCatalogue, MccCatalogueEntry, MccChangeRequest, mccCountryCheck, mccIssue, mccLabel, MccRef } from '../merchants/mcc';
 import { regionForCountry } from '../merchants/regions';
 import { randomToken } from './crypto';
 import { entityOfApplication, GoLiveIntent, goLiveBlocker, isRuleError, issueMid, MerchantEntity, parentEntityOf, RegionalMid, toMidView } from './merchant-identity';
@@ -348,6 +348,8 @@ export class MerchantServer {
           return ok(this.productAction(id, caller, role, (ctx) => ({ version: decidePricing(ctx, subId, body) })));
         }
       }
+      if (resource === 'changes' && id?.startsWith('MCR-') && sub === 'decision' && m === 'POST') return ok(legacyChangeView(this.decideMccChange(this.legacyMerchantOf(id), id, body, caller, role)));
+      if (resource === 'changes' && id?.startsWith('MCR-') && sub === 'withdraw' && m === 'POST') fail(409, 'INVALID_TRANSITION', { message: `${id} was made before profile changes were combined and can't be withdrawn. Ask Risk to reject it.` });
       if (resource === 'changes' && id && sub === 'decision' && m === 'POST') return ok(this.changeAction(caller, role, (ctx) => decideChange(ctx, id, body)));
       if (resource === 'changes' && id && sub === 'withdraw' && m === 'POST') return ok(this.changeAction(caller, role, (ctx) => withdrawChange(ctx, id)));
       if (resource === 'sub-merchants' && id && m === 'POST') {
@@ -427,8 +429,13 @@ export class MerchantServer {
       mccEvents: (db.mccEvents ?? []).filter((e) => e.merchantId === m.id).sort((a, b) => b.at - a.at),
       mccRequest: (db.mccRequests ?? []).find((r) => r.merchantId === m.id && r.status === 'pending') ?? null,
       mccChangeNeedsRisk: this.riskApproved(db, m.id),
-      pendingChanges: (db.changeRequests ?? []).filter((r) => r.merchantId === m.id && r.status === 'pending').map(toChangeView),
-      profileEvents: (db.profileEvents ?? []).filter((e) => e.merchantId === m.id),
+      // Older MCC-only requests show as profile changes, so Risk decides them in the same place.
+      pendingChanges: [
+        ...(db.changeRequests ?? []).filter((r) => r.merchantId === m.id && r.status === 'pending').map(toChangeView),
+        ...(db.mccRequests ?? []).filter((r) => r.merchantId === m.id && r.status === 'pending').map(legacyChangeView),
+      ],
+      // One profile history: direct edits, profile change requests and the MCC history.
+      profileEvents: [...(db.profileEvents ?? []).filter((e) => e.merchantId === m.id), ...(db.mccEvents ?? []).filter((e) => e.merchantId === m.id).map(mccHistoryAsProfile)].sort((a, b) => b.at - a.at),
       subMerchants: subMerchantsOf(db, m.id, this.now()),
       suspensions: suspensionsOf(db, m.id),
       effects: {
@@ -609,6 +616,17 @@ export class MerchantServer {
       now: this.now(),
       readData: (country, raw) => this.readData(country, raw),
       recordApp: (app, text, comment) => this.event(app, caller, role, text, null, null, comment),
+      mcc: {
+        check: (merchantId, code) => {
+          const { entry, restricted } = this.readMccChoice(db, merchantId, code);
+          return { mcc: { code: entry.code, description: entry.description }, restrictedIn: restricted };
+        },
+        assign: (merchant, code, requestId) => {
+          const { entry, catalogue } = this.readMccChoice(db, merchant.id, code);
+          merchant.mcc = { ...this.assignedMcc(entry, catalogue, this.now(), caller.name), viaRequest: requestId };
+        },
+        legacyPending: (merchantId) => (db.mccRequests ?? []).find((r) => r.merchantId === merchantId && r.status === 'pending')?.id ?? null,
+      },
       notify: (event, merchant, app, audience, title, body) => {
         db.notifications.unshift({
           id: `NT-${db.seq.notification++}`, at: this.now(), event, title, body, applicationId: app?.id ?? '', merchantId: merchant.id, ...(app ? { country: app.country } : {}), audience,
@@ -1111,6 +1129,8 @@ export class MerchantServer {
     }
     const pending = (db.mccRequests ?? []).find((r) => r.merchantId === m.id && r.status === 'pending');
     if (pending) fail(409, 'MCC_CHANGE_PENDING', { message: `MCC change ${pending.id} is waiting for a Risk decision. Wait for that decision first.` });
+    const profile = (db.changeRequests ?? []).find((r) => r.merchantId === m.id && r.scope === 'merchant_profile' && r.status === 'pending');
+    if (profile) fail(409, 'CHANGE_PENDING', { message: `The profile already has a change waiting for Risk (${profile.id}). Wait for that decision first.` });
     const reason = str(body?.reason, 500).trim();
     if (reason.length < 10) fail(422, 'VALIDATION_FAILED', { errors: [{ section: 'business', field: 'reason', message: 'Explain why the MCC should change (at least 10 characters).' }] });
     const { entry, restricted } = this.readMccChoice(db, m.id, body?.code);
@@ -1173,6 +1193,10 @@ export class MerchantServer {
 
   private catalogue(): MccCatalogue {
     return this.opts.mcc?.catalogue() ?? EMPTY_MCC_CATALOGUE;
+  }
+
+  private legacyMerchantOf(requestId: string): string {
+    return (this.load().mccRequests ?? []).find((r) => r.id === requestId)?.merchantId ?? fail(404, 'NOT_FOUND', { message: `No change request ${requestId}.` });
   }
 
   /** Risk has approved at least one of the merchant's applications (MCC changes then need Risk). */
@@ -1688,5 +1712,27 @@ export class MerchantServer {
 }
 
 const ok = (body: unknown, status = 200): ServerReply => ({ status, body });
+/** An older MCC-only request shown as a profile change. */
+function legacyChangeView(r: MccChangeRequest): ChangeRequest {
+  return {
+    id: r.id, scope: 'merchant_profile', section: 'identity', merchantId: r.merchantId, applicationId: null, country: null,
+    changes: [{ field: 'mcc', label: 'MCC', from: mccLabel(r.previous), to: mccLabel(r.proposed) }], reason: r.reason,
+    requestedBy: r.requestedBy, requestedRole: r.requestedRole as StaffRole, requestedAt: r.requestedAt, status: r.status,
+    decidedBy: r.decidedBy, decidedRole: r.decidedRole as StaffRole | null, decidedAt: r.decidedAt, decisionComment: r.decisionComment,
+    ...(r.restrictedIn.length ? { restrictedIn: r.restrictedIn } : {}),
+  };
+}
+
+/** An MCC history entry in the profile history's shape. */
+function mccHistoryAsProfile(e: MccAuditEvent): ProfileEvent {
+  const action = e.outcome === 'set_before_approval' ? 'mcc_set' : e.outcome;
+  const decided = e.outcome === 'change_approved' || e.outcome === 'change_rejected';
+  return {
+    at: e.at, merchantId: e.merchantId, action, changes: [{ field: 'mcc', label: 'MCC', from: mccLabel(e.previous), to: mccLabel(e.next) }], reason: e.reason,
+    by: (decided ? e.decidedBy : e.requestedBy) ?? e.requestedBy, role: ((decided ? e.decidedRole : e.requestedRole) ?? e.requestedRole) as StaffRole,
+    requestId: e.requestId, comment: e.comment, ...(e.restrictedIn.length ? { restrictedIn: e.restrictedIn } : {}),
+  };
+}
+
 const mccRef = (m: MccRef | null | undefined): MccRef | null => (m ? { code: m.code, description: m.description } : null);
 const mccText = (m: MccRef | null) => (m ? `${m.code} (${m.description})` : 'none');

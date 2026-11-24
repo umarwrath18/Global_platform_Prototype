@@ -49,6 +49,8 @@ export interface MerchantMcc extends MccRef {
   catalogueKind: MccCatalogueSource['kind'];
   setAt: number;
   setBy: string;
+  /** The approved profile change that set it, if any. */
+  viaRequest?: string;
 }
 
 export interface MccOption extends MccRef {
