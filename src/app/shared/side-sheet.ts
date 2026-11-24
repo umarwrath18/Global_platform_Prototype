@@ -3,7 +3,8 @@ import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, inject, 
 
 /**
  * Side sheet (Mobi design system): slides in from the right over a dimmed page, so the list behind
- * stays visible. Two sizes: `detail` (560 px) for viewing and deciding, `editor` (640 px) for forms.
+ * stays visible. Sizes: `detail` (560 px) for viewing and deciding, `editor` (640 px) for forms,
+ * `wide` (800 px) for previews such as documents.
  * Full screen below 768 px. The content provides its own header, scrolling body and footer with the
  * `sheet-head`, `sheet-body` and `sheet-foot` classes (or any column layout).
  *
@@ -17,7 +18,7 @@ import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, inject, 
   encapsulation: ViewEncapsulation.None,
   template: `
     <div class="sheet-backdrop" (click)="dismiss.emit()" aria-hidden="true"></div>
-    <section class="sheet-panel" [class.editor]="size() === 'editor'" role="dialog" aria-modal="true" [attr.aria-label]="label()" (keydown)="onKeydown($event)" tabindex="-1">
+    <section class="sheet-panel" [class.editor]="size() === 'editor'" [class.wide]="size() === 'wide'" role="dialog" aria-modal="true" [attr.aria-label]="label()" (keydown)="onKeydown($event)" tabindex="-1">
       <ng-content />
     </section>
   `,
@@ -51,9 +52,13 @@ import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, inject, 
     app-side-sheet .sheet-panel.editor {
       width: min(640px, 100%);
     }
+    app-side-sheet .sheet-panel.wide {
+      width: min(800px, 100%);
+    }
     @media (max-width: 767px) {
       app-side-sheet .sheet-panel,
-      app-side-sheet .sheet-panel.editor {
+      app-side-sheet .sheet-panel.editor,
+      app-side-sheet .sheet-panel.wide {
         width: 100%;
         border-radius: 0;
         animation-name: sheet-up;
@@ -197,7 +202,7 @@ import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, inject, 
   `,
 })
 export class SideSheet implements AfterViewInit, OnDestroy {
-  readonly size = input<'detail' | 'editor'>('detail');
+  readonly size = input<'detail' | 'editor' | 'wide'>('detail');
   /** Accessible name of the dialog (usually its title). */
   readonly label = input.required<string>();
   readonly dismiss = output<void>();

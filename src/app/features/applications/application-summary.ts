@@ -1,9 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import { registeredInCountry } from '../../core/merchants/application-rules';
-import { APPROVAL_PRIORITY_LABEL, ApplicationData, connectionTypeLabel, CountryApplication, FieldIssue, GlobalMerchant, merchantCategoryLabel, SECTION_LABEL, SectionKey } from '../../core/merchants/merchant-models';
+import { APPROVAL_PRIORITY_LABEL, ApplicationData, connectionTypeLabel, CountryApplication, DocumentRecord, FieldIssue, GlobalMerchant, merchantCategoryLabel, SECTION_LABEL, SectionKey } from '../../core/merchants/merchant-models';
 import { MccService } from '../../core/merchants/mcc.service';
 import type { MccRef } from '../../core/merchants/mcc';
 import { countryName, rulesFor } from '../../core/merchants/onboarding-config';
+import { fileSizeLabel, fileTypeLabel } from '../../core/documents/document-files';
 import { Icon } from '../../shared/icon';
 import { fmtDate } from '../../shared/merchant-ui';
 import { DecimalPipe } from '@angular/common';
@@ -28,6 +29,11 @@ export class ApplicationSummaryView {
   /** The MCC as just changed in the form (it is saved to the merchant straight away). */
   readonly currentMcc = input<MccRef | null | undefined>(undefined);
   readonly edit = output<SectionKey>();
+  /** File names open the Document sheet (Sales / Operations, Risk and CS on a saved application). */
+  readonly openable = input(false);
+  readonly openDoc = output<DocumentRecord>();
+  protected readonly fileType = fileTypeLabel;
+  protected readonly fileSize = fileSizeLabel;
 
   protected readonly d = computed(() => this.data() ?? this.application().data);
   protected readonly cfg = computed(() => rulesFor(this.application()));

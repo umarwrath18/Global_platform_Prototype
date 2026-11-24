@@ -97,6 +97,33 @@
   font-weight: 500;
 }
 
+.doc-link {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--mobi-blue);
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: none;
+    border-radius: 4px;
+    box-shadow: var(--focus-ring);
+  }
+}
+
+.doc-meta {
+  font-size: 12px;
+}
+
 .doc-files {
   display: flex;
   flex-direction: column;

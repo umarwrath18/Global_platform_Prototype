@@ -9,6 +9,34 @@
             <strong>{{ sectionLabel[r.section] }}@if (r.country) { · {{ countryName(r.country) }}}</strong>
             <span class="muted">{{ r.id }} · requested {{ dateTime(r.requestedAt) }} by {{ r.requestedBy }} ({{ teamLabel[r.requestedRole] }})</span>
           </header>
+          @if (docPairs(r); as pairs) {
+            @for (p of pairs; track p.type) {
+              <div class="cr-docs" role="group" [attr.aria-label]="p.label">
+                <h4>{{ p.label }}</h4>
+                <div class="cr-doc-grid">
+                  @for (side of [{ name: 'Current', doc: p.current }, { name: 'Proposed', doc: p.proposed }]; track side.name) {
+                    <div class="cr-doc" [class.proposed]="side.name === 'Proposed'">
+                      <div class="cr-doc-h">{{ side.name }}</div>
+                      @if (side.doc; as f) {
+                        <div class="cr-doc-thumb" aria-hidden="true"><app-icon name="file" [size]="28" /></div>
+                        <div class="cr-doc-info">
+                          @if (canOpenDocs()) {
+                            <button type="button" class="cr-doc-link" (click)="openDoc.set({ doc: f, r, side: $any(side.name) })" [attr.aria-label]="'Open ' + side.name.toLowerCase() + ' file ' + f.fileName">{{ f.fileName }}</button>
+                          } @else {
+                            <strong>{{ f.fileName }}</strong>
+                          }
+                          <span class="muted">{{ fileType(f.fileName) }} · {{ fileSize(f.sizeKb) }} · {{ dateTime(f.uploadedAt) }}</span>
+                        </div>
+                      } @else {
+                        <div class="cr-doc-none muted">{{ side.name === 'Current' ? 'None' : 'Removed' }}</div>
+                      }
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+            @if (canOpenDocs()) {<p class="muted small">Click a file to open it. Both files stay available in this change request after the decision.</p>}
+          } @else {
           <div class="table-wrap">
             <table class="data-table cr-table">
               <thead><tr><th scope="col">Field</th><th scope="col">Current</th><th scope="col">Proposed</th></tr></thead>
@@ -19,6 +47,7 @@
               </tbody>
             </table>
           </div>
+          }
           <p class="cr-reason"><strong>Reason</strong> {{ r.reason }}</p>
           @if (r.decidedBy && r.status !== 'pending') {
             <p class="cr-reason"><strong>{{ statusLabel[r.status] }}</strong> {{ dateTime(r.decidedAt!) }} · {{ r.decidedBy }}@if (r.decisionComment) { – {{ r.decisionComment }}}</p>
@@ -47,4 +76,8 @@
       }
     </div>
   </section>
+}
+
+@if (openDoc(); as o) {
+  <app-document-sheet [doc]="o.doc" [typeLabel]="docLabel(o.r, o.doc.type)" [eyebrow]="'Change request ' + o.r.id + ' · ' + o.side" [subtitle]="sectionLabel[o.r.section] + (o.r.country ? ' · ' + countryName(o.r.country) : '') + ' · requested by ' + o.r.requestedBy" [applicationId]="o.r.applicationId!" (closed)="openDoc.set(null)" (recorded)="docRecorded.emit($event)" />
 }

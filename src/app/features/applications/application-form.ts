@@ -1,3 +1,4 @@
+import { DocumentFiles } from '../../core/documents/document-files';
 import { ChangeDetectionStrategy, Component, computed, inject, input, OnInit, output, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { documentFileError, registeredInCountry, SECTION_ORDER, todayIso, validateApplication } from '../../core/merchants/application-rules';
@@ -43,6 +44,7 @@ const newId = () => `n${Date.now().toString(36)}${uid++}`;
 })
 export class ApplicationForm implements OnInit {
   private readonly api = inject(MerchantApi);
+  private readonly files = inject(DocumentFiles);
   protected readonly mcc = inject(MccService);
 
   readonly application = input.required<CountryApplication>();
@@ -275,7 +277,10 @@ export class ApplicationForm implements OnInit {
     }
     this.docErrors.update(({ [type]: _, ...rest }) => rest);
     // One file per document type: a new file replaces the current one.
-    this.edit((d) => (d.documents = [...d.documents.filter((x) => x.type !== type), { id: newId(), type, fileName: file.name, sizeKb, uploadedAt: Date.now(), sample: false }]));
+    // The file itself stays in this browser so Sales / Operations, Risk and CS can open it.
+    const id = newId() + Math.random().toString(36).slice(2, 6); // unique across tabs: it keys the stored file
+    void this.files.put(id, file);
+    this.edit((d) => (d.documents = [...d.documents.filter((x) => x.type !== type), { id, type, fileName: file.name, sizeKb, uploadedAt: Date.now(), sample: false }]));
   }
 
   protected removeDoc(id: string) {

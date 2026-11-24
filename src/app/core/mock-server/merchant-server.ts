@@ -1,3 +1,4 @@
+import { recordDocumentAccess, stampUploads } from './documents';
 import { emptyApplicationData, ipnIssue, registeredInCountry, SECTION_ORDER, validateApplication, validateRegistrationNumber, isEmail, isPhone } from '../merchants/application-rules';
 import {
   APPROVAL_PRIORITIES,
@@ -292,6 +293,12 @@ export class MerchantServer {
         if (id && sub === 'readiness' && m === 'POST') return ok(await this.readiness(id, body, caller, role));
         if (id && sub === 'ipn' && m === 'PUT') return ok(this.setIpn(id, body, caller, role));
         if (id && sub === 'changes' && m === 'POST') return ok(this.changeAction(caller, role, (ctx) => requestCountryChange(ctx, id, body)), 201);
+        if (id && sub === 'documents' && subId && action === 'access' && m === 'POST') {
+          const db = this.load();
+          const history = recordDocumentAccess(db, id, subId, body, { name: caller.name, role }, this.now());
+          this.save(db);
+          return ok({ history });
+        }
         if (id && sub === 'products' && m === 'GET') return ok(this.products(id, role));
         if (id && sub === 'products' && m === 'PUT') {
           // Settlement changes need a current MFA code (5-minute window).
@@ -765,7 +772,7 @@ export class MerchantServer {
     const db = this.load();
     const app = this.findApplication(db, id);
     if (!EDITABLE.includes(app.status)) fail(409, 'INVALID_TRANSITION', { message: 'This application can no longer be edited.' });
-    app.data = this.readData(app.country, body?.data);
+    app.data = this.withUploaders(app, this.readData(app.country, body?.data), caller, role);
     app.updatedAt = this.now();
     // Collapse repeated saves into one history entry per editing session.
     const last = app.history[app.history.length - 1];
@@ -781,7 +788,7 @@ export class MerchantServer {
     const app = this.findApplication(db, id);
     const merchant = this.findMerchant(db, app.merchantId);
     if (!EDITABLE.includes(app.status)) fail(409, 'INVALID_TRANSITION', { message: 'Only draft or returned applications can be submitted.' });
-    if (body?.data) app.data = this.readData(app.country, body.data);
+    if (body?.data) app.data = this.withUploaders(app, this.readData(app.country, body.data), caller, role);
     const errors = validateApplication(app.country, app.data, merchant);
     const mccProblem = mccIssue(this.catalogue(), app.country, merchant.mcc);
     if (mccProblem) errors.push(mccProblem);
@@ -1348,6 +1355,11 @@ export class MerchantServer {
   private summary(db: MerchantDb, a: CountryApplication, m: MerchantRecord): ApplicationSummary {
     const mid = (db.mids ?? []).find((x) => x.applicationId === a.id);
     return { id: a.id, merchantId: a.merchantId, merchantName: m.legalName, country: a.country, currency: a.currency, status: a.status, priority: a.data.business.approvalPriority ?? 'medium', submissionCount: a.submissionCount, createdAt: a.createdAt, updatedAt: a.updatedAt, liveMid: mid ? { mid: mid.mid, source: mid.source } : null };
+  }
+
+  /** Who uploaded each file: kept for known files, the caller for new ones. */
+  private withUploaders(app: CountryApplication, data: ApplicationData, caller: Caller, role: StaffRole): ApplicationData {
+    return { ...data, documents: stampUploads(app.data.documents, data.documents, caller.name, role) };
   }
 
   private event(app: CountryApplication, caller: Caller | null, role: StaffRole | 'system', action: string, from: ApplicationStatus | null, to: ApplicationStatus | null, comment?: string, sections?: SectionKey[]) {

@@ -9,6 +9,7 @@ import {
   CountryApplication,
   CreateMerchantRequest,
   GlobalMerchant,
+  HistoryEvent,
   MerchantApiError,
   MerchantDetail,
   MerchantSummary,
@@ -116,6 +117,11 @@ export class MerchantApi {
 
   getApplication(id: string) {
     return this.run(this.http.get<ApplicationDetail>(`/api/applications/${encodeURIComponent(id)}`, { headers: this.headers }));
+  }
+
+  /** Records opening or downloading one of the application's documents; returns the updated history. */
+  documentAccess(applicationId: string, documentId: string, action: 'view' | 'download') {
+    return this.run(this.http.post<{ history: HistoryEvent[] }>(`/api/applications/${encodeURIComponent(applicationId)}/documents/${encodeURIComponent(documentId)}/access`, { action }, { headers: this.headers }));
   }
 
   saveDraft(id: string, data: ApplicationData) {

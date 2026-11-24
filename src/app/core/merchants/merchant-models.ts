@@ -152,7 +152,13 @@ export interface DocumentRecord {
   uploadedAt: number;
   /** Sample record created by the prototype; no file content is stored. */
   sample: boolean;
+  /** Who uploaded it (set by the server when the file first appears). Absent on older and sample records. */
+  uploadedBy?: string;
+  uploadedByRole?: StaffRole;
 }
+
+/** Opening or downloading a document, recorded in the application history. */
+export type DocumentAccess = 'view' | 'download';
 
 /** The merchant's business size, used for risk monitoring and limits. */
 export type MerchantCategory = 'enterprise' | 'sme' | 'micro';
