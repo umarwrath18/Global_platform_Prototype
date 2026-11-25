@@ -18,7 +18,7 @@ import { SideSheet } from '../../shared/side-sheet';
     <div class="sheet-titles">
       <p class="sheet-eyebrow">Routing · Merchant override</p>
       <h2 class="sheet-title">{{ existing() ? 'Edit merchant override' : 'Add merchant override' }}</h2>
-      <p class="sheet-sub">Pin one merchant to a host for one country and payment method.</p>
+      <p class="sheet-sub">Pin one merchant to a partner for one country and payment method.</p>
     </div>
     <button type="button" class="sheet-close" (click)="close()" aria-label="Close"><app-icon name="x" [size]="18" /></button>
   </header>
@@ -50,16 +50,16 @@ import { SideSheet } from '../../shared/side-sheet';
       </div>
     </div>
     <div class="f-field">
-      <label for="ov-host">Pinned host <span class="req">*</span></label>
+      <label for="ov-host">Pinned partner <span class="req">*</span></label>
       <select id="ov-host" class="f-input" [disabled]="!method()" [class.invalid]="err('hostId')" (change)="hostId.set(v($event))">
-        <option value="" [selected]="!hostId()">Select host</option>
+        <option value="" [selected]="!hostId()">Select partner</option>
         @for (o of hosts(); track o.hostId) {<option [value]="o.hostId" [selected]="o.hostId === hostId()">{{ o.name }} · {{ o.eligible ? 'Active · ' + methodLabel() + ' Available' : o.reason }}</option>}
       </select>
       @if (err('hostId'); as m) {<p class="f-error">{{ m }}</p>} @else if (defaultLine(); as d) {<p class="f-hint">{{ d }}</p>}
     </div>
     <label class="rt-toggle">
       <input type="checkbox" role="switch" [checked]="fallback()" (change)="fallback.set($any($event.target).checked)" />
-      <span><strong>Fall back to the default route</strong> If {{ hostName() || 'the pinned host' }} is not eligible, use the default route. Off: the payment fails.</span>
+      <span><strong>Fall back to the default route</strong> If {{ hostName() || 'the pinned partner' }} is not eligible, use the default route. Off: the payment fails.</span>
     </label>
     <div class="f-field">
       <label for="ov-reason">Reason <span class="req">*</span></label>

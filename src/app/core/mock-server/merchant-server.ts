@@ -34,7 +34,7 @@ import {
 import { ONBOARDING_COUNTRIES, READINESS_CHECKLISTS, REGISTRATION_COUNTRIES } from '../merchants/onboarding-config';
 import { fmtDay, periodText, PricingAuditEvent, pricingInEffect, pricingSummary, PricingVersion, ProductConfig, secondarySummary, todayIso } from '../merchants/products';
 import type { MerchantSettingsView } from '../merchants/merchant-portal';
-import { ChangeRequest, ChangeRequestRecord, describeChange, FieldChange, ProfileEvent } from '../merchants/change-requests';
+import { ApprovalItem, ChangeRequest, ChangeRequestRecord, describeChange, FieldChange, ProfileEvent } from '../merchants/change-requests';
 import { EMPTY_MCC_CATALOGUE, MccAuditEvent, MccCatalogue, MccCatalogueEntry, MccChangeRequest, mccCountryCheck, mccIssue, mccLabel, MccRef } from '../merchants/mcc';
 import { regionForCountry } from '../merchants/regions';
 import { randomToken } from './crypto';
@@ -192,6 +192,8 @@ export interface MerchantServerOptions {
    * may switch with "View as". The app turns this on; tests that switch teams with one login leave it off.
    */
   fixedTeams?: boolean;
+  /** Approval items held by other services (partner cost pricing), shown in the same inbox. */
+  extraApprovals?: () => ApprovalItem[];
 }
 
 const STAFF_ROLES: StaffRole[] = ['sales', 'risk', 'cs', 'finops'];
@@ -382,7 +384,7 @@ export class MerchantServer {
           return ok(this.suspensionAction(caller, role, step[1]));
         }
       }
-      if (resource === 'approvals' && !id && m === 'GET') return ok(approvalsFor(this.load(), role));
+      if (resource === 'approvals' && !id && m === 'GET') return ok(approvalsFor(this.load(), role, this.opts.extraApprovals?.() ?? []));
       if (resource === 'pricing' && !sub && m === 'GET') {
         const country = str(query.get('country'), 2).toUpperCase() || null;
         const corridor = country && ONBOARDING_COUNTRIES[country] ? country : null;

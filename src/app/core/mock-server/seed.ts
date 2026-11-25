@@ -142,7 +142,7 @@ export const DEMO_ACCOUNT_GUIDE: { loginId: string; scenario: string; portal?: '
   { loginId: 'TANJUNG-ADMIN', scenario: 'FinOps · MFA on' },
   { loginId: 'MOBI-SUPPORT', scenario: 'Mobi Support · MFA on' },
   { loginId: 'MOBI-SECURITY', scenario: 'Security Admin (Tech) · MFA on' },
-  { loginId: 'MOBI-TECHOPS', scenario: 'Tech Ops · Host Management · MFA on' },
+  { loginId: 'MOBI-TECHOPS', scenario: 'Tech Ops · Partners and Routing · MFA on' },
   { loginId: 'MOBI-ADMIN', scenario: 'Prototype admin · can switch teams with "View as" · MFA on' },
   { loginId: 'TANJUNG-VIEWER', scenario: 'Viewer (Sales / Operations) · MFA on' },
   { loginId: 'LUMI-ADMIN', scenario: 'Account with no active countries · MFA not set up yet' },

@@ -3,7 +3,13 @@ import {
   AVAILABILITY_LABEL,
   AvailabilityStatus,
   checklistOf,
+  CostVersion,
   enableBlockers,
+  methodCategory,
+  MethodCost,
+  PAYMENT_CATEGORIES,
+  SECRET_LABEL,
+  SecretKind,
   Host,
   HOST_ADAPTERS,
   HOST_CODE_RE,
@@ -28,7 +34,9 @@ import {
   registrationCountries,
   statusOf,
 } from '../hosts/hosts';
-import { countryName } from '../merchants/onboarding-config';
+import { countryName, ONBOARDING_COUNTRIES } from '../merchants/onboarding-config';
+import { activateVersion, classifyPeriod, inEffect, pricingSummary, runStatusJob, techniqueLabel, todayIso, validatePrimary } from '../merchants/products';
+import { readDraft } from './product-pricing';
 
 /**
  * Host Management, simulated backend. Hosts, capabilities, integrations and activity are stored
@@ -40,8 +48,11 @@ import { countryName } from '../merchants/onboarding-config';
  */
 
 const KEY = 'mobi.gp.hostdb';
-/** 2: one status, setup checklist; partners, credential references, validation and health removed. */
-const DB_VERSION = 2;
+/**
+ * 3: Partner Management: contacts, write-only secrets (last 4 only), cost pricing versions.
+ * 2: one status, setup checklist; partners, credential references, validation and health removed.
+ */
+const DB_VERSION = 3;
 
 interface HostDb {
   version: number;
@@ -50,6 +61,8 @@ interface HostDb {
   capabilities: HostCapability[];
   integrations: HostIntegration[];
   activity: HostActivity[];
+  /** Cost pricing (what partners charge Mobi), versioned like merchant pricing. */
+  costVersions: CostVersion[];
 }
 
 export interface HostCaller {
@@ -86,7 +99,10 @@ const fail = (status: number, code: string, message?: string, errors?: HostField
 
 interface Who {
   name: string;
+  userId: string;
   manage: boolean;
+  /** FinOps decides cost pricing (never the Tech Ops user who set it). */
+  finops: boolean;
   label: string;
 }
 
@@ -119,6 +135,16 @@ export class HostServer {
       if (m === 'PUT' && id && !sub) return ok(this.save(who, id, body));
       if (m === 'POST' && id && sub === 'capabilities' && !subId) return ok(this.addCapability(who, id, body), 201);
       if (m === 'PUT' && id && sub === 'capabilities' && subId) return ok(this.updateCapability(who, id, subId, body));
+      if (m === 'POST' && id && sub === 'secrets') {
+        this.requireManage(who);
+        const kind = this.checkSecret(id, body);
+        const denied = await this.stepUp(token, body?.code);
+        if (denied) return denied;
+        return ok(this.setSecret(who, id, kind, String(body.value)));
+      }
+      if (m === 'POST' && id && sub === 'cost-pricing' && !subId) return ok(this.setCost(who, id, body), 201);
+      if (m === 'POST' && id && sub === 'cost-pricing' && subId && rawPath.endsWith('/decision')) return ok(this.decideCost(who, id, subId, body));
+      if (m === 'POST' && id && sub === 'cost-pricing' && subId && rawPath.endsWith('/cancel')) return ok(this.cancelCost(who, id, subId));
       if (m === 'POST' && id && sub === 'status') {
         this.requireManage(who);
         this.checkStatusChange(id, body);
@@ -131,6 +157,17 @@ export class HostServer {
       if (e instanceof HostError) return { status: e.status, body: e.body };
       throw e;
     }
+  }
+
+  /** Cost pricing waiting for FinOps, for the shared Approvals inbox (server-side use only). */
+  costApprovals(): { id: string; hostId: string; hostName: string; country: string; methodCode: string; summary: string; requestedBy: string; requestedRole: string; requestedAt: number; status: 'pending' | 'approved' | 'rejected' | 'withdrawn'; decidedAt: number | null }[] {
+    const db = this.load();
+    return db.costVersions.map((v) => ({
+      id: v.id, hostId: v.hostId, hostName: db.hosts.find((h) => h.id === v.hostId)?.name ?? v.hostId, country: v.country, methodCode: v.methodCode,
+      summary: `${methodName(v.country, v.methodCode)}: ${pricingSummary(v)} from ${v.startDate}`, requestedBy: v.createdBy, requestedRole: 'techops', requestedAt: v.createdAt,
+      status: v.status === 'pending_approval' ? 'pending' : v.status === 'rejected' ? 'rejected' : v.status === 'cancelled' ? 'withdrawn' : 'approved',
+      decidedAt: v.approvedAt ?? v.rejectedAt ?? v.cancelledAt,
+    }));
   }
 
   /** Read-only view for Routing: each host's status and its payment methods (no access check: server-side use only). */
@@ -150,14 +187,15 @@ export class HostServer {
   // ------------------------------------------------------------- access
 
   private who(caller: HostCaller, roleHeader: string | null): Who {
-    if (caller.merchantId) fail(403, 'ROLE_NOT_PERMITTED', 'Merchant users have no access to Host Management.');
+    if (caller.merchantId) fail(403, 'ROLE_NOT_PERMITTED', 'Merchant users have no access to Partner Management.');
     const team = caller.team ?? null;
     const techOps = team === 'techops' || (team === 'admin' && roleHeader === 'techops');
-    return { name: caller.name, manage: techOps && !caller.readOnly, label: `${caller.name} (${techOps ? 'Tech Ops' : TEAM_LABEL[team ?? ''] ?? 'Mobi'})` };
+    const finops = team === 'finops' || (team === 'admin' && roleHeader === 'finops');
+    return { name: caller.name, userId: caller.userId, manage: techOps && !caller.readOnly, finops: finops && !caller.readOnly, label: `${caller.name} (${techOps ? 'Tech Ops' : finops ? 'FinOps' : TEAM_LABEL[team ?? ''] ?? 'Mobi'})` };
   }
 
   private requireManage(who: Who) {
-    if (!who.manage) fail(403, 'ROLE_NOT_PERMITTED', 'Only Tech Ops can change hosts.');
+    if (!who.manage) fail(403, 'ROLE_NOT_PERMITTED', 'Only Tech Ops can change partners.');
   }
 
   private async stepUp(token: string | null, code: unknown): Promise<Reply | null> {
@@ -179,7 +217,10 @@ export class HostServer {
     const count = (st: HostView['status']) => hosts.filter((h) => h.status === st).length;
     return {
       hosts,
-      summary: { total: hosts.length, active: count('active'), disabled: count('disabled'), maintenance: count('maintenance'), draft: count('draft') },
+      summary: {
+        total: hosts.length, active: count('active'), disabled: count('disabled'), maintenance: count('maintenance'), draft: count('draft'),
+        costMissing: hosts.filter((h) => h.cost.priced < h.cost.total).length, costPending: hosts.filter((h) => h.cost.pending > 0).length,
+      },
       can: { manage: who.manage },
       sampleData: true,
     };
@@ -190,13 +231,17 @@ export class HostServer {
     const host = this.find(db, id);
     const view = this.view(db, host);
     const integration = db.integrations.find((i) => i.hostId === host.id) ?? null;
+    const caps = db.capabilities.filter((c) => c.hostId === host.id);
     return {
       host: view,
-      capabilities: db.capabilities.filter((c) => c.hostId === host.id).map(capView),
+      capabilities: caps.map(capView),
       integration: integration ? { ...integration, missing: integrationMissing(integration) } : null,
       activity: db.activity.filter((a) => a.hostId === host.id).sort((a, b) => b.timestamp - a.timestamp || b.id.localeCompare(a.id)),
       enableBlockers: enableBlockers(view.checklist),
-      can: { manage: who.manage },
+      costVersions: db.costVersions.filter((v) => v.hostId === host.id).sort((a, b) => b.createdAt - a.createdAt),
+      methodCosts: caps.map((c) => this.methodCost(db, host.id, c.countryCode, c.paymentMethodCode)),
+      can: { manage: who.manage, decidePricing: who.finops },
+      today: todayIso(this.now()),
       sampleData: true,
     };
   }
@@ -213,12 +258,15 @@ export class HostServer {
     const caps = db.capabilities.filter((c) => c.hostId === h.id);
     const integration = db.integrations.find((i) => i.hostId === h.id) ?? null;
     const active = caps.filter((c) => c.availabilityStatus !== 'disabled');
+    const costs = active.map((c) => this.methodCost(db, h.id, c.countryCode, c.paymentMethodCode));
     return {
       ...h,
       status: statusOf(h),
       markets: [...new Set(caps.map((c) => countryName(c.countryCode)))],
       paymentMethods: [...new Set(active.map((c) => methodName(c.countryCode, c.paymentMethodCode) + (c.paymentFlow === 'payout' ? ' (Payout)' : '')))],
-      checklist: checklistOf(h, caps, integration),
+      categories: PAYMENT_CATEGORIES.map((category) => ({ category, count: caps.filter((c) => methodCategory(c.countryCode, c.paymentMethodCode) === category).length })).filter((x) => x.count),
+      checklist: checklistOf(h, caps, integration, (country, method) => this.priced(db, h.id, country, method)),
+      cost: { priced: costs.filter((c) => c.current || c.scheduled).length, total: costs.length, pending: costs.filter((c) => c.pending).length },
     };
   }
 
@@ -237,7 +285,7 @@ export class HostServer {
     if (existing && existing.operationalState !== 'disabled' && !existing.draft) {
       // An active (or maintenance) host must stay ready to enable; disable it first to take it apart.
       const prospective = checklistOf({ ...existing, ...basic, draft }, caps, integ ? ({ ...integ } as HostIntegration) : (db.integrations.find((i) => i.hostId === existing.id) ?? null));
-      const open = enableBlockers(prospective);
+      const open = enableBlockers(prospective.filter((x) => x.id !== 'pricing'));
       if (draft || open.length) fail(409, 'INVALID_TRANSITION', `${existing.name} is ${existing.operationalState === 'active' ? 'Active' : 'under maintenance'}, so it must stay ready: ${draft ? 'it cannot go back to draft.' : open.join(' ')} Disable it first to make this change.`);
     }
     const now = this.now();
@@ -247,8 +295,9 @@ export class HostServer {
       const country = basic.registrationCountry || 'XX';
       db.seq.host[country] = (db.seq.host[country] ?? 0) + 1;
       host = {
-        id: `HST-${country}-${String(db.seq.host[country]).padStart(3, '0')}`,
+        id: `PTR-${country}-${String(db.seq.host[country]).padStart(3, '0')}`,
         ...basic,
+        secrets: {},
         draft,
         // A new host is never operational: Tech Ops enables it once it is verified.
         operationalState: 'disabled',
@@ -261,16 +310,16 @@ export class HostServer {
         sample: false,
       };
       db.hosts.push(host);
-      this.log(db, host, who, draft ? 'Host saved as draft' : 'Host created', `${host.name} (${host.hostCode}) · ${hostTypeName(host.hostType)}`);
+      this.log(db, host, who, draft ? 'Partner saved as draft' : 'Partner created', `${host.name} (${host.hostCode}) · ${hostTypeName(host.hostType)}`);
     } else {
       host = existing;
       const changed = (Object.keys(basic) as (keyof typeof basic)[]).filter((k) => (host[k] ?? '') !== (basic[k] ?? ''));
       Object.assign(host, basic, { updatedAt: now, updatedBy: who.label });
       if (host.draft && !draft) {
         host.draft = false;
-        this.log(db, host, who, 'Host created', 'Draft completed and saved.');
+        this.log(db, host, who, 'Partner set up', 'Draft completed and saved.');
       } else if (changed.length) {
-        this.log(db, host, who, 'Host details updated', changed.map((k) => FIELD_LABEL[k] ?? k).join(', '));
+        this.log(db, host, who, 'Partner details updated', changed.map((k) => FIELD_LABEL[k] ?? k).join(', '));
       }
     }
 
@@ -309,7 +358,7 @@ export class HostServer {
       } else {
         Object.assign(rec, integ, { updatedAt: now });
       }
-      if (before !== JSON.stringify(integrationFields(rec))) this.log(db, host, who, 'Integration details updated', `${rec.integrationName || 'Integration'} · ${rec.environment === 'production' ? 'Production' : 'Sandbox'} · ${integrationMissing(rec).length ? 'incomplete' : 'complete'}`);
+      if (rec && before !== JSON.stringify(integrationFields(rec))) this.log(db, host, who, 'Integration details updated', `${rec.integrationName || 'Integration'} · ${rec.environment === 'production' ? 'Production' : 'Sandbox'} · ${integrationMissing(rec).length ? 'incomplete' : 'complete'}`);
     }
 
     this.saveDb(db);
@@ -323,16 +372,22 @@ export class HostServer {
     const hostType = (HOST_TYPES.some((t) => t.id === b.hostType) ? b.hostType : '') as HostType;
     const registrationCountry = registrationCountries().some((c) => c.code === b.registrationCountry) ? String(b.registrationCountry) : '';
     const ownerTeam = s(b.ownerTeam, 80);
-    if (!name) errors.push({ field: 'basic.name', message: 'Enter the host name.' });
-    if (!hostCode) errors.push({ field: 'basic.hostCode', message: 'Enter a host code.' });
+    const contactEmail = s(b.contactEmail, 120);
+    const contactPhone = s(b.contactPhone, 30);
+    if (!name) errors.push({ field: 'basic.name', message: 'Enter the partner name.' });
+    if (!hostCode) errors.push({ field: 'basic.hostCode', message: 'Enter a partner code.' });
+    if (contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) errors.push({ field: 'basic.contactEmail', message: 'Enter a valid email address.' });
+    if (contactPhone && !/^\+?[0-9 ()-]{7,20}$/.test(contactPhone)) errors.push({ field: 'basic.contactPhone', message: 'Enter a phone number with country code, e.g. +84 24 3974 8888.' });
     else if (!HOST_CODE_RE.test(hostCode)) errors.push({ field: 'basic.hostCode', message: 'Use 2–20 letters, numbers, dashes or underscores, starting with a letter or number.' });
-    else if (db.hosts.some((h) => h.hostCode === hostCode && h.id !== existing?.id)) errors.push({ field: 'basic.hostCode', message: `${hostCode} is already used by another host. Choose a unique code.` });
+    else if (db.hosts.some((h) => h.hostCode === hostCode && h.id !== existing?.id)) errors.push({ field: 'basic.hostCode', message: `${hostCode} is already used by another partner. Choose a unique code.` });
     if (!draft) {
-      if (!hostType) errors.push({ field: 'basic.hostType', message: 'Choose the host type.' });
+      if (!hostType) errors.push({ field: 'basic.hostType', message: 'Choose the partner type.' });
+      if (!contactEmail) errors.push({ field: 'basic.contactEmail', message: 'Enter the operations contact email.' });
+      if (!contactPhone) errors.push({ field: 'basic.contactPhone', message: 'Enter the operations phone number.' });
       if (!registrationCountry) errors.push({ field: 'basic.registrationCountry', message: 'Choose the country of registration.' });
       if (!ownerTeam) errors.push({ field: 'basic.ownerTeam', message: 'Enter the responsible team.' });
     }
-    return { name, hostCode, description: s(b.description, 300), hostType: hostType || 'other', registrationCountry, ownerTeam, notes: s(b.notes, 1000) };
+    return { name, hostCode, description: s(b.description, 300), hostType: hostType || 'other', registrationCountry, ownerTeam, notes: s(b.notes, 1000), contactEmail, contactPhone, escalationContact: s(b.escalationContact, 120) };
   }
 
   private readCapabilities(raw: unknown, draft: boolean, errors: HostFieldError[]) {
@@ -371,7 +426,7 @@ export class HostServer {
       }
     }
     // Secrets are never accepted: anything that looks like one is refused, not stored.
-    if (raw.secret || raw.apiKey || raw.password || raw.privateKey || raw.credentialReference) errors.push({ field: 'integration', message: 'Credentials and secrets are not entered or kept in Host Management.' });
+    if (raw.secret || raw.apiKey || raw.password || raw.privateKey || raw.credentialReference) errors.push({ field: 'integration', message: 'Secrets are set one at a time with Set / Replace, never with the integration details.' });
     const url = s(raw.apiBaseUrl, 300);
     if (url && !URL_RE.test(url)) errors.push({ field: 'integration.apiBaseUrl', message: 'Enter a valid URL, starting with https://.' });
     else if (url && environment === 'production' && !url.toLowerCase().startsWith('https://')) errors.push({ field: 'integration.apiBaseUrl', message: 'Production endpoints must use https.' });
@@ -389,6 +444,7 @@ export class HostServer {
       timeoutSeconds: timeout,
       connectionConfig: s(raw.connectionConfig, 500),
       notes: s(raw.notes, 1000),
+      portalUsername: s(raw.portalUsername, 80),
     };
   }
 
@@ -470,12 +526,12 @@ export class HostServer {
       host.operationalState = 'active';
       host.maintenance = null;
       host.disabledReason = null;
-      this.log(db, host, who, from === 'maintenance' ? 'Host re-enabled' : 'Host enabled', `${from === 'maintenance' ? 'Maintenance ended. ' : ''}Eligible for routing once Routing Management exists; no routing rules were created.`);
+      this.log(db, host, who, from === 'maintenance' ? 'Partner re-enabled' : 'Partner enabled', `${from === 'maintenance' ? 'Maintenance ended. ' : ''}Eligible for routing once Routing Management exists; no routing rules were created.`);
     } else if (body.action === 'disable') {
       host.operationalState = 'disabled';
       host.maintenance = null;
       host.disabledReason = reason;
-      this.log(db, host, who, 'Host disabled', `Reason: ${reason}. No traffic is rerouted automatically.`);
+      this.log(db, host, who, 'Partner disabled', `Reason: ${reason}. No traffic is rerouted automatically.`);
     } else {
       const until = body.until ? Number(body.until) : null;
       host.operationalState = 'maintenance';
@@ -487,10 +543,154 @@ export class HostServer {
     return this.detail(who, id);
   }
 
+  // ------------------------------------------------------------- write-only secrets
+
+  /** Checks before the authenticator code is asked for. The value itself is never stored. */
+  private checkSecret(id: string, body: any): SecretKind {
+    const db = this.load();
+    this.find(db, id);
+    const kind = body?.kind as SecretKind;
+    if (!(kind in SECRET_LABEL)) fail(400, 'VALIDATION_FAILED', 'Choose API key, secret key or partner portal password.');
+    const value = typeof body?.value === 'string' ? body.value.trim() : '';
+    if (value.length < 8 || value.length > 500) fail(422, 'VALIDATION_FAILED', `Enter the ${SECRET_LABEL[kind].toLowerCase()} (at least 8 characters).`, [{ field: 'value', message: `Enter the ${SECRET_LABEL[kind].toLowerCase()} (at least 8 characters).` }]);
+    if (/\s/.test(value)) fail(422, 'VALIDATION_FAILED', 'Remove spaces from the value.', [{ field: 'value', message: 'Remove spaces from the value.' }]);
+    return kind;
+  }
+
+  /**
+   * Prototype: only the last 4 characters and who set it are kept; the value is discarded here.
+   * A real system hands the value to the credential vault and stores the vault reference.
+   */
+  private setSecret(who: Who, id: string, kind: SecretKind, value: string): HostDetailResponse {
+    const db = this.load();
+    const host = this.find(db, id);
+    const replaced = !!host.secrets?.[kind];
+    host.secrets = { ...(host.secrets ?? {}), [kind]: { last4: value.trim().slice(-4), setAt: this.now(), setBy: who.label } };
+    this.touch(host, who);
+    this.log(db, host, who, `${SECRET_LABEL[kind]} ${replaced ? 'replaced' : 'set'}`, `Ends in ${value.trim().slice(-4)}. The value is never shown again.`);
+    this.saveDb(db);
+    return this.detail(who, id);
+  }
+
+  // ------------------------------------------------------------- cost pricing (what the partner charges Mobi)
+
+  private costScope(db: HostDb, hostId: string, country: string, methodCode: string) {
+    return db.costVersions.filter((v) => v.hostId === hostId && v.country === country && v.methodCode === methodCode);
+  }
+
+  private methodCost(db: HostDb, hostId: string, country: string, methodCode: string): MethodCost {
+    const today = todayIso(this.now());
+    const scope = this.costScope(db, hostId, country, methodCode);
+    return {
+      country,
+      methodCode,
+      current: scope.filter((v) => inEffect(v, today)).sort((a, b) => b.startDate.localeCompare(a.startDate) || b.version - a.version)[0] ?? null,
+      scheduled: scope.filter((v) => v.status === 'scheduled').sort((a, b) => a.startDate.localeCompare(b.startDate))[0] ?? null,
+      pending: scope.find((v) => v.status === 'pending_approval') ?? null,
+    };
+  }
+
+  /** Approved cost pricing in effect now or scheduled. */
+  private priced(db: HostDb, hostId: string, country: string, methodCode: string): boolean {
+    const c = this.methodCost(db, hostId, country, methodCode);
+    return !!(c.current || c.scheduled);
+  }
+
+  /** Tech Ops submits cost pricing for one payment method; FinOps approves it. Same rules as merchant pricing. */
+  private setCost(who: Who, id: string, body: any): CostVersion {
+    this.requireManage(who);
+    const db = this.load();
+    const host = this.find(db, id);
+    const country = String(body?.country ?? '');
+    const cfg = ONBOARDING_COUNTRIES[country] ?? fail(422, 'VALIDATION_FAILED', 'Choose the country.');
+    const draft = readDraft(body?.draft, cfg.currency);
+    // Cost pricing has no sub-merchants, VA bank splits or secondary charges.
+    // Partner costs are in the country's currency.
+    Object.assign(draft, { subMerchantId: null, vaBanks: [], subscription: null, promotion: null, currency: cfg.currency });
+    if (draft.technique === null) fail(422, 'VALIDATION_FAILED', 'Choose a pricing model.');
+    const cap = db.capabilities.find((c) => c.hostId === host.id && c.countryCode === country && c.paymentMethodCode === draft.methodCode) ?? fail(422, 'VALIDATION_FAILED', `${host.name} isn't registered for that payment method in ${cfg.name}.`);
+    draft.flow = cap.paymentFlow;
+    const scope = this.costScope(db, host.id, country, draft.methodCode);
+    const editOf = typeof body?.editOf === 'string' && body.editOf ? (scope.find((v) => v.id === body.editOf) ?? fail(404, 'NOT_FOUND', 'Pricing version not found.')) : null;
+    if (editOf) {
+      if (editOf.status !== 'active' && editOf.status !== 'scheduled') fail(409, 'INVALID_TRANSITION', 'Only active or scheduled cost pricing can be changed.');
+      if (draft.technique !== editOf.technique) fail(422, 'VALIDATION_FAILED', `The pricing model (${techniqueLabel(editOf.technique)}) cannot be changed. Set a new version without editing to change it.`);
+    }
+    if (scope.some((v) => v.status === 'pending_approval')) fail(409, 'PRICING_PENDING', `${methodName(country, draft.methodCode)} already has cost pricing waiting for FinOps. Wait for that decision or withdraw it first.`);
+    const today = todayIso(this.now());
+    const issues = validatePrimary(draft, draft.endDate !== null);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.startDate)) issues.unshift({ field: 'startDate', message: 'Start date is required' });
+    if (draft.startDate && draft.startDate < today) issues.push({ field: 'startDate', message: "Start date can't be in the past" });
+    if (issues.length) fail(422, 'VALIDATION_FAILED', issues.map((i) => i.message).join(' '), issues.map((i) => ({ field: i.field, message: i.message })));
+    const conflict = classifyPeriod(draft, scope, editOf?.id);
+    if (conflict.kind === 'overlap') fail(409, 'PRICING_OVERLAP', `This period overlaps cost pricing v${conflict.existing.version} (${conflict.existing.startDate}${conflict.existing.endDate ? ` to ${conflict.existing.endDate}` : ' onwards'}). Choose dates that don't overlap.`);
+    const now = this.now();
+    const v: CostVersion = {
+      ...draft,
+      id: this.nextId(db, 'CST'),
+      hostId: host.id,
+      country,
+      applicationId: `${host.id}:${country}`,
+      version: Math.max(0, ...scope.map((x) => x.version)) + 1,
+      status: 'pending_approval',
+      usd: null,
+      source: 'change',
+      settlementSnapshot: null,
+      editOf: editOf?.id ?? null,
+      createdBy: who.label,
+      createdById: who.userId,
+      createdRole: 'techops',
+      createdAt: now,
+      approvedBy: null, approvedAt: null, rejectedBy: null, rejectedAt: null, rejectionReason: null, cancelledBy: null, cancelledAt: null,
+    };
+    db.costVersions.push(v);
+    this.touch(host, who);
+    this.log(db, host, who, 'Cost pricing submitted', `${methodName(country, v.methodCode)} (${cfg.name}) v${v.version}: ${pricingSummary(v)} from ${v.startDate}. Waiting for FinOps.`);
+    this.saveDb(db);
+    return v;
+  }
+
+  private decideCost(who: Who, id: string, versionId: string, body: any): CostVersion {
+    if (!who.finops) fail(403, 'ROLE_NOT_PERMITTED', 'Only FinOps can approve or reject cost pricing.');
+    const db = this.load();
+    const host = this.find(db, id);
+    const v = db.costVersions.find((x) => x.id === versionId && x.hostId === host.id) ?? fail(404, 'NOT_FOUND', 'Pricing version not found.');
+    if (v.status !== 'pending_approval') fail(409, 'INVALID_TRANSITION', `v${v.version} has already been decided.`);
+    if (v.createdById === who.userId) fail(403, 'ROLE_NOT_PERMITTED', 'You submitted this cost pricing, so someone else must decide it.');
+    const now = this.now();
+    const today = todayIso(now);
+    if (body?.decision === 'approve') {
+      if (v.startDate < today) v.startDate = today;
+      activateVersion(v, this.costScope(db, host.id, v.country, v.methodCode), today);
+      Object.assign(v, { approvedBy: who.label, approvedAt: now });
+      this.log(db, host, who, 'Cost pricing approved', `${methodName(v.country, v.methodCode)} v${v.version}: ${pricingSummary(v)} from ${v.startDate}.`);
+    } else if (body?.decision === 'reject') {
+      const reason = String(body?.reason ?? '').trim().slice(0, 1000);
+      if (reason.length < 5) fail(422, 'VALIDATION_FAILED', 'Give the reason for rejecting (at least 5 characters).', [{ field: 'reason', message: 'Give the reason for rejecting (at least 5 characters).' }]);
+      Object.assign(v, { status: 'rejected', rejectedBy: who.label, rejectedAt: now, rejectionReason: reason });
+      this.log(db, host, who, 'Cost pricing rejected', `${methodName(v.country, v.methodCode)} v${v.version}. Reason: ${reason}`);
+    } else fail(400, 'VALIDATION_FAILED', 'Choose approve or reject.');
+    this.saveDb(db);
+    return v;
+  }
+
+  /** Tech Ops withdraws a cost pricing version still waiting for FinOps. */
+  private cancelCost(who: Who, id: string, versionId: string): CostVersion {
+    this.requireManage(who);
+    const db = this.load();
+    const host = this.find(db, id);
+    const v = db.costVersions.find((x) => x.id === versionId && x.hostId === host.id) ?? fail(404, 'NOT_FOUND', 'Pricing version not found.');
+    if (v.status !== 'pending_approval') fail(409, 'INVALID_TRANSITION', 'Only cost pricing waiting for FinOps can be withdrawn.');
+    Object.assign(v, { status: 'cancelled', cancelledBy: who.label, cancelledAt: this.now() });
+    this.log(db, host, who, 'Cost pricing withdrawn', `${methodName(v.country, v.methodCode)} v${v.version}.`);
+    this.saveDb(db);
+    return v;
+  }
+
   // ------------------------------------------------------------- helpers
 
   private find(db: HostDb, id: string): Host {
-    return db.hosts.find((h) => h.id === id) ?? fail(404, 'NOT_FOUND', 'Host not found.');
+    return db.hosts.find((h) => h.id === id) ?? fail(404, 'NOT_FOUND', 'Partner not found.');
   }
 
   private touch(host: Host, who: Who) {
@@ -518,7 +718,11 @@ export class HostServer {
     if (raw) {
       try {
         const db = JSON.parse(raw) as HostDb;
-        if (db.version === DB_VERSION) return db;
+        if (db.version === DB_VERSION) {
+          // Scheduled cost pricing starts, and ended pricing expires, as days pass.
+          if (runStatusJob(db.costVersions, todayIso(this.now()))) this.saveDb(db);
+          return db;
+        }
       } catch {
         // fall through to a fresh seed
       }
@@ -554,10 +758,13 @@ function capLabel(c: HostCapability) {
 const hostTypeName = (t: HostType) => HOST_TYPES.find((x) => x.id === t)?.label ?? t;
 
 const FIELD_LABEL: Record<string, string> = {
-  name: 'Host Name',
-  hostCode: 'Host Code',
+  name: 'Partner name',
+  hostCode: 'Partner code',
   description: 'Description',
-  hostType: 'Host Type',
+  hostType: 'Partner type',
+  contactEmail: 'Operations email',
+  contactPhone: 'Operations phone',
+  escalationContact: 'Escalation contact',
   registrationCountry: 'Country of Registration',
   ownerTeam: 'Internal Owner',
   notes: 'Notes',
@@ -574,9 +781,18 @@ function ok(body: unknown, status = 200): Reply {
 const DAY = 86_400_000;
 const TECH = 'Wei Ling Tan (Tech Ops)';
 
-/** Sample hosts. Names identify demo records only; none is a live integration. */
+/** Sample partners. Names identify demo records only; none is a live integration. */
+
+function hash(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
 function seed(now: number): HostDb {
-  const db: HostDb = { version: DB_VERSION, seq: { host: {}, any: 0 }, hosts: [], capabilities: [], integrations: [], activity: [] };
+  const db: HostDb = { version: DB_VERSION, seq: { host: {}, any: 0 }, hosts: [], capabilities: [], integrations: [], activity: [], costVersions: [] };
   const id = (p: string) => `${p}-${String(++db.seq.any).padStart(5, '0')}`;
   type SeedHost = {
     code: string;
@@ -589,36 +805,43 @@ function seed(now: number): HostDb {
     integ: Partial<HostIntegration> | null;
     maintenance?: string;
     disabledReason?: string;
+    email: string;
+    phone: string;
+    /** Approved cost pricing: [country, method, % rate or null, fixed fee or null]. */
+    cost: [string, string, number | null, number | null][];
+    /** A change waiting for FinOps: [country, method, fixed fee]. */
+    pendingCost?: [string, string, number];
+    secrets?: SecretKind[];
   };
   const rest = (url: string, env: HostEnvironment, auth: AuthMethod, cfg: HostAuthConfig, name: string): Partial<HostIntegration> => ({ integrationName: name, adapterType: 'mobi_rest_v1', apiBaseUrl: url, apiVersion: 'v1', environment: env, authenticationType: auth, authConfig: cfg, timeoutSeconds: 30, connectionConfig: 'Callback URL: https://pay.mobi.example/hooks · IP allowlist: 2 addresses', notes: '' });
   const hosts: SeedHost[] = [
     {
-      code: 'HARSYA', name: 'HARSYA', type: 'payment_aggregator', country: 'ID', state: 'active', desc: 'Indonesian aggregator for virtual accounts, QRIS and e-wallets.',
+      code: 'HARSYA', email: 'ops@harsya.example', phone: '+62 21 5000 1100', cost: [['ID', 'va', null, 2000], ['ID', 'qris', 0.45, null], ['ID', 'ovo', 1.2, null]], secrets: ['secretKey'], name: 'HARSYA', type: 'payment_aggregator', country: 'ID', state: 'active', desc: 'Indonesian aggregator for virtual accounts, QRIS and e-wallets.',
       caps: [['ID', 'va', 'available'], ['ID', 'qris', 'available'], ['ID', 'ovo', 'available']],
       integ: rest('https://api.harsya.example/v1', 'production', 'oauth2', { tokenUrl: 'https://api.harsya.example/oauth/token', clientId: 'mobi-collections', scope: 'payments' }, 'HARSYA Collections API'),
     },
     {
-      code: 'WINPAY', name: 'WINPAY', type: 'payment_aggregator', country: 'ID', state: 'active', desc: 'Virtual accounts and bank payouts in Indonesia.',
+      code: 'WINPAY', email: 'ops@winpay.example', phone: '+62 21 5555 0101', cost: [['ID', 'va', null, 2500], ['ID', 'bank_transfer_payout', null, 3000]], pendingCost: ['ID', 'bank_transfer_payout', 2750], secrets: ['apiKey', 'secretKey', 'portalPassword'], name: 'WINPAY', type: 'payment_aggregator', country: 'ID', state: 'active', desc: 'Virtual accounts and bank payouts in Indonesia.',
       caps: [['ID', 'va', 'available'], ['ID', 'bank_transfer_payout', 'available']],
       integ: rest('https://api.winpay.example/v2', 'production', 'api_key_secret', { keyHeader: 'X-Api-Key', signature: 'HMAC-SHA256' }, 'WINPAY Gateway API'),
     },
     {
-      code: 'LINKQU', name: 'LINKQU', type: 'payment_aggregator', country: 'ID', state: 'disabled', desc: 'Payout and e-wallet aggregator; sandbox testing in progress.',
+      code: 'LINKQU', email: 'support@linkqu.example', phone: '+62 21 2900 7788', cost: [['ID', 'bank_transfer_payout', null, 2800]], secrets: ['apiKey'], name: 'LINKQU', type: 'payment_aggregator', country: 'ID', state: 'disabled', desc: 'Payout and e-wallet aggregator; sandbox testing in progress.',
       caps: [['ID', 'bank_transfer_payout', 'available'], ['ID', 'dana', 'available'], ['ID', 'va', 'unavailable']],
       integ: rest('https://sandbox.linkqu.example/api', 'sandbox', 'api_key_secret', { keyHeader: 'X-Linkqu-Key', signature: 'HMAC-SHA256' }, 'LINKQU Payout API'), disabledReason: 'Sandbox testing; not ready for production.',
     },
     {
-      code: 'PBB', name: 'Public Bank', type: 'bank', country: 'MY', state: 'active', desc: 'FPX, card acquiring and bank payouts in Malaysia.',
+      code: 'PBB', email: 'merchantservices@publicbank.example', phone: '+60 3 2176 6000', cost: [['MY', 'fpx', 0.6, null], ['MY', 'cards', 1.5, null], ['MY', 'bank_transfer_payout', null, 1.5]], name: 'Public Bank', type: 'bank', country: 'MY', state: 'active', desc: 'FPX, card acquiring and bank payouts in Malaysia.',
       caps: [['MY', 'fpx', 'available'], ['MY', 'cards', 'available'], ['MY', 'bank_transfer_payout', 'available']],
       integ: { ...rest('https://h2h.publicbank.example/gateway', 'production', 'mtls', {}, 'Public Bank Host-to-Host'), adapterType: 'mobi_iso8583' },
     },
     {
-      code: 'SAIGONPAY', name: 'Saigon PayLink', type: 'payment_gateway', country: 'VN', state: 'disabled', desc: 'Vietnam provider for VietQR and MoMo (sample).',
+      code: 'SAIGONPAY', email: 'partners@saigonpaylink.example', phone: '+84 28 3822 4400', cost: [], name: 'Saigon PayLink', type: 'payment_gateway', country: 'VN', state: 'disabled', desc: 'Vietnam provider for VietQR and MoMo (sample).',
       caps: [['VN', 'vietqr', 'available'], ['VN', 'momo', 'available']],
       integ: { ...rest('https://api.saigonpaylink.example', 'sandbox', 'oauth2', { clientId: 'mobi-vn' }, 'Saigon PayLink API') }, disabledReason: 'Integration not finished.',
     },
     {
-      code: 'CIMBCOLLECT', name: 'CIMB Collect', type: 'bank', country: 'MY', state: 'maintenance', desc: 'DuitNow QR collections in Malaysia.',
+      code: 'CIMBCOLLECT', email: 'collect.ops@cimb.example', phone: '+60 3 2261 8888', cost: [['MY', 'duitnow_qr', 0.4, null]], secrets: ['apiKey'], name: 'CIMB Collect', type: 'bank', country: 'MY', state: 'maintenance', desc: 'DuitNow QR collections in Malaysia.',
       caps: [['MY', 'duitnow_qr', 'available']],
       integ: rest('https://collect.cimb.example/api', 'production', 'api_key', { keyHeader: 'X-Api-Key' }, 'CIMB Collect API'), maintenance: 'Provider certificate rotation announced for tonight.',
     },
@@ -627,17 +850,19 @@ function seed(now: number): HostDb {
   for (const s of hosts) {
     i += 1;
     db.seq.host[s.country] = (db.seq.host[s.country] ?? 0) + 1;
-    const hostId = `HST-${s.country}-${String(db.seq.host[s.country]).padStart(3, '0')}`;
+    const hostId = `PTR-${s.country}-${String(db.seq.host[s.country]).padStart(3, '0')}`;
     const created = now - (40 - i * 3) * DAY;
     const host: Host = {
       id: hostId, hostCode: s.code, name: s.name, description: s.desc, hostType: s.type, registrationCountry: s.country,
       ownerTeam: `Tech Ops – ${countryName(s.country)}`, notes: 'Sample record for the prototype; not a live integration.', draft: false,
+      contactEmail: s.email, contactPhone: s.phone, escalationContact: '',
+      secrets: Object.fromEntries((s.secrets ?? []).map((k) => [k, { last4: hash(`${s.code}:${k}`).toString(36).toUpperCase().padStart(4, '0').slice(-4), setAt: created + 2 * DAY, setBy: TECH }])),
       operationalState: s.state, maintenance: s.maintenance ? { reason: s.maintenance, until: now + 0.5 * DAY, since: now - 2 * 3600_000, by: TECH } : null,
       disabledReason: s.disabledReason ?? null, createdAt: created, updatedAt: now - i * 3600_000, createdBy: TECH, updatedBy: TECH, sample: true,
     };
     db.hosts.push(host);
     const act = (at: number, action: string, details: string) => db.activity.push({ id: id('ACT'), hostId, hostName: s.name, action, performedBy: TECH, timestamp: at, details });
-    act(created, 'Host created', `${s.name} (${s.code}) · ${hostTypeName(s.type)}`);
+    act(created, 'Partner created', `${s.name} (${s.code}) · ${hostTypeName(s.type)}`);
     for (const [country, method, availability] of s.caps) {
       const m = hostMethods(country).find((x) => x.code === method)!;
       db.capabilities.push({ id: id('CAP'), hostId, countryCode: country, paymentMethodCode: method, paymentFlow: m.flow, supportedCurrencies: [hostCountries().find((x) => x.code === country)!.currency], availabilityStatus: availability, createdAt: created, updatedAt: created });
@@ -646,14 +871,32 @@ function seed(now: number): HostDb {
     if (s.integ) {
       const integ: HostIntegration = {
         id: id('INT'), hostId, integrationName: '', adapterType: 'mobi_rest_v1', apiBaseUrl: '', apiVersion: '', environment: 'sandbox', authenticationType: null, authConfig: {},
-        timeoutSeconds: 30, connectionConfig: '', notes: '', updatedAt: created + 2 * DAY, ...s.integ,
+        timeoutSeconds: 30, connectionConfig: '', notes: '', portalUsername: s.secrets?.includes('portalPassword') ? 'mobi_ops' : '', updatedAt: created + 2 * DAY, ...s.integ,
       };
       db.integrations.push(integ);
       act(created + 2 * DAY, 'Integration details updated', `${integ.integrationName} · ${integ.environment === 'production' ? 'Production' : 'Sandbox'}`);
     }
-    if (s.state === 'active' || s.state === 'maintenance') act(created + 4 * DAY, 'Host enabled', 'Eligible for routing once Routing Management exists; no routing rules were created.');
+    const costStart = todayIso(created + 3 * DAY);
+    const costVersion = (country: string, method: string, pct: number | null, fee: number | null, extra: Partial<CostVersion>): CostVersion => ({
+      flow: hostMethods(country).find((x) => x.code === method)!.flow, methodCode: method, subMerchantId: null, vaBanks: [],
+      technique: pct !== null ? 'variable_rate' : 'fixed_fee', currency: ONBOARDING_COUNTRIES[country].currency, mdrPct: pct, fixedFee: fee, minimumFee: null,
+      volumePeriod: null, tiers: null, historical: null, subscription: null, promotion: null, startDate: costStart, endDate: null,
+      id: id('CST'), hostId, country, applicationId: `${hostId}:${country}`, version: 1, status: 'active', usd: null, source: 'change', settlementSnapshot: null, editOf: null,
+      createdBy: TECH, createdById: 'U-18', createdRole: 'techops', createdAt: created + 2 * DAY, approvedBy: 'Nurul Huda (FinOps)', approvedAt: created + 3 * DAY,
+      rejectedBy: null, rejectedAt: null, rejectionReason: null, cancelledBy: null, cancelledAt: null, ...extra,
+    });
+    for (const [country, method, pct, fee] of s.cost) {
+      db.costVersions.push(costVersion(country, method, pct, fee, {}));
+      act(created + 3 * DAY, 'Cost pricing approved', `${methodName(country, method)} v1 · approved by FinOps`);
+    }
+    if (s.pendingCost) {
+      const [country, method, fee] = s.pendingCost;
+      db.costVersions.push(costVersion(country, method, null, fee, { version: 2, status: 'pending_approval', startDate: todayIso(now + 6 * DAY), createdAt: now - 3 * 3600_000, approvedBy: null, approvedAt: null }));
+      act(now - 3 * 3600_000, 'Cost pricing submitted', `${methodName(country, method)} v2: fixed fee ${fee} from ${todayIso(now + 6 * DAY)}. Waiting for FinOps.`);
+    }
+    if (s.state === 'active' || s.state === 'maintenance') act(created + 4 * DAY, 'Partner enabled', 'Eligible for routing once Routing Management exists; no routing rules were created.');
     if (s.state === 'maintenance') act(now - 2 * 3600_000, 'Maintenance started', `Reason: ${s.maintenance}`);
-    if (s.state === 'disabled' && s.disabledReason) act(created + 4 * DAY, 'Host disabled', `Reason: ${s.disabledReason}`);
+    if (s.state === 'disabled' && s.disabledReason) act(created + 4 * DAY, 'Partner disabled', `Reason: ${s.disabledReason}`);
   }
   return db;
 }

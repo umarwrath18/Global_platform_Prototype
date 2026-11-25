@@ -1,4 +1,6 @@
 import { HostServer } from './host-server';
+import type { ApprovalItem } from '../merchants/change-requests';
+import { countryName } from '../merchants/onboarding-config';
 import { RoutingServer } from './routing-server';
 import { HttpErrorResponse, HttpInterceptorFn, HttpResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
@@ -36,7 +38,7 @@ export class MockBackend {
     defaultCatalogue: { source: { kind: 'standard', name: MCC_STANDARD_NAME, version: MCC_STANDARD_VERSION, loadedAt: 0 }, entries: MCC_STANDARD_LIST },
   });
 
-  readonly merchants: MerchantServer = new MerchantServer({ storage: localStorage, auth: this.server, strictValidation: isStrictValidation, countryConfig: this.countryConfig, mcc: this.mcc, fixedTeams: true });
+  readonly merchants: MerchantServer = new MerchantServer({ storage: localStorage, auth: this.server, strictValidation: isStrictValidation, countryConfig: this.countryConfig, mcc: this.mcc, fixedTeams: true, extraApprovals: () => this.costApprovals() });
 
   /** Transactions (sample records for live MIDs; see transaction-server.ts). Shared by both apps. */
   readonly hosts = new HostServer({ storage: localStorage, auth: this.server });
@@ -46,6 +48,15 @@ export class MockBackend {
 
   /** Merchant-facing portal (Dashboard, My Transactions; see merchant-portal-server.ts). */
   readonly merchantPortal = new MerchantPortalServer({ storage: localStorage, auth: this.server, profile: (id) => this.merchants.portalProfile(id), transactions: this.transactions });
+
+  /** Partner cost pricing in the shared Approvals inbox (FinOps decides on the partner page). */
+  private costApprovals(): ApprovalItem[] {
+    return this.hosts.costApprovals().map((c) => ({
+      kind: 'cost_pricing' as const, id: c.id, title: `Partner cost · ${countryName(c.country)}`, merchantId: c.hostId, merchantName: c.hostName, applicationId: null, country: c.country,
+      summary: c.summary, requestedBy: c.requestedBy, requestedRole: c.requestedRole, requestedAt: c.requestedAt, status: c.status, approverTeam: 'finops' as const, decidedAt: c.decidedAt,
+      link: ['/partners', c.hostId], query: { tab: 'pricing' },
+    }));
+  }
 
   constructor() {
     (window as any).mobiDemo = {

@@ -83,7 +83,12 @@ export class PricingEditor implements OnInit, AfterViewInit {
   readonly view = input.required<ProductPricingView>();
   readonly preset = input.required<PricingPreset>();
   /** `mid`: from Product & Payment Config (§8.5). `merchant`: from Merchant Pricing (§7.4). Both open in a side sheet. */
-  readonly variant = input<'mid' | 'merchant'>('mid');
+  readonly variant = input<'mid' | 'merchant' | 'cost'>('mid');
+  /**
+   * Partner cost pricing (variant 'cost'): saves through this instead of merchant pricing. Same
+   * models, rules and calculator; no sub-merchants or secondary charges; FinOps approves.
+   */
+  readonly costSubmit = input<((draft: PricingDraft, editOf: string | null) => Promise<PricingVersion>) | null>(null);
   readonly saved = output<{ version: PricingVersion; view: ProductPricingView }>();
   readonly closed = output<void>();
 
@@ -113,7 +118,10 @@ export class PricingEditor implements OnInit, AfterViewInit {
   protected readonly codeError = signal<string | null>(null);
   private readonly codePrompt = viewChild(CodePrompt);
   protected readonly day = displayDate;
-  protected readonly eyebrow = computed(() => (this.variant() === 'merchant' ? 'Merchant Pricing' : 'Product & Payment Config'));
+  protected readonly eyebrow = computed(() => (this.variant() === 'cost' ? 'Partner cost pricing · what the partner charges Mobi' : this.variant() === 'merchant' ? 'Merchant Pricing' : 'Product & Payment Config'));
+  protected readonly cost = computed(() => this.variant() === 'cost');
+  /** Who the pricing is for, in scope lists. */
+  protected readonly party = computed(() => (this.cost() ? 'Partner' : 'Merchant'));
 
   // Scope
   protected readonly flow = signal<ProductFlow>('payin');
@@ -173,11 +181,15 @@ export class PricingEditor implements OnInit, AfterViewInit {
   protected readonly methodsInFlow = computed(() => this.options().filter((m) => m.flow === this.flow()));
   protected readonly methodGroups = computed(() => groupMethods(this.methodsInFlow()));
   protected readonly method = computed(() => this.view().methods.find((m) => m.code === this.methodCode()) ?? null);
-  protected readonly showVa = computed(() => usesVaBanks(this.view().country, this.methodCode()));
+  protected readonly showVa = computed(() => !this.cost() && usesVaBanks(this.view().country, this.methodCode()));
   protected readonly vaButton = computed(() => (!this.vaBanks().length ? 'Select VA Banks' : this.vaBanks().length === VA_BANKS.length ? 'All VA Banks' : `${this.vaBanks().length} bank(s) selected`));
   protected readonly vaSummary = computed(() => (this.vaBanks().length && this.vaBanks().length < VA_BANKS.length ? this.vaBanks().map((b) => VA_BANKS.find((x) => x.code === b)!.name).join(', ') : 'All'));
-  protected readonly subtitle = computed(() => `${this.view().merchantName} - ${this.view().mid ? `MID ${this.view().mid}` : this.view().applicationId}`);
-  protected readonly title = computed(() => (this.phase() === 'secondary' ? 'Configure Secondary Charges' : this.editing() ? `Edit Pricing (new version of v${this.editing()!.version})` : 'Configure Primary Pricing'));
+  protected readonly subtitle = computed(() => (this.cost() ? `${this.view().merchantName} · ${countryName(this.view().country)}` : `${this.view().merchantName} - ${this.view().mid ? `MID ${this.view().mid}` : this.view().applicationId}`));
+  protected readonly title = computed(() =>
+    this.cost()
+      ? this.editing() ? `Change cost pricing (new version of v${this.editing()!.version})` : 'Set cost pricing'
+      : this.phase() === 'secondary' ? 'Configure Secondary Charges' : this.editing() ? `Edit Pricing (new version of v${this.editing()!.version})` : 'Configure Primary Pricing',
+  );
   protected readonly settlement = computed(() => (this.flow() === 'payin' ? (this.view().config.settlement[this.methodCode()] ?? null) : null));
   protected readonly usd = computed(() => this.technique() === 'fixed_fee' && this.currency() === 'USD');
   protected readonly localEquivalent = computed(() => (n(this.fixedFee()) ?? 0) * this.view().usdRate);
@@ -252,7 +264,7 @@ export class PricingEditor implements OnInit, AfterViewInit {
   protected volumePeriodLabel(p: VolumePeriod | null) {
     return p ? VOLUME_PERIOD_LABEL[p] : 'Monthly';
   }
-  protected readonly appliesTo = computed(() => this.subName() ?? 'Master Merchant');
+  protected readonly appliesTo = computed(() => (this.cost() ? 'Every payment Mobi sends through this partner' : (this.subName() ?? 'Master Merchant')));
   /** Volume tiers as table rows; the one the calculator lands in is marked. */
   protected readonly tierRows = computed(() => {
     const vol = n(this.calcVolume()) ?? 0;
@@ -509,6 +521,13 @@ export class PricingEditor implements OnInit, AfterViewInit {
     this.serverError.set(null);
     this.codeError.set(null);
     try {
+      const submit = this.costSubmit();
+      if (submit) {
+        const version = await submit(this.draft(), this.editing()?.id ?? null);
+        this.done.set(version);
+        this.saved.emit({ version, view: this.view() });
+        return;
+      }
       const res = await this.api.setPricing(this.view().applicationId, { draft: this.draft(), editOf: this.editing()?.id ?? null, ...(code ? { code } : {}) });
       this.codeAsk.set(false);
       this.done.set(res.version);

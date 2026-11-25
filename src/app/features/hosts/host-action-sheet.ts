@@ -22,7 +22,7 @@ export type HostAction = 'enable' | 'disable' | 'maintenance';
 <app-side-sheet [label]="title()" (dismiss)="close()">
   <header class="sheet-head">
     <div class="sheet-titles">
-      <p class="sheet-eyebrow">Host status</p>
+      <p class="sheet-eyebrow">Partner status</p>
       <h2 class="sheet-title">{{ title() }}</h2>
       <p class="sheet-sub">{{ h.name }} · {{ h.id }}</p>
     </div>

@@ -52,12 +52,12 @@ interface Row {
       <div class="f-field">
         <label for="rt-min">Minimum success rate (%)</label>
         <input id="rt-min" class="f-input rt-num" inputmode="decimal" maxlength="5" [class.invalid]="err('smart.minSuccessRate')" [value]="minRate()" (input)="minRate.set(v($event))" />
-        @if (err('smart.minSuccessRate'); as m) {<p class="f-error">{{ m }}</p>} @else {<p class="f-hint">Hosts below this are skipped. Look-back: last 24 hours (simulated).</p>}
+        @if (err('smart.minSuccessRate'); as m) {<p class="f-error">{{ m }}</p>} @else {<p class="f-hint">Partners below this are skipped. Look-back: last 24 hours (simulated).</p>}
       </div>
     }
 
     <div class="f-field">
-      <span class="f-label">{{ mode() === 'split' ? 'Traffic share' : mode() === 'smart' ? 'Candidate hosts' : 'Hosts, in order' }}</span>
+      <span class="f-label">{{ mode() === 'split' ? 'Traffic share' : mode() === 'smart' ? 'Candidate partners' : 'Partners, in order' }}</span>
       @if (rows().length) {
         <ol class="rt-list">
           @for (row of rows(); track row.hostId; let i = $index; let last = $last) {
@@ -80,7 +80,7 @@ interface Row {
           }
         </ol>
       } @else {
-        <p class="host-empty-line">No hosts yet. Add one below.</p>
+        <p class="host-empty-line">No partners yet. Add one below.</p>
       }
       @if (mode() === 'split') {
         <div class="rt-meter" aria-hidden="true">@for (row of rows(); track row.hostId; let i = $index) {<i [style.width.%]="row.share" [class]="'c' + (i % 4)"></i>}</div>
@@ -89,15 +89,15 @@ interface Row {
       @if (err('hosts') || err('shares'); as m) {<p class="f-error" role="alert">{{ m }}</p>}
       @if (addable().length) {
         <div class="rt-add">
-          <label class="sr-only" for="rt-add">Host to add</label>
+          <label class="sr-only" for="rt-add">Partner to add</label>
           <select id="rt-add" class="f-input" (change)="pick.set(v($event))">
-            <option value="" [selected]="!pick()">Add a host…</option>
+            <option value="" [selected]="!pick()">Add a partner…</option>
             @for (o of addable(); track o.hostId) {<option [value]="o.hostId">{{ o.name }} · {{ o.eligible ? 'eligible' : o.reason }}</option>}
           </select>
           <button type="button" class="btn" [disabled]="!pick()" (click)="add()"><app-icon name="plus" [size]="14" />Add</button>
         </div>
       }
-      <p class="f-hint">Only hosts registered for {{ r.countryName }} · {{ r.methodName }} in Host Management can be added.</p>
+      <p class="f-hint">Only partners registered for {{ r.countryName }} · {{ r.methodName }} in Partners can be added.</p>
     </div>
 
     <label class="rt-toggle">

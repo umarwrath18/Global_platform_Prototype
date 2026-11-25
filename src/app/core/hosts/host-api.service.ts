@@ -2,7 +2,8 @@ import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { StaffRoleService } from '../merchants/staff-role.service';
-import { AvailabilityStatus, HostActivity, HostDetailResponse, HostDraftInput, HostFieldError, HostListResponse } from './hosts';
+import { AvailabilityStatus, CostVersion, HostActivity, HostDetailResponse, HostDraftInput, HostFieldError, HostListResponse, SecretKind } from './hosts';
+import type { PricingDraft } from '../merchants/products';
 
 export interface HostApiError {
   code: string;
@@ -58,6 +59,23 @@ export class HostApi {
 
   setAvailability(id: string, capabilityId: string, availabilityStatus: AvailabilityStatus) {
     return firstValueFrom(this.http.put<HostDetailResponse>(`/api/hosts/${encodeURIComponent(id)}/capabilities/${encodeURIComponent(capabilityId)}`, { availabilityStatus }, { headers: this.headers }));
+  }
+
+  /** Write-only: the value goes to the server once and is never returned. */
+  setSecret(id: string, kind: SecretKind, value: string, code?: string) {
+    return firstValueFrom(this.http.post<HostDetailResponse>(`/api/hosts/${encodeURIComponent(id)}/secrets`, { kind, value, ...(code ? { code } : {}) }, { headers: this.headers }));
+  }
+
+  setCost(id: string, country: string, draft: PricingDraft, editOf: string | null) {
+    return firstValueFrom(this.http.post<CostVersion>(`/api/hosts/${encodeURIComponent(id)}/cost-pricing`, { country, draft, editOf }, { headers: this.headers }));
+  }
+
+  decideCost(id: string, versionId: string, decision: 'approve' | 'reject', reason = '') {
+    return firstValueFrom(this.http.post<CostVersion>(`/api/hosts/${encodeURIComponent(id)}/cost-pricing/${encodeURIComponent(versionId)}/decision`, { decision, reason }, { headers: this.headers }));
+  }
+
+  cancelCost(id: string, versionId: string) {
+    return firstValueFrom(this.http.post<CostVersion>(`/api/hosts/${encodeURIComponent(id)}/cost-pricing/${encodeURIComponent(versionId)}/cancel`, {}, { headers: this.headers }));
   }
 
   changeStatus(id: string, body: { action: 'enable' | 'disable' | 'maintenance'; reason?: string; until?: number | null; confirm?: boolean; code?: string }) {

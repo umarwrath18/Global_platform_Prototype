@@ -268,7 +268,7 @@ const summary = (r: Pick<ChangeRequestRecord, 'changes'>) => r.changes.map((c) =
 // ------------------------------------------------------------------ approvals page
 
 /** Everything waiting for a decision, and recent decisions, for the acting team. */
-export function approvalsFor(db: MerchantDb, role: StaffRole): ApprovalsView {
+export function approvalsFor(db: MerchantDb, role: StaffRole, extra: ApprovalItem[] = []): ApprovalsView {
   const name = (id: string) => db.merchants.find((m) => m.id === id)?.legalName ?? id;
   const items: ApprovalItem[] = [];
   for (const r of db.changeRequests ?? []) {
@@ -307,7 +307,7 @@ export function approvalsFor(db: MerchantDb, role: StaffRole): ApprovalsView {
       approverTeam: 'risk', decidedAt: e.decidedAt ?? null, link: ['/merchants', e.gmid], query: { sub: e.id },
     });
   }
-  items.push(...suspensionApprovals(db));
+  items.push(...suspensionApprovals(db), ...extra);
   const pendingOf = (keep: (i: ApprovalItem) => boolean) => items.filter((i) => i.status === 'pending' && keep(i)).sort((a, b) => a.requestedAt - b.requestedAt);
   const recentOf = (keep: (i: ApprovalItem) => boolean) => items.filter((i) => i.status !== 'pending' && keep(i)).sort((a, b) => (b.decidedAt ?? 0) - (a.decidedAt ?? 0)).slice(0, 20);
   const all = [...items].sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1) || (a.status === 'pending' ? a.requestedAt - b.requestedAt : (b.decidedAt ?? 0) - (a.decidedAt ?? 0)));

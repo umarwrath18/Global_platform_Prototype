@@ -10,7 +10,7 @@ Which host each payment goes to. Design approved 24 Nov 2026
 | Default route | One per country + payment method. The list shows every combination with a host registered in Host Management ("Not set" until a route is saved). |
 | Modes (5B) | **Priority**: ordered hosts, the first eligible one is used. **Percentage split**: whole-number shares adding up to 100 (at least two hosts). |
 | Smart (5C) | Hosts ranked by **simulated** success rate and response time, weighted per route (default 70 % success / 30 % speed), skipping hosts below a minimum success rate (default 90 %). Score = weight × success rate + (1 − weight) × speed (1 at 0 ms, 0 at 3,000 ms or slower). |
-| Eligible host | Status **Active** in Host Management and that payment method **Available**. Read live, so disabling a host or switching a method off changes routing at once. |
+| Eligible host | Status **Active** in Partners and that payment method **Available**. Read live, so disabling a host or switching a method off changes routing at once. |
 | Fallback (per route) | Priority: next eligible host. Split: the skipped host's share is re-divided in proportion. Smart: next in the ranking, or the best-ranked host when none meets the minimum. Off: the payment fails. |
 | Merchant overrides (5B) | Pin a merchant or sub-merchant to one host for one country + method. Checked first (a sub-merchant's own override before its parent's). Option: fall back to the default route, or fail, when the pinned host isn't eligible. One override per merchant + country + method; reason required. |
 | Route states | Routing · Fallback in use · Some payments fail (split, fallback off) · No eligible host · Not set. |

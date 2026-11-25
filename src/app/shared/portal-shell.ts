@@ -32,14 +32,14 @@ const NAV: NavItem[] = [
   { label: 'Notifications', icon: 'bell', link: '/notifications' },
   { label: 'Approvals', icon: 'check-circle', link: '/approvals' },
   { label: 'Merchant Pricing', icon: 'card', link: '/merchant-pricing' },
-  { label: 'Host Management', icon: 'route', link: '/hosts' },
+  { label: 'Partners', icon: 'route', link: '/partners' },
   { label: 'Routing', icon: 'swap', link: '/routing' },
 ];
 
-/** What Tech Ops sees: Host Management (it manages hosts) and the Dashboard; no merchant permissions. */
+/** What Tech Ops sees: Partners and Routing (it manages both) and the Dashboard; no merchant permissions. */
 const TECHOPS_NAV: NavItem[] = [
   { label: 'Dashboard', icon: 'grid', link: '/dashboard' },
-  { label: 'Host Management', icon: 'route', link: '/hosts' },
+  { label: 'Partners', icon: 'route', link: '/partners' },
   { label: 'Routing', icon: 'swap', link: '/routing' },
 ];
 
@@ -48,7 +48,7 @@ const SUPPORT_NAV: NavItem[] = [
   { label: 'Dashboard', icon: 'grid', link: '/dashboard' },
   { label: 'Transactions', icon: 'swap', link: '/transactions' },
   { label: 'User security', icon: 'shield', link: '/security/users' },
-  { label: 'Host Management', icon: 'route', link: '/hosts' },
+  { label: 'Partners', icon: 'route', link: '/partners' },
   { label: 'Routing', icon: 'swap', link: '/routing' },
 ];
 
@@ -56,7 +56,7 @@ const SUPPORT_NAV: NavItem[] = [
 const SECURITY_NAV: NavItem[] = [
   { label: 'Dashboard', icon: 'grid', link: '/dashboard' },
   { label: 'User security', icon: 'shield', link: '/security/users' },
-  { label: 'Host Management', icon: 'route', link: '/hosts' },
+  { label: 'Partners', icon: 'route', link: '/partners' },
   { label: 'Routing', icon: 'swap', link: '/routing' },
 ];
 

@@ -30,7 +30,8 @@ import {
  */
 
 const KEY = 'mobi.gp.routingdb';
-const DB_VERSION = 1;
+/** 2: partner IDs (PTR-…) after Host Management became Partner Management. */
+const DB_VERSION = 2;
 const PERF_BUCKET_MS = 15 * 60_000;
 
 interface RoutingDb {
@@ -214,7 +215,7 @@ export class RoutingServer {
     return ids.map((id) => {
       const host = snap.hosts.find((h) => h.id === id);
       const cap = caps.find((c) => c.hostId === id);
-      const reason = !host ? 'Removed from Host Management' : !cap ? 'Method not registered' : host.status !== 'active' ? STATUS_REASON[host.status] : cap.availabilityStatus !== 'available' ? `${methodName(country, methodCode)} ${cap.availabilityStatus === 'disabled' ? 'switched off' : 'unavailable'}` : '';
+      const reason = !host ? 'Removed from Partners' : !cap ? 'Method not registered' : host.status !== 'active' ? STATUS_REASON[host.status] : cap.availabilityStatus !== 'available' ? `${methodName(country, methodCode)} ${cap.availabilityStatus === 'disabled' ? 'switched off' : 'unavailable'}` : '';
       return { hostId: id, name: host?.name ?? id, hostCode: host?.hostCode ?? '', hostStatus: host?.status ?? 'removed', availability: cap?.availabilityStatus ?? 'disabled', eligible: !reason, reason };
     });
   }
@@ -456,7 +457,7 @@ function describe(r: Route, snap: RoutingHostSnapshot): string {
 
 const key = (country: string, method: string) => `${country}:${method}`;
 const stateOrder = (s: RouteView['state']) => ({ none: 0, at_risk: 1, fallback: 2, routing: 3, not_set: 4 })[s];
-const STATUS_REASON: Record<string, string> = { draft: 'Host is a draft', disabled: 'Host disabled', maintenance: 'Host under maintenance', active: '' };
+const STATUS_REASON: Record<string, string> = { draft: 'Partner is a draft', disabled: 'Partner disabled', maintenance: 'Partner under maintenance', active: '' };
 const TEAM_LABEL: Record<string, string> = { sales: 'Sales / Operations', risk: 'Risk', cs: 'Customer Success', finops: 'FinOps', support: 'Mobi Support', security: 'Security Admin', admin: 'Prototype admin' };
 
 function safe<T>(fn: () => T, fallback: T): T {

@@ -12,7 +12,7 @@
  * provider's API. Provider-specific handling belongs in the integration adapter, never here.
  */
 
-import { CORRIDORS } from '../merchants/products';
+import { CORRIDORS, PricingVersion } from '../merchants/products';
 import { ONBOARDING_COUNTRIES, REGISTRATION_COUNTRIES, countryName } from '../merchants/onboarding-config';
 
 // ------------------------------------------------------------------ reference lists
@@ -65,6 +65,15 @@ export const PAYMENT_FLOW_LABEL: Record<PaymentFlow, string> = { payin: 'PayIn',
 
 // ------------------------------------------------------------------ entities
 
+/** A secret is never stored or shown: only that it is set, its last 4 characters, and who set it. */
+export interface SecretMeta {
+  last4: string;
+  setAt: number;
+  setBy: string;
+}
+export type SecretKind = 'apiKey' | 'secretKey' | 'portalPassword';
+export const SECRET_LABEL: Record<SecretKind, string> = { apiKey: 'API key', secretKey: 'Secret key', portalPassword: 'Partner portal password' };
+
 export interface Host {
   id: string;
   hostCode: string;
@@ -74,6 +83,13 @@ export interface Host {
   registrationCountry: string;
   ownerTeam: string;
   notes: string;
+  /** Operations contact for incidents and settlement queries. */
+  contactEmail: string;
+  contactPhone: string;
+  /** Optional escalation contact (name, email or phone). */
+  escalationContact: string;
+  /** Write-only secrets: metadata only. */
+  secrets: Partial<Record<SecretKind, SecretMeta>>;
   /** Saved with Save as Draft: incomplete, never operational. */
   draft: boolean;
   /** Set by Tech Ops; the host's status is Draft while `draft`, otherwise this. */
@@ -125,6 +141,8 @@ export interface HostIntegration {
   timeoutSeconds: number | null;
   connectionConfig: string;
   notes: string;
+  /** Mobi's login name on the partner's own portal (the password is a write-only secret). */
+  portalUsername: string;
   updatedAt: number;
 }
 
@@ -152,7 +170,7 @@ export interface HostIntegrationView extends HostIntegration {
 
 /** One line of the setup checklist. */
 export interface SetupItem {
-  id: 'basic' | 'methods' | 'integration' | 'production';
+  id: 'basic' | 'methods' | 'integration' | 'production' | 'pricing';
   label: string;
   done: boolean;
 }
@@ -161,12 +179,31 @@ export interface HostView extends Host {
   status: HostStatus;
   markets: string[];
   paymentMethods: string[];
+  /** Methods per category, e.g. { QR: 1, Payout: 1 }. */
+  categories: { category: PaymentCategory; count: number }[];
   checklist: SetupItem[];
+  /** Cost pricing coverage of the partner's methods (not switched off). */
+  cost: { priced: number; total: number; pending: number };
+}
+
+/** A cost pricing version: the merchant pricing version shape, scoped to partner + country. */
+export interface CostVersion extends PricingVersion {
+  hostId: string;
+  country: string;
+}
+
+/** Cost pricing for one of the partner's payment methods. */
+export interface MethodCost {
+  country: string;
+  methodCode: string;
+  current: CostVersion | null;
+  scheduled: CostVersion | null;
+  pending: CostVersion | null;
 }
 
 export interface HostListResponse {
   hosts: HostView[];
-  summary: { total: number; active: number; disabled: number; maintenance: number; draft: number };
+  summary: { total: number; active: number; disabled: number; maintenance: number; draft: number; costMissing: number; costPending: number };
   can: { manage: boolean };
   sampleData: true;
 }
@@ -178,16 +215,20 @@ export interface HostDetailResponse {
   activity: HostActivity[];
   /** Why Enable is not possible yet (empty when it is). */
   enableBlockers: string[];
-  can: { manage: boolean };
+  costVersions: CostVersion[];
+  methodCosts: MethodCost[];
+  /** manage: Tech Ops. decidePricing: FinOps approves cost pricing. */
+  can: { manage: boolean; decidePricing: boolean };
+  today: string;
   sampleData: true;
 }
 
 /** Add / Edit host (the steps of the editor). */
 export interface HostDraftInput {
   draft: boolean;
-  basic: Pick<Host, 'name' | 'hostCode' | 'description' | 'hostType' | 'registrationCountry' | 'ownerTeam' | 'notes'>;
+  basic: Pick<Host, 'name' | 'hostCode' | 'description' | 'hostType' | 'registrationCountry' | 'ownerTeam' | 'notes' | 'contactEmail' | 'contactPhone' | 'escalationContact'>;
   capabilities: Pick<HostCapability, 'countryCode' | 'paymentMethodCode' | 'availabilityStatus'>[];
-  integration: Pick<HostIntegration, 'integrationName' | 'adapterType' | 'apiBaseUrl' | 'apiVersion' | 'environment' | 'authenticationType' | 'authConfig' | 'timeoutSeconds' | 'connectionConfig' | 'notes'> | null;
+  integration: Pick<HostIntegration, 'integrationName' | 'adapterType' | 'apiBaseUrl' | 'apiVersion' | 'environment' | 'authenticationType' | 'authConfig' | 'timeoutSeconds' | 'connectionConfig' | 'notes' | 'portalUsername'> | null;
 }
 
 export interface HostFieldError {
@@ -205,6 +246,23 @@ export function hostCountries(): { code: string; name: string; currency: string 
 /** Payment methods configured for a country (same catalogue as products and pricing). */
 export function hostMethods(country: string): { code: string; name: string; flow: PaymentFlow; group?: string }[] {
   return (ONBOARDING_COUNTRIES[country]?.paymentMethods ?? []).map((m) => ({ code: m.code, name: m.name, flow: m.flow, ...(m.group ? { group: m.group } : {}) }));
+}
+
+export type PaymentCategory = 'QR' | 'Cards' | 'Online banking' | 'E-wallets' | 'Over the counter' | 'Payout';
+export const PAYMENT_CATEGORIES: PaymentCategory[] = ['QR', 'Cards', 'Online banking', 'E-wallets', 'Over the counter', 'Payout'];
+
+/** E-wallets that a country's catalogue doesn't group (e.g. Vietnam). */
+const EWALLET_CODES = ['momo', 'zalopay', 'ovo', 'dana', 'linkaja', 'shopee', 'shopeepay', 'tng', 'grabpay', 'boost'];
+
+/** Category a catalogue method belongs to (for grouping in Partner screens). */
+export function methodCategory(country: string, code: string): PaymentCategory {
+  const m = hostMethods(country).find((x) => x.code === code);
+  if (m?.flow === 'payout') return 'Payout';
+  if ((m?.group && /wallet/i.test(m.group)) || EWALLET_CODES.includes(code)) return 'E-wallets';
+  if (/qr/i.test(code)) return 'QR';
+  if (code === 'cards') return 'Cards';
+  if (code === 'ezycash') return 'Over the counter';
+  return 'Online banking';
 }
 
 export function methodName(country: string, code: string): string {
@@ -235,14 +293,22 @@ export function integrationMissing(i: Pick<HostIntegration, 'integrationName' | 
 
 export const statusOf = (h: Pick<Host, 'draft' | 'operationalState'>): HostStatus => (h.draft ? 'draft' : h.operationalState);
 
-/** Setup checklist: what a host needs before it can be enabled. */
-export function checklistOf(host: Pick<Host, 'name' | 'hostCode' | 'hostType' | 'registrationCountry' | 'ownerTeam' | 'draft'>, capabilities: Pick<HostCapability, 'availabilityStatus'>[], integration: HostIntegration | null): SetupItem[] {
-  return [
-    { id: 'basic', label: 'Basic information complete', done: !host.draft && !!(host.name && host.hostCode && host.hostType && host.registrationCountry && host.ownerTeam) },
-    { id: 'methods', label: 'At least one payment method Available', done: capabilities.some((c) => c.availabilityStatus === 'available') },
+/** Setup checklist: what a partner needs before it can be enabled. `priced`: methods with approved cost pricing. */
+export function checklistOf(
+  host: Pick<Host, 'name' | 'hostCode' | 'hostType' | 'registrationCountry' | 'ownerTeam' | 'draft' | 'contactEmail' | 'contactPhone'>,
+  capabilities: Pick<HostCapability, 'availabilityStatus' | 'countryCode' | 'paymentMethodCode'>[],
+  integration: HostIntegration | null,
+  priced?: (country: string, method: string) => boolean,
+): SetupItem[] {
+  const live = capabilities.filter((c) => c.availabilityStatus === 'available');
+  const items: SetupItem[] = [
+    { id: 'basic', label: 'Partner details complete', done: !host.draft && !!(host.name && host.hostCode && host.hostType && host.registrationCountry && host.ownerTeam && host.contactEmail && host.contactPhone) },
+    { id: 'methods', label: 'At least one payment method Available', done: live.length > 0 },
     { id: 'integration', label: 'Integration details complete', done: !!integration && !integrationMissing(integration).length },
     { id: 'production', label: 'Production endpoint set', done: integration?.environment === 'production' },
   ];
+  if (priced) items.push({ id: 'pricing', label: 'Cost pricing approved for every Available method', done: live.length > 0 && live.every((c) => priced(c.countryCode, c.paymentMethodCode)) });
+  return items;
 }
 
 /** Why a host can't be enabled yet (empty = it can): the open checklist items. */
@@ -252,6 +318,7 @@ export function enableBlockers(checklist: SetupItem[]): string[] {
     methods: 'Make at least one payment method Available.',
     integration: 'Complete the integration details.',
     production: 'Set the Production endpoint: a Sandbox endpoint cannot take live payments.',
+    pricing: 'Get cost pricing approved by FinOps for every Available payment method.',
   };
   return checklist.filter((c) => !c.done).map((c) => text[c.id]);
 }

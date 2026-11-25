@@ -35,7 +35,7 @@ const TABS: { id: Tab; label: string }[] = [
   <div class="host-head">
     <div>
       <h1>Routing <span class="sample-tag" title="No live payments are routed in this prototype.">Sample data</span></h1>
-      <p>Decide which host each payment goes to: by priority, by percentage split, or Smart (simulated performance).</p>
+      <p>Decide which partner each payment goes to: by priority, by percentage split, or Smart (simulated performance).</p>
     </div>
     @if (data()?.can?.manage && tab() === 'overrides') {
       <div class="actions"><button type="button" class="btn primary" (click)="overrideSheet.set({ o: null })"><app-icon name="plus" [size]="16" />Add override</button></div>
@@ -75,7 +75,7 @@ const TABS: { id: Tab; label: string }[] = [
           } @else {
             <div class="table-wrap">
               <table class="data-table host-table rt-table">
-                <thead><tr><th scope="col">Country · Method</th><th scope="col">Mode</th><th scope="col">Hosts (in order)</th><th scope="col">Fallback</th><th scope="col">Eligible hosts</th><th scope="col">State</th>@if (d.can.manage) {<th scope="col"><span class="sr-only">Actions</span></th>}</tr></thead>
+                <thead><tr><th scope="col">Country · Method</th><th scope="col">Mode</th><th scope="col">Partners (in order)</th><th scope="col">Fallback</th><th scope="col">Eligible partners</th><th scope="col">State</th>@if (d.can.manage) {<th scope="col"><span class="sr-only">Actions</span></th>}</tr></thead>
                 <tbody>
                   @for (r of routes(); track r.key) {
                     <tr>
@@ -101,20 +101,20 @@ const TABS: { id: Tab; label: string }[] = [
                 </tbody>
               </table>
             </div>
-            <p class="rt-foot">Eligible = host Active in Host Management and that payment method Available. Struck-through hosts are skipped.</p>
+            <p class="rt-foot">Eligible = partner Active in Partners and that payment method Available. Struck-through partners are skipped.</p>
           }
         </section>
       }
 
       @case ('overrides') {
-        <p class="rt-intro">A merchant or sub-merchant pinned to a specific host for one country and payment method. Overrides come before the default route.</p>
+        <p class="rt-intro">A merchant or sub-merchant pinned to a specific partner for one country and payment method. Overrides come before the default route.</p>
         <section class="panel-card">
           @if (!d.overrides.length) {
             <div class="empty-state"><h3>No merchant overrides</h3><p>Every merchant follows the default routes.</p>@if (d.can.manage) {<button type="button" class="btn primary" (click)="overrideSheet.set({ o: null })">Add override</button>}</div>
           } @else {
             <div class="table-wrap">
               <table class="data-table host-table">
-                <thead><tr><th scope="col">Merchant</th><th scope="col">Country · Method</th><th scope="col">Pinned host</th><th scope="col">If the host is not eligible</th><th scope="col">Reason</th><th scope="col">Updated</th>@if (d.can.manage) {<th scope="col"><span class="sr-only">Actions</span></th>}</tr></thead>
+                <thead><tr><th scope="col">Merchant</th><th scope="col">Country · Method</th><th scope="col">Pinned partner</th><th scope="col">If the partner is not eligible</th><th scope="col">Reason</th><th scope="col">Updated</th>@if (d.can.manage) {<th scope="col"><span class="sr-only">Actions</span></th>}</tr></thead>
                 <tbody>
                   @for (o of d.overrides; track o.id) {
                     <tr>
@@ -137,7 +137,7 @@ const TABS: { id: Tab; label: string }[] = [
       @case ('checker') {
         <div class="rt-check">
           <form class="panel-card rt-check-form" (submit)="$event.preventDefault(); runCheck()">
-            <h2>Which host would this payment use?</h2>
+            <h2>Which partner would this payment use?</h2>
             <p class="f-hint">Runs the current rules. Nothing is sent to a provider.</p>
             <div class="f-field"><label for="ck-merchant">Merchant</label>
               <select id="ck-merchant" class="f-input" (change)="ckMerchant.set(v($event)); ckCountry.set(''); ckMethod.set('')">
@@ -186,7 +186,7 @@ const TABS: { id: Tab; label: string }[] = [
           </form>
           <div class="table-wrap">
             <table class="data-table host-table">
-              <thead><tr><th scope="col">Host</th><th scope="col">Country</th><th scope="col">Payment method</th><th scope="col" class="num">Success rate</th><th scope="col" class="num">Avg response</th><th scope="col" class="num">Attempts (24 h)</th><th scope="col">Used in</th></tr></thead>
+              <thead><tr><th scope="col">Partner</th><th scope="col">Country</th><th scope="col">Payment method</th><th scope="col" class="num">Success rate</th><th scope="col" class="num">Avg response</th><th scope="col" class="num">Attempts (24 h)</th><th scope="col">Used in</th></tr></thead>
               <tbody>
                 @for (p of perfRows(); track p.hostId + p.country + p.methodCode) {
                   <tr>
@@ -200,7 +200,7 @@ const TABS: { id: Tab; label: string }[] = [
               </tbody>
             </table>
           </div>
-          <p class="rt-foot">Smart score = success rate and speed, weighted per route. Figures refresh every 15 minutes (simulated). Hosts that are not Active have none.</p>
+          <p class="rt-foot">Smart score = success rate and speed, weighted per route. Figures refresh every 15 minutes (simulated). Partners that are not Active have none.</p>
         </section>
       }
 

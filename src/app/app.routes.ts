@@ -116,15 +116,28 @@ export const routes: Routes = [
         loadComponent: () => import('./features/configuration/mcc-catalogue').then((m) => m.MccCataloguePage),
       },
       {
-        path: 'hosts',
-        title: 'Host Management · Mobi Global Platform',
-        loadComponent: () => import('./features/hosts/hosts-page').then((m) => m.HostsPage),
+        path: 'partners',
+        title: 'Partners · Mobi Global Platform',
+        loadComponent: () => import('./features/partners/partners-page').then((m) => m.PartnersPage),
       },
       {
-        path: 'hosts/:id',
-        title: 'Host details · Mobi Global Platform',
-        loadComponent: () => import('./features/hosts/host-detail').then((m) => m.HostDetail),
+        path: 'partners/new',
+        title: 'New partner · Mobi Global Platform',
+        loadComponent: () => import('./features/partners/new-partner').then((m) => m.NewPartner),
       },
+      {
+        path: 'partners/:id/setup',
+        title: 'Partner setup · Mobi Global Platform',
+        loadComponent: () => import('./features/partners/partner-setup').then((m) => m.PartnerSetup),
+      },
+      {
+        path: 'partners/:id',
+        title: 'Partner · Mobi Global Platform',
+        loadComponent: () => import('./features/partners/partner-page').then((m) => m.PartnerPage),
+      },
+      // Host Management became Partners.
+      { path: 'hosts', redirectTo: 'partners' },
+      { path: 'hosts/:id', redirectTo: 'partners/:id' },
       {
         path: 'routing',
         title: 'Routing · Mobi Global Platform',

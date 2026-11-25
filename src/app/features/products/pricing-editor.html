@@ -9,7 +9,10 @@
   <div class="sheet-body">
     <div class="editor-done" role="status">
       <span class="done-icon" aria-hidden="true"><app-icon name="check-circle" [size]="28" /></span>
-      @if (variant() === 'merchant') {
+      @if (cost()) {
+        <h3>Submitted for FinOps approval</h3>
+        <p>{{ editing() ? 'The current cost stays in effect until FinOps approves v' + d.version + '.' : 'The cost applies once FinOps approves it.' }}</p>
+      } @else if (variant() === 'merchant') {
         <h3>Submitted Successfully</h3>
         <p>{{ editing() ? 'The updated pricing has been submitted for Finance approval as v' + d.version + '.' : 'The pricing configuration has been submitted for Finance approval.' }}</p>
       } @else if (d.status === 'pending_approval') {
@@ -143,7 +146,7 @@
             }
             @if (methodCode()) {
               <dl class="sheet-dl scope-dl" aria-label="Scope">
-                <div><dt>Merchant</dt><dd>{{ view().merchantName }}</dd></div>
+                <div><dt>{{ party() }}</dt><dd>{{ view().merchantName }}</dd></div>
                 <div><dt>Applies to</dt><dd>{{ appliesTo() }}</dd></div>
                 <div><dt>Payment Method</dt><dd>{{ method()?.name }} · {{ flowLabel[flow()] }}</dd></div>
                 @if (showVa()) {<div class="wide"><dt>VA Banks</dt><dd>{{ vaSummary() }}</dd></div>}
@@ -160,10 +163,12 @@
                 </button>
               }
             </div>
+            @if (!cost()) {
             <label class="check-line">
               <input type="checkbox" [checked]="technique() === null" (change)="setTechnique($any($event.target).checked ? null : 'variable_rate')" />
               No primary pricing method – charge a subscription fee only
             </label>
+            }
             @if (technique() === null) {
               <p class="f-hint">If the Primary Pricing Method is not configured, Subscription Fees must be configured.</p>
             }
@@ -319,7 +324,7 @@
             <section class="sheet-section">
               <h3>Scope</h3>
               <dl class="sheet-dl">
-                <div><dt>Merchant</dt><dd>{{ view().merchantName }}</dd></div>
+                <div><dt>{{ party() }}</dt><dd>{{ view().merchantName }}</dd></div>
                 <div><dt>Corridor</dt><dd>{{ cname() }} · {{ local() }}</dd></div>
                 <div><dt>Applies to</dt><dd>{{ appliesTo() }}</dd></div>
                 <div><dt>Flow</dt><dd>{{ flowLabel[flow()] }}</dd></div>
@@ -447,6 +452,8 @@
         @if (step() > (editing() ? 2 : 0)) {<button type="button" class="btn" (click)="back()">Back</button>}
         @if (step() < 3) {
           <button type="button" class="btn primary" (click)="next()" [disabled]="!canNext()">Next</button>
+        } @else if (cost()) {
+          <button type="button" class="btn primary" (click)="submit(true)" [disabled]="saving()">@if (saving()) {<span class="spinner" aria-hidden="true"></span>}Submit for FinOps approval</button>
         } @else {
           <button type="button" class="btn primary" (click)="toSecondary()">Next: Secondary Charges</button>
         }

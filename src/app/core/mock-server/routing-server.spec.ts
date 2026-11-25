@@ -59,7 +59,7 @@ describe('Routing', () => {
     const state = Object.fromEntries(o.routes.map((r) => [r.key, r.state]));
     expect(state).toMatchObject({ 'ID:va': 'routing', 'ID:qris': 'routing', 'ID:bank_transfer_payout': 'fallback', 'MY:fpx': 'routing', 'MY:duitnow_qr': 'none', 'VN:vietqr': 'not_set' });
     expect(o.routes.find((r) => r.key === 'ID:bank_transfer_payout')!.effective).toEqual([{ hostId: await hostId('WINPAY'), name: 'WINPAY', share: 100 }]);
-    expect(o.routes.find((r) => r.key === 'MY:duitnow_qr')!.stateNote).toBe('CIMB Collect host under maintenance');
+    expect(o.routes.find((r) => r.key === 'MY:duitnow_qr')!.stateNote).toBe('CIMB Collect partner under maintenance');
     expect(o.summary).toEqual({ routes: 6, routing: 4, fallback: 1, none: 1 });
     expect(o.overrides).toHaveLength(1);
     expect(o.overrides[0]).toMatchObject({ merchantId: 'GM-1', hostName: 'WINPAY', hostEligible: true });
@@ -70,7 +70,7 @@ describe('Routing', () => {
     const harsya = await hostId('HARSYA');
     await hostCall('POST', `/api/hosts/${harsya}/status`, { action: 'disable', reason: 'Provider outage', confirm: true, code: await code() });
     const va = await routeOf('ID:va');
-    expect(va).toMatchObject({ state: 'fallback', stateNote: 'HARSYA host disabled: using WINPAY' });
+    expect(va).toMatchObject({ state: 'fallback', stateNote: 'HARSYA partner disabled: using WINPAY' });
     const check = (await call('POST', '/api/routing/check', { merchantId: 'GM-2', country: 'ID', methodCode: 'va' })).body;
     expect(check).toMatchObject({ hostName: 'WINPAY', via: 'priority', usedFallback: true });
     expect((await routeOf('ID:qris')).state).toBe('none');
@@ -102,7 +102,7 @@ describe('Routing', () => {
     const saigon = (await hostCall<HostListResponse>('GET', '/api/hosts')).body.hosts.find((h) => h.hostCode === 'SAIGONPAY')!.id;
     const vn = await call('PUT', '/api/routing/routes/VN/vietqr', { mode: 'priority', hosts: [{ hostId: saigon }], fallback: false, code: await code() });
     expect(vn.body).toMatchObject({ state: 'none' });
-    expect(vn.body.stateNote).toContain('Saigon PayLink host disabled');
+    expect(vn.body.stateNote).toContain('Saigon PayLink partner disabled');
   });
 
   it('split with fallback off: the blocked share fails; with fallback on it is re-divided', async () => {
@@ -129,7 +129,7 @@ describe('Routing', () => {
     await hostCall('POST', `/api/hosts/${winpay}/status`, { action: 'disable', reason: 'Bank incident', confirm: true, code: await code() });
     expect((await call('POST', '/api/routing/check', { merchantId: 'GM-1', country: 'ID', methodCode: 'va' })).body).toMatchObject({ hostName: 'HARSYA', usedFallback: true });
     const ovr = (await overview()).overrides[0];
-    expect(ovr).toMatchObject({ hostEligible: false, hostReason: 'Host disabled' });
+    expect(ovr).toMatchObject({ hostEligible: false, hostReason: 'Partner disabled' });
     await call('PUT', `/api/routing/overrides/${ovr.id}`, { merchantId: 'GM-1', subMerchantId: null, country: 'ID', methodCode: 'va', hostId: winpay, fallbackToRoute: false, reason: 'Pilot: no fallback agreed', code: await code() });
     expect((await call('POST', '/api/routing/check', { merchantId: 'GM-1', country: 'ID', methodCode: 'va' })).body).toMatchObject({ hostId: null, via: 'none' });
 
@@ -171,6 +171,6 @@ describe('Routing', () => {
   it('a host removed from a route still shows, as not eligible', async () => {
     const created = (await hostCall<HostDetailResponse>('POST', '/api/hosts', { draft: true, basic: { name: 'Tmp', hostCode: 'TMP1' }, capabilities: [{ countryCode: 'ID', paymentMethodCode: 'va', availabilityStatus: 'available' }], integration: null })).body;
     const va = await routeOf('ID:va');
-    expect(va.options.find((o) => o.hostId === created.host.id)).toMatchObject({ eligible: false, reason: 'Host is a draft' });
+    expect(va.options.find((o) => o.hostId === created.host.id)).toMatchObject({ eligible: false, reason: 'Partner is a draft' });
   });
 });
